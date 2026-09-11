@@ -9,9 +9,9 @@ function maskName(name: string): string {
 }
 
 async function main() {
-  console.log('🏏 Initializing TVS Dealer Super Cup (September 2026)...\n');
+  console.log('🏏 Initializing TVS Dealer Super Cup (September-October 2026)...\n');
 
-  // 1. Ensure September 2026 Campaign exists
+  // 1. Ensure September-October 2026 Campaign exists
   let campaign = await prisma.campaign.findFirst({
     where: { type: 'SUPER_CUP' },
   });
@@ -20,10 +20,10 @@ async function main() {
     campaign = await prisma.campaign.update({
       where: { id: campaign.id },
       data: {
-        name: 'Dealer Super Cup — September 2026',
-        slug: 'september-2026',
+        name: 'TVS Certified Super Cup - September-October 2026',
+        slug: 'supercup-sept-oct-2026',
         startDate: new Date('2026-09-01T00:00:00Z'),
-        endDate: new Date('2026-09-30T23:59:59Z'),
+        endDate: new Date('2026-10-31T23:59:59Z'),
         type: 'SUPER_CUP',
         status: 'ACTIVE',
       },
@@ -31,10 +31,10 @@ async function main() {
   } else {
     campaign = await prisma.campaign.create({
       data: {
-        name: 'Dealer Super Cup — September 2026',
-        slug: 'september-2026',
+        name: 'TVS Certified Super Cup - September-October 2026',
+        slug: 'supercup-sept-oct-2026',
         startDate: new Date('2026-09-01T00:00:00Z'),
-        endDate: new Date('2026-09-30T23:59:59Z'),
+        endDate: new Date('2026-10-31T23:59:59Z'),
         type: 'SUPER_CUP',
         status: 'ACTIVE',
       },
@@ -69,8 +69,8 @@ async function main() {
     });
   }
 
-  // 3. Match Days
-  console.log('📅 Setting September 2026 match schedule...');
+  // 3. Match Days (All Thursdays in September and October 2026)
+  console.log('📅 Setting September-October 2026 match schedule (Every Thursday at 2 PM IST)...');
   await prisma.matchDay.deleteMany({ where: { campaignId: campaign.id } });
 
   await prisma.matchDay.createMany({
@@ -78,7 +78,7 @@ async function main() {
       {
         campaignId: campaign.id,
         matchNumber: 1,
-        auctionId: '1978', // Today's live TVS Certified auction (TVSC Weekly Auction TN 10-Sep-2026)
+        auctionId: '1978', // Live TVS Certified auction (TVSC Weekly Auction TN 10-Sep-2026)
         date: new Date('2026-09-10T08:30:00Z'), // 2:00 PM IST
         status: 'LIVE',
       },
@@ -86,14 +86,49 @@ async function main() {
         campaignId: campaign.id,
         matchNumber: 2,
         auctionId: 'TVSC-SEP-17',
-        date: new Date('2026-09-17T08:30:00Z'),
+        date: new Date('2026-09-17T08:30:00Z'), // September 17, 2026 Thursday 2:00 PM IST
         status: 'UPCOMING',
       },
       {
         campaignId: campaign.id,
         matchNumber: 3,
         auctionId: 'TVSC-SEP-24',
-        date: new Date('2026-09-24T08:30:00Z'),
+        date: new Date('2026-09-24T08:30:00Z'), // September 24, 2026 Thursday 2:00 PM IST
+        status: 'UPCOMING',
+      },
+      {
+        campaignId: campaign.id,
+        matchNumber: 4,
+        auctionId: 'TVSC-OCT-01',
+        date: new Date('2026-10-01T08:30:00Z'), // October 1, 2026 Thursday 2:00 PM IST
+        status: 'UPCOMING',
+      },
+      {
+        campaignId: campaign.id,
+        matchNumber: 5,
+        auctionId: 'TVSC-OCT-08',
+        date: new Date('2026-10-08T08:30:00Z'), // October 8, 2026 Thursday 2:00 PM IST
+        status: 'UPCOMING',
+      },
+      {
+        campaignId: campaign.id,
+        matchNumber: 6,
+        auctionId: 'TVSC-OCT-15',
+        date: new Date('2026-10-15T08:30:00Z'), // October 15, 2026 Thursday 2:00 PM IST
+        status: 'UPCOMING',
+      },
+      {
+        campaignId: campaign.id,
+        matchNumber: 7,
+        auctionId: 'TVSC-OCT-22',
+        date: new Date('2026-10-22T08:30:00Z'), // October 22, 2026 Thursday 2:00 PM IST
+        status: 'UPCOMING',
+      },
+      {
+        campaignId: campaign.id,
+        matchNumber: 8,
+        auctionId: 'TVSC-OCT-29',
+        date: new Date('2026-10-29T08:30:00Z'), // October 29, 2026 Thursday 2:00 PM IST
         status: 'UPCOMING',
       },
     ],
@@ -174,7 +209,11 @@ async function main() {
   }
 
   const dealerCount = await prisma.dealer.count();
-  console.log(`\n✅ Setup complete! Database ready with ${dealerCount} real TVS dealers and clean 0-point score slate.`);
+  console.log(`\n✅ Setup complete! Database ready with ${dealerCount} real TVS dealers.`);
+  console.log(`\n📅 Campaign: September-October 2026 (8 Thursdays at 2:00 PM IST)`);
+  console.log(`   - September: 10, 17, 24`);
+  console.log(`   - October: 1, 8, 15, 22, 29`);
+  console.log(`\n🏆 All Thursdays will work automatically with the cron job!\n`);
 }
 
 main()
