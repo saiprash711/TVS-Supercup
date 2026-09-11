@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: 'standalone', // Enable for Docker deployment
+  ...(process.env.DOCKER_BUILD ? { output: 'standalone' } : {}),
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
