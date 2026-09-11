@@ -1,0 +1,19 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/internal/events",
+      "schedule": "*/2 * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/internal/events/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+  }
+}

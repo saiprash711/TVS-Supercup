@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: supercup-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/prisma/dev.db
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - NODE_ENV=production
+    volumes:
+      - ./prisma:/app/prisma
+    depends_on:
+      - sync-daemon
+
+  sync-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile.sync
+    container_name: supercup-sync
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=file:/app/prisma/dev.db
+      - AUCTION_ID=${AUCTION_ID:-1978}
+      - SYNC_INTERVAL_MS=${SYNC_INTERVAL_MS:-10000}
+      - NODE_ENV=production
+    volumes:
+      - ./prisma:/app/prisma
+
+volumes:
+  prisma-data:

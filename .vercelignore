@@ -1,0 +1,50 @@
+# Development files
+*.md
+!README.md
+.env
+.env.*
+*.log
+
+# Local database
+prisma/dev.db
+prisma/dev.db-journal
+prisma/dev.db-wal
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+
+# Development scripts
+scripts/
+start.bat
+start_live_sync.bat
+
+# Docker files
+Dockerfile
+Dockerfile.sync
+docker-compose.yml
+.dockerignore
+
+# Deployment scripts
+deploy.ps1
+deploy.sh
+ecosystem.config.js
+
+# Documentation
+AGENTS.md
+CLAUDE.md
+DEPLOYMENT.md
+PRE_DEPLOYMENT_CHECKLIST.md
+QUICKSTART.md
+THURSDAY_AUCTION_FLOW.md
+CAMPAIGN ROADMAP.pdf
+Dealers
+Password
+
+# Build artifacts
+.next/cache
+node_modules/.cache
+tsconfig.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db

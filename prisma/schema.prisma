@@ -1,0 +1,162 @@
+// TVS Certified Dealer Super Cup — Database Schema
+// Using SQLite for local dev. Switch to PostgreSQL in production by changing the provider and url.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Dealer ─────────────────────────────────────────────────────────────────
+
+model Dealer {
+  id               Int              @id @default(autoincrement())
+  externalDealerId String           @unique @map("external_dealer_id")
+  displayName      String           @map("display_name")
+  maskedName       String           @map("masked_name")
+  city             String           @default("")
+  phone            String?
+  password         String?          @default("tvs123")
+  status           String           @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  activities DealerActivity[]
+  scores     DealerScore[]
+  tiers      DealerTier[]
+
+  @@map("dealers")
+}
+
+// ─── Campaign ───────────────────────────────────────────────────────────────
+
+model Campaign {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String   @unique
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  type      String   // SUPER_CUP, LOYALTY, RECOGNITION
+  status    String   @default("ACTIVE") // DRAFT, ACTIVE, COMPLETED, ARCHIVED
+  createdAt DateTime @default(now()) @map("created_at")
+
+  matchDays  MatchDay[]
+  activities DealerActivity[]
+  rules      PointRule[]
+  scores     DealerScore[]
+  tiers      DealerTier[]
+
+  @@map("campaigns")
+}
+
+// ─── Match Day ──────────────────────────────────────────────────────────────
+
+model MatchDay {
+  id          Int      @id @default(autoincrement())
+  campaignId  Int      @map("campaign_id")
+  matchNumber Int      @map("match_number")
+  auctionId   String?  @map("auction_id")
+  date        DateTime
+  status      String   @default("UPCOMING") // UPCOMING, LIVE, COMPLETED
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  campaign   Campaign         @relation(fields: [campaignId], references: [id])
+  activities DealerActivity[]
+
+  @@unique([campaignId, matchNumber])
+  @@map("match_days")
+}
+
+// ─── Dealer Activity ────────────────────────────────────────────────────────
+
+model DealerActivity {
+  id                    Int      @id @default(autoincrement())
+  dealerId              Int      @map("dealer_id")
+  campaignId            Int      @map("campaign_id")
+  matchId               Int?     @map("match_id")
+  activityType          String   @map("activity_type") // BUY, SELL, MATCH_PARTICIPATION, ALL_MATCHES_BONUS
+  externalTransactionId String?  @map("external_transaction_id")
+  points                Int
+  metadata              String?  @default("{}") // Stores vehicle name, bid amount, device info, etc.
+  timestamp             DateTime
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  dealer   Dealer   @relation(fields: [dealerId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  match    MatchDay? @relation(fields: [matchId], references: [id])
+
+  // Duplicate protection: same dealer + campaign + match + activity + transaction = unique
+  @@unique([dealerId, campaignId, matchId, activityType, externalTransactionId])
+  @@map("dealer_activities")
+}
+
+// ─── Point Rules ────────────────────────────────────────────────────────────
+
+model PointRule {
+  id           Int      @id @default(autoincrement())
+  campaignId   Int      @map("campaign_id")
+  activityType String   @map("activity_type") // BUY, SELL, MATCH_PARTICIPATION, ALL_MATCHES_BONUS
+  points       Int
+  description  String   @default("")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([campaignId, activityType])
+  @@map("point_rules")
+}
+
+// ─── Dealer Score (materialized view for performance) ───────────────────────
+
+model DealerScore {
+  id         Int      @id @default(autoincrement())
+  dealerId   Int      @map("dealer_id")
+  campaignId Int      @map("campaign_id")
+  totalPoints Int     @default(0) @map("total_points")
+  rank       Int      @default(0)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  dealer   Dealer   @relation(fields: [dealerId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([dealerId, campaignId])
+  @@map("dealer_scores")
+}
+
+// ─── Dealer Tier (for November loyalty progression) ─────────────────────────
+
+model DealerTier {
+  id              Int      @id @default(autoincrement())
+  dealerId        Int      @map("dealer_id")
+  campaignId      Int      @map("campaign_id")
+  tier            String   @default("BEGINNER") // BEGINNER, SILVER, GOLD, PLATINUM, DIAMOND
+  cumulativePoints Int     @default(0) @map("cumulative_points")
+  achievedAt      DateTime @default(now()) @map("achieved_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  dealer   Dealer   @relation(fields: [dealerId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([dealerId, campaignId])
+  @@map("dealer_tiers")
+}
+
+// ─── Audit Log (for admin manual adjustments) ───────────────────────────────
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  adminUser String   @map("admin_user")
+  action    String   // POINTS_ADJUSTED, RULE_CHANGED, SCORE_RECALCULATED, MATCH_UPDATED
+  targetType String  @map("target_type") // DEALER, CAMPAIGN, MATCH, RULE
+  targetId  String   @map("target_id")
+  details   String   // JSON string with before/after values
+  reason    String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
