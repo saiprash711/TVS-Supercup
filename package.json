@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "npx prisma db push",
-    "db:seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "db:seed": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json prisma/seed.ts",
     "db:setup": "npx prisma db push && npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "db:studio": "npx prisma studio",
     "sync:live": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/live-sync-daemon.ts",
