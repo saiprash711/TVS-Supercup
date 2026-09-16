@@ -117,20 +117,37 @@ export default function AdminPage() {
   const [liveFilter, setLiveFilter] = useState<string>('ALL');
   const [liveSearchQuery, setLiveSearchQuery] = useState<string>('');
   const [liveLoading, setLiveLoading] = useState(false);
-  const [liveAuctionId, setLiveAuctionId] = useState('1978');
+  const [liveAuctionId, setLiveAuctionId] = useState('1991');
 
   // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<{ dealerId: number; dealerName: string } | null>(null);
   const [adjustPoints, setAdjustPoints] = useState('');
 
-  // Helper: compute the next auction date label (auctions are every Thursday at 2 PM IST)
-  const getNextAuctionDateLabel = () => {
+  // Helper: compute the schedule/date label for the currently viewed auction
+  const getAuctionScheduleLabel = (targetAuctionId: string = liveAuctionId) => {
+    const match = matchDays.find(m => String(m.auctionId) === String(targetAuctionId.trim()));
+    if (match?.date) {
+      const matchDate = new Date(match.date);
+      const now = new Date();
+      const isToday = now.toDateString() === matchDate.toDateString();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const isTomorrow = tomorrow.toDateString() === matchDate.toDateString();
+      const istTime = '2:00 PM IST';
+      
+      if (match.status === 'COMPLETED' || matchDate.getTime() < now.getTime() - 24 * 3600 * 1000) {
+        return `${matchDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })} (Completed)`;
+      }
+      if (isToday) return `Today at ${istTime} (LIVE)`;
+      if (isTomorrow) return `Tomorrow at ${istTime}`;
+      return `${matchDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} at ${istTime}`;
+    }
+
+    // Fallback if not matching a known matchDay
     const now = new Date();
     const auctionDate = new Date(now);
     const dayOfWeek = auctionDate.getDay(); // 0=Sun, 4=Thu
     const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
     if (daysUntilThursday === 0) {
-      // Today is Thursday — check if it's past auction time
       const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
       if (istNow.getHours() >= 16) {
         auctionDate.setDate(auctionDate.getDate() + 7);
@@ -141,9 +158,9 @@ export default function AdminPage() {
     const isToday = now.toDateString() === auctionDate.toDateString();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
-    if (isToday) return 'Today';
-    if (isTomorrow) return 'Tomorrow';
-    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    if (isToday) return 'Today at 2:00 PM IST';
+    if (isTomorrow) return 'Tomorrow at 2:00 PM IST';
+    return `${auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at 2:00 PM IST`;
   };
   const [adjustReason, setAdjustReason] = useState('');
 
@@ -182,7 +199,13 @@ export default function AdminPage() {
       if (data.stats) {
         setStats(data.stats);
         setLeaderboard(data.leaderboard || []);
-        setMatchDays(data.matchDays || []);
+        const matches: MatchDay[] = data.matchDays || [];
+        setMatchDays(matches);
+        const activeOrUpcoming = matches.find(m => m.status === 'LIVE') ||
+                                matches.find(m => m.status === 'UPCOMING');
+        if (activeOrUpcoming?.auctionId) {
+          setLiveAuctionId(prev => (prev === '1978' || prev === '1991' || !prev ? activeOrUpcoming.auctionId! : prev));
+        }
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -206,7 +229,7 @@ export default function AdminPage() {
     setLiveLoading(true);
     try {
       const syncParam = autoSync ? '&sync=true' : '';
-      const auctionParam = `&auctionId=${encodeURIComponent(liveAuctionId.trim() || '1978')}`;
+      const auctionParam = `&auctionId=${encodeURIComponent(liveAuctionId.trim() || '1991')}`;
       const filterParam = filter && filter !== 'ALL' ? `&type=${encodeURIComponent(filter)}` : '';
       const searchParam = search?.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const res = await fetch(`/api/admin?action=liveActivities${syncParam}${auctionParam}${filterParam}${searchParam}&take=200`);
@@ -250,7 +273,7 @@ export default function AdminPage() {
 
   const handleSyncLiveAuction = async () => {
     setSyncing(true);
-    const targetId = liveAuctionId.trim() || '1978';
+    const targetId = liveAuctionId.trim() || '1991';
     try {
       const res = await fetch('/api/admin', {
         method: 'POST',
@@ -365,8 +388,8 @@ export default function AdminPage() {
       window.open('/api/admin?action=export&type=activities&all=true', '_blank');
       showToast('Downloading All Live Bids & Activities Feed CSV...');
     } else if (type === 'activities') {
-      window.open('/api/admin?action=export&type=activities', '_blank');
-      showToast(`Downloading Auction #${liveAuctionId || '1978'} Results (Won Vehicles) CSV...`);
+      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}`, '_blank');
+      showToast(`Downloading Auction #${liveAuctionId || '1991'} Results (Won Vehicles) CSV...`);
     } else {
       window.open('/api/admin?action=export&type=dealers', '_blank');
       showToast('Downloading Dealer Leaderboard Summary CSV...');
@@ -374,11 +397,11 @@ export default function AdminPage() {
   };
 
   const triggerDownloadBoth = () => {
-    window.open('/api/admin?action=export&type=activities', '_blank');
+    window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}`, '_blank');
     setTimeout(() => {
       window.open('/api/admin?action=export&type=dealers', '_blank');
     }, 600);
-    showToast(`Downloading Auction #${liveAuctionId || '1978'} Results & Dealer Summary CSVs...`);
+    showToast(`Downloading Auction #${liveAuctionId || '1991'} Results & Dealer Summary CSVs...`);
   };
 
   // ─── Login Screen ──────────────────────────────────────────────────
@@ -506,7 +529,7 @@ export default function AdminPage() {
                 onClick={handleSyncLiveAuction}
                 disabled={syncing}
               >
-                {syncing ? '⏳ Syncing Auction 1978...' : '⚡ Sync 2 PM Live Auction'}
+                {syncing ? `⏳ Syncing Auction #${liveAuctionId || '1991'}...` : '⚡ Sync 2 PM Live Auction'}
               </button>
               <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginBottom: 'var(--space-sm)' }} onClick={handleRecalculate}>
                 🔄 Recalculate
@@ -644,11 +667,38 @@ export default function AdminPage() {
                             📡 2 PM Live Auction Monitor & Interactions
                           </h2>
                           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
-                            Auction <strong>#{liveStats?.auctionId || liveAuctionId}</strong> • {liveStats?.totalVehicles ?? '—'} Activities • Chennai / TN • {getNextAuctionDateLabel()} at <strong>2:00 PM IST</strong> • All captured activities stored permanently in SQLite (<code style={{ color: '#60A5FA' }}>dev.db</code>)
+                            Auction <strong>#{liveStats?.auctionId || liveAuctionId}</strong>
+                            {matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ? ` (Match #${matchDays.find(m => String(m.auctionId) === String(liveAuctionId))?.matchNumber})` : ''} • {liveStats?.totalActivities ?? 0} Activities • Chennai / TN • {getAuctionScheduleLabel(liveAuctionId)}
                           </p>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {/* Quick Match Selection */}
+                          {matchDays.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Match:</span>
+                              <select
+                                value={liveAuctionId}
+                                onChange={(e) => setLiveAuctionId(e.target.value)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#60A5FA',
+                                  fontWeight: 700,
+                                  fontSize: '0.82rem',
+                                  outline: 'none',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {matchDays.map(m => (
+                                  <option key={m.id} value={m.auctionId || ''} style={{ background: '#111827', color: '#fff' }}>
+                                    Match #{m.matchNumber} {m.auctionId ? `(#${m.auctionId})` : ''} — {m.status === 'LIVE' ? '🟢 LIVE' : m.status === 'COMPLETED' ? '✓ Completed' : '⏳ Upcoming'}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Auction ID:</span>
                             <input
@@ -700,7 +750,7 @@ export default function AdminPage() {
                             onClick={handleSyncLiveAuction}
                             disabled={syncing}
                           >
-                            {syncing ? '⏳ Syncing...' : `⚡ Sync Auction #${liveAuctionId || '1978'}`}
+                            {syncing ? '⏳ Syncing...' : `⚡ Sync Auction #${liveAuctionId || '1991'}`}
                           </button>
                         </div>
                       </div>
@@ -926,7 +976,7 @@ export default function AdminPage() {
                               Live Auction Stream Ready
                             </h3>
                             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '520px', margin: '0 auto var(--space-md)' }}>
-                              Next live event: <strong>{getNextAuctionDateLabel()} at 2:00 PM IST (Auction #{liveAuctionId})</strong>. Incoming bids, buyer wins, room attendees, and vehicle inspections will stream and store here in real-time.
+                              Live event schedule: <strong>{getAuctionScheduleLabel(liveAuctionId)} (Auction #{liveAuctionId})</strong>. Incoming bids, buyer wins, room attendees, and vehicle inspections will stream and store here in real-time.
                             </p>
                             <button className="btn btn-primary btn-sm" onClick={handleSyncLiveAuction} disabled={syncing}>
                               {syncing ? '⏳ Syncing TVS...' : '⚡ Test Live Sync Now'}

@@ -156,7 +156,16 @@ export async function GET(request: NextRequest) {
 
       case 'liveActivities': {
         const shouldSync = searchParams.get('sync') === 'true';
-        const syncAuctionId = searchParams.get('auctionId') || '1978';
+        let syncAuctionId = searchParams.get('auctionId');
+        if (!syncAuctionId) {
+          const liveMatch = await prisma.matchDay.findFirst({
+            where: { campaignId: campaign.id, status: 'LIVE' },
+          }) || await prisma.matchDay.findFirst({
+            where: { campaignId: campaign.id, status: 'UPCOMING' },
+            orderBy: { date: 'asc' },
+          });
+          syncAuctionId = liveMatch?.auctionId || '1991';
+        }
         if (shouldSync) {
           try {
             await syncLiveAuction(syncAuctionId);
@@ -360,7 +369,16 @@ export async function GET(request: NextRequest) {
         };
 
         if (exportType === 'activities') {
-          const auctionId = searchParams.get('auctionId') || '1978';
+          let auctionId = searchParams.get('auctionId');
+          if (!auctionId) {
+            const liveMatch = await prisma.matchDay.findFirst({
+              where: { campaignId: campaign.id, status: 'LIVE' },
+            }) || await prisma.matchDay.findFirst({
+              where: { campaignId: campaign.id, status: 'UPCOMING' },
+              orderBy: { date: 'asc' },
+            });
+            auctionId = liveMatch?.auctionId || '1991';
+          }
           const isAll = searchParams.get('all') === 'true';
 
           const whereClause: any = {
@@ -713,12 +731,12 @@ export async function POST(request: NextRequest) {
             targetType: 'CAMPAIGN',
             targetId: String(campaign.id),
             details: JSON.stringify({
-              auctionId: '1978',
+              auctionId: body.auctionId || '1991',
               dealersSynced: allDealers.length,
               totalNewActivities,
               totalPointsAwarded,
             }),
-            reason: body.reason || 'Synced live auction 1978 transactions',
+            reason: body.reason || `Synced live auction ${body.auctionId || '1991'} transactions`,
           },
         });
 
@@ -731,7 +749,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'syncLiveAuction': {
-        const auctionId = body.auctionId || '1978';
+        const auctionId = body.auctionId || '1991';
         const result = await syncLiveAuction(auctionId);
 
         await prisma.auditLog.create({

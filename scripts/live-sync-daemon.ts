@@ -20,7 +20,7 @@ process.on('uncaughtException', (err) => {
   console.error('⚠️ [Safety Shield] Uncaught Exception caught (daemon continuing):', err);
 });
 
-const AUCTION_ID = process.env.AUCTION_ID || '1978';
+let AUCTION_ID = process.env.AUCTION_ID || '';
 const INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS || '10000', 10);
 
 let isRunning = true;
@@ -64,39 +64,25 @@ async function runCycle(campaignId: number) {
       ],
     };
 
-    const totalBids = await prisma.dealerActivity.count({
-      where: { ...auctionWhere, activityType: 'BID_PLACED' },
-    });
-    const totalBuys = await prisma.dealerActivity.count({
-      where: { ...auctionWhere, activityType: 'BUY' },
-    });
-    const totalAttends = await prisma.dealerActivity.count({
-      where: { ...auctionWhere, activityType: 'MATCH_PARTICIPATION' },
-    });
-    const totalWatchlist = await prisma.dealerActivity.count({
-      where: { ...auctionWhere, activityType: 'WATCHLIST_ADD' },
-    });
-    const activeDealers = await prisma.dealerActivity.groupBy({
-      by: ['dealerId'],
-      where: auctionWhere,
-    });
-
-    // Fetch top 3 leaderboard
-    const topLeaderboard = await getLeaderboard(campaignId, 3);
-    const topStr = topLeaderboard
-      .map(d => `#${d.rank} ${d.dealer}: ${d.points} pts`)
-      .join(' | ');
+    const totalBids = await prisma.dealerActivity.count({ where: { ...auctionWhere, activityType: 'BID_PLACED' } });
+    const totalWins = await prisma.dealerActivity.count({ where: { ...auctionWhere, activityType: 'BUY' } });
+    const totalAttendees = await prisma.dealerActivity.count({ where: { ...auctionWhere, activityType: 'MATCH_PARTICIPATION' } });
+    const totalInterests = await prisma.dealerActivity.count({ where: { ...auctionWhere, activityType: 'WATCHLIST_ADD' } });
 
     if (result.processed > 0) {
-      console.log(`\n🔥 [${timeStr}] [CYCLE #${cycleNumber}] NEW LIVE INTERACTIONS CAPTURED!`);
-      console.log(`   +${result.processed} new activities | +${result.pointsAwarded} points awarded | Took ${durationMs}ms`);
-      console.log(`   📊 Totals in DB: ${totalBids} Bids | ${totalBuys} Won Vehicles | ${totalAttends} Attendees | ${activeDealers.length} Active Dealers`);
-      console.log(`   🏆 Top Leaders: ${topStr || 'None yet'}`);
+      console.log(`\n🔥 [${timeStr}] [Cycle #${cycleNumber}] NEW LIVE ACTIVITIES DETECTED! (+${result.processed} new, +${result.pointsAwarded} pts)`);
+      console.log(`   📊 Cumulative Totals for Auction #${AUCTION_ID}: ${totalBids} Bids | ${totalWins} Won Vehicles | ${totalAttendees} Attendees | ${totalInterests} Watchlists (${durationMs}ms)`);
+      
+      // Print top 3 leaderboard snapshot
+      const top3 = await getLeaderboard(campaignId, 3);
+      if (top3.length > 0) {
+        console.log(`   🏆 Leaderboard Top 3:`);
+        top3.forEach((d, i) => {
+          console.log(`      ${i + 1}. ${d.dealer} — ${d.points} pts`);
+        });
+      }
     } else {
-      console.log(
-        `[${timeStr}] [Cycle #${cycleNumber}] Listening to Auction #${AUCTION_ID}... ` +
-        `DB State: ${totalBids} bids, ${totalBuys} won, ${totalAttends} attendees (${activeDealers.length} active dealers) [${durationMs}ms]`
-      );
+      process.stdout.write(`\r📡 [${timeStr}] [Cycle #${cycleNumber}] Listening to Auction #${AUCTION_ID}... ${totalBids} bids, ${totalWins} won, ${totalAttendees} attended (${durationMs}ms)`);
     }
   } catch (err: any) {
     console.error(`\n⚠️ [${timeStr}] [Cycle #${cycleNumber}] Sync error (will retry in ${INTERVAL_MS / 1000}s):`, err?.message || err);
@@ -106,23 +92,30 @@ async function runCycle(campaignId: number) {
 }
 
 async function main() {
-  console.log('===============================================================');
-  console.log('   TVS CERTIFIED SUPER CUP 2026 — LIVE AUCTION SYNC DAEMON   ');
-  console.log('===============================================================');
-  console.log(`Target Auction ID: #${AUCTION_ID} (Today at 2:00 PM IST)`);
-  console.log(`Polling Interval : Every ${INTERVAL_MS / 1000} seconds`);
-  console.log(`Database Target  : SQLite (supercup/prisma/dev.db - WAL Mode)`);
-  console.log('Press Ctrl+C to stop gracefully.\n');
-
   // Find active campaign
   const campaign = await prisma.campaign.findFirst({
     where: { type: 'SUPER_CUP', status: 'ACTIVE' },
+    include: { matchDays: true },
   });
 
   if (!campaign) {
     console.error('❌ Error: No active SUPER_CUP campaign found in database!');
     process.exit(1);
   }
+
+  const liveMatch = campaign.matchDays.find(m => m.status === 'LIVE') ||
+                    campaign.matchDays.find(m => m.status === 'UPCOMING');
+  if (!AUCTION_ID) {
+    AUCTION_ID = liveMatch?.auctionId || '1991';
+  }
+
+  console.log('===============================================================');
+  console.log('   TVS CERTIFIED SUPER CUP 2026 — LIVE AUCTION SYNC DAEMON   ');
+  console.log('===============================================================');
+  console.log(`Target Auction ID: #${AUCTION_ID} (${liveMatch ? `Match #${liveMatch.matchNumber}` : 'Live Match'})`);
+  console.log(`Polling Interval : Every ${INTERVAL_MS / 1000} seconds`);
+  console.log(`Database Target  : Active Database`);
+  console.log('Press Ctrl+C to stop gracefully.\n');
 
   console.log(`Linked Campaign  : ${campaign.name} (ID: ${campaign.id})`);
   console.log(`TVS Identities   : 1,608 registered dealer mappings verified & ready.\n`);

@@ -481,7 +481,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     return this.userToKeyMap.get(s) || s;
   }
 
-  async getDealerActivities(dealerId: string, auctionId: string = '1978', token?: string): Promise<TVSAuctionActivity[]> {
+  async getDealerActivities(dealerId: string, auctionId: string = '1991', token?: string): Promise<TVSAuctionActivity[]> {
     const activities: TVSAuctionActivity[] = [];
     const authToken = await this.getValidToken(token);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -666,7 +666,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     return activities;
   }
 
-  async getAuctionActivities(auctionId: string = '1978', token?: string): Promise<TVSAuctionActivity[]> {
+  async getAuctionActivities(auctionId: string = '1991', token?: string): Promise<TVSAuctionActivity[]> {
     const activities: TVSAuctionActivity[] = [];
     let authToken = await this.getValidToken(token);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

@@ -78,16 +78,16 @@ async function main() {
       {
         campaignId: campaign.id,
         matchNumber: 1,
-        auctionId: '1978', // Live TVS Certified auction (TVSC Weekly Auction TN 10-Sep-2026)
+        auctionId: '1978', // TVS Certified auction (TVSC Weekly Auction TN 10-Sep-2026)
         date: new Date('2026-09-10T08:30:00Z'), // 2:00 PM IST
-        status: 'LIVE',
+        status: 'COMPLETED',
       },
       {
         campaignId: campaign.id,
         matchNumber: 2,
-        auctionId: 'TVSC-SEP-17',
+        auctionId: '1991', // Live TVS Certified auction (TVSC Weekly Auction TN 17-Sep-2026)
         date: new Date('2026-09-17T08:30:00Z'), // September 17, 2026 Thursday 2:00 PM IST
-        status: 'UPCOMING',
+        status: 'LIVE',
       },
       {
         campaignId: campaign.id,

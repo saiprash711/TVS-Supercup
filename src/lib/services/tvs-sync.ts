@@ -54,9 +54,9 @@ export async function syncDealerActivities(
       }
     }
 
-    // Default to the current live or first match if unmapped
-    const liveMatch = matchDays.find(m => m.status === 'LIVE') || matchDays[0];
-    const targetAuctionId = liveMatch?.auctionId || '1978';
+    // Default to the current live or upcoming match if unmapped
+    const liveMatch = matchDays.find(m => m.status === 'LIVE') || matchDays.find(m => m.status === 'UPCOMING') || matchDays[0];
+    const targetAuctionId = liveMatch?.auctionId || '1991';
 
     // 1. Fetch live activities from TVS APIs strictly for this auction
     const liveActivities = await provider.getDealerActivities(externalDealerId, targetAuctionId, token);
@@ -142,7 +142,7 @@ export async function syncDealerActivities(
  * Sync activities for an entire match auction (all dealers).
  */
 export async function syncAuctionActivities(
-  auctionId: string = '1978',
+  auctionId: string = '1991',
   campaignId: number,
   token?: string
 ): Promise<{ processed: number; pointsAwarded: number; totalActivitiesFound: number }> {
@@ -270,28 +270,34 @@ export async function syncAuctionActivities(
 }
 
 /**
- * Synchronize the current live auction (e.g. today's 2 PM auction #1978)
+ * Synchronize the current live auction (e.g. tomorrow's 2 PM auction #1991)
  */
 export async function syncLiveAuction(
-  auctionId: string = '1978',
+  auctionId?: string,
   token?: string
 ): Promise<{ success: boolean; processed: number; pointsAwarded: number; auctionId: string }> {
   const campaign = await prisma.campaign.findFirst({
     where: { type: 'SUPER_CUP', status: 'ACTIVE' },
+    include: { matchDays: true },
     orderBy: { startDate: 'desc' },
   });
 
   if (!campaign) {
-    return { success: false, processed: 0, pointsAwarded: 0, auctionId };
+    return { success: false, processed: 0, pointsAwarded: 0, auctionId: auctionId || '1991' };
   }
 
-  const result = await syncAuctionActivities(auctionId, campaign.id, token);
+  const liveMatch = campaign.matchDays.find(m => m.status === 'LIVE') ||
+                    campaign.matchDays.find(m => m.status === 'UPCOMING') ||
+                    campaign.matchDays[0];
+  const targetAuctionId = auctionId || liveMatch?.auctionId || '1991';
+
+  const result = await syncAuctionActivities(targetAuctionId, campaign.id, token);
 
   return {
     success: true,
     processed: result.processed,
     pointsAwarded: result.pointsAwarded,
-    auctionId,
+    auctionId: targetAuctionId,
   };
 }
 
