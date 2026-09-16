@@ -665,30 +665,30 @@ export default function AdminPage() {
                   <>
                     {/* Header Banner */}
                     <div className="card" style={{
-                      background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))',
-                      borderColor: 'rgba(59, 130, 246, 0.3)',
-                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                      background: '#ffffff',
+                      borderColor: '#e2e8f0',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                       marginBottom: 'var(--space-lg)',
                     }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-md)' }}>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                             <span style={{
                               display: 'inline-block',
-                              width: '10px',
-                              height: '10px',
+                              width: '8px',
+                              height: '8px',
                               borderRadius: '50%',
                               background: '#10B981',
-                              boxShadow: '0 0 10px #10B981',
+                              boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
                             }}></span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#10B981', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10B981', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                               Live Stream Connected to TVS Certified
                             </span>
                           </div>
-                          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: 800, margin: 0 }}>
+                          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
                             📡 2 PM Live Auction Monitor & Interactions
                           </h2>
-                          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+                          <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '4px' }}>
                             Auction <strong>#{liveStats?.auctionId || liveAuctionId}</strong>
                             {matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ? ` (Match #${matchDays.find(m => String(m.auctionId) === String(liveAuctionId))?.matchNumber})` : ''} • {liveStats?.totalActivities ?? 0} Activities • Chennai / TN • {getAuctionScheduleLabel(liveAuctionId)}
                           </p>
@@ -697,23 +697,23 @@ export default function AdminPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {/* Quick Match Selection */}
                           {matchDays.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Match:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>Match:</span>
                               <select
                                 value={liveAuctionId}
                                 onChange={(e) => handleMatchSelect(e.target.value)}
                                 style={{
                                   background: 'transparent',
                                   border: 'none',
-                                  color: '#60A5FA',
-                                  fontWeight: 700,
-                                  fontSize: '0.82rem',
+                                  color: '#2563eb',
+                                  fontWeight: 600,
+                                  fontSize: '0.875rem',
                                   outline: 'none',
                                   cursor: 'pointer',
                                 }}
                               >
                                 {matchDays.map(m => (
-                                  <option key={m.id} value={m.auctionId || ''} style={{ background: '#111827', color: '#fff' }}>
+                                  <option key={m.id} value={m.auctionId || ''} style={{ background: '#ffffff', color: '#0f172a' }}>
                                     Match #{m.matchNumber} {m.auctionId ? `(#${m.auctionId})` : ''} — {m.status === 'LIVE' ? '🟢 LIVE' : m.status === 'COMPLETED' ? '✓ Completed' : '⏳ Upcoming'}
                                   </option>
                                 ))}
@@ -721,8 +721,8 @@ export default function AdminPage() {
                             </div>
                           )}
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Auction ID:</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>Auction ID:</span>
                             <input
                               type="text"
                               value={liveAuctionId}
@@ -731,9 +731,9 @@ export default function AdminPage() {
                                 width: '55px',
                                 background: 'transparent',
                                 border: 'none',
-                                color: '#60A5FA',
-                                fontWeight: 700,
-                                fontSize: '0.85rem',
+                                color: '#2563eb',
+                                fontWeight: 600,
+                                fontSize: '0.875rem',
                                 outline: 'none',
                               }}
                               title="TVS Certified Auction ID"
@@ -743,9 +743,10 @@ export default function AdminPage() {
                           <button
                             className="btn btn-sm"
                             style={{
-                              background: liveAutoRefresh ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                              color: liveAutoRefresh ? '#10B981' : 'var(--text-muted)',
-                              border: `1px solid ${liveAutoRefresh ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)'}`,
+                              background: liveAutoRefresh ? '#dcfce7' : '#f8fafc',
+                              color: liveAutoRefresh ? '#16a34a' : '#64748b',
+                              border: `1px solid ${liveAutoRefresh ? '#bbf7d0' : '#e2e8f0'}`,
+                              fontWeight: 600,
                             }}
                             onClick={() => setLiveAutoRefresh(!liveAutoRefresh)}
                           >
@@ -756,7 +757,7 @@ export default function AdminPage() {
                             className="btn btn-ghost btn-sm"
                             onClick={() => loadLiveActivities(false)}
                             disabled={liveLoading}
-                            style={{ border: '1px solid var(--border-subtle)' }}
+                            style={{ border: '1px solid #e2e8f0' }}
                           >
                             {liveLoading ? '🔄 Fetching...' : '🔄 Refresh View'}
                           </button>
@@ -764,10 +765,11 @@ export default function AdminPage() {
                           <button
                             className="btn btn-primary btn-sm"
                             style={{
-                              background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+                              background: '#2563eb',
                               color: '#fff',
-                              boxShadow: '0 2px 12px rgba(37, 99, 235, 0.4)',
-                              fontWeight: 700,
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                              fontWeight: 600,
+                              border: 'none',
                             }}
                             onClick={handleSyncLiveAuction}
                             disabled={syncing}
