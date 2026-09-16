@@ -166,17 +166,18 @@ export async function GET(request: NextRequest) {
           });
           syncAuctionId = liveMatch?.auctionId || '1991';
         }
-        if (shouldSync) {
+        const match = await prisma.matchDay.findFirst({
+          where: { campaignId: campaign.id, auctionId: syncAuctionId },
+        });
+
+        // Only auto-sync if explicitly requested AND match is not already completed
+        if (shouldSync && (!match || match.status !== 'COMPLETED')) {
           try {
             await syncLiveAuction(syncAuctionId);
           } catch (err) {
             console.warn('Live activities sync error:', err);
           }
         }
-
-        const match = await prisma.matchDay.findFirst({
-          where: { campaignId: campaign.id, auctionId: syncAuctionId },
-        });
 
         const auctionFilter: any = {
           campaignId: campaign.id,

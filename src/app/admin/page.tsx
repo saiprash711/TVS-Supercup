@@ -191,8 +191,8 @@ export default function AdminPage() {
     }
   };
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (keepAuctionId = false, showFullLoader = false) => {
+    if (showFullLoader) setLoading(true);
     try {
       const res = await fetch('/api/admin?action=stats');
       const data = await res.json();
@@ -201,16 +201,19 @@ export default function AdminPage() {
         setLeaderboard(data.leaderboard || []);
         const matches: MatchDay[] = data.matchDays || [];
         setMatchDays(matches);
-        const activeOrUpcoming = matches.find(m => m.status === 'LIVE') ||
-                                matches.find(m => m.status === 'UPCOMING');
-        if (activeOrUpcoming?.auctionId) {
-          setLiveAuctionId(prev => (prev === '1978' || prev === '1991' || !prev ? activeOrUpcoming.auctionId! : prev));
+        if (!keepAuctionId) {
+          const activeOrUpcoming = matches.find(m => m.status === 'LIVE') ||
+                                  matches.find(m => m.status === 'UPCOMING');
+          if (activeOrUpcoming?.auctionId) {
+            setLiveAuctionId(prev => (prev ? prev : activeOrUpcoming.auctionId!));
+          }
         }
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
+    } finally {
+      if (showFullLoader) setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const loadRules = useCallback(async () => {
@@ -225,11 +228,17 @@ export default function AdminPage() {
     if (data.logs) setAuditLog(data.logs);
   }, []);
 
-  const loadLiveActivities = useCallback(async (autoSync = false, filter = liveFilter, search = liveSearchQuery) => {
+  const loadLiveActivities = useCallback(async (
+    autoSync = false,
+    filter = liveFilter,
+    search = liveSearchQuery,
+    overrideAuctionId?: string
+  ) => {
+    const targetId = (overrideAuctionId !== undefined ? overrideAuctionId : liveAuctionId).trim() || '1991';
     setLiveLoading(true);
     try {
       const syncParam = autoSync ? '&sync=true' : '';
-      const auctionParam = `&auctionId=${encodeURIComponent(liveAuctionId.trim() || '1991')}`;
+      const auctionParam = `&auctionId=${encodeURIComponent(targetId)}`;
       const filterParam = filter && filter !== 'ALL' ? `&type=${encodeURIComponent(filter)}` : '';
       const searchParam = search?.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const res = await fetch(`/api/admin?action=liveActivities${syncParam}${auctionParam}${filterParam}${searchParam}&take=200`);
@@ -245,6 +254,11 @@ export default function AdminPage() {
     }
   }, [liveAuctionId, liveFilter, liveSearchQuery]);
 
+  const handleMatchSelect = (newAuctionId: string) => {
+    setLiveAuctionId(newAuctionId);
+    loadLiveActivities(false, liveFilter, liveSearchQuery, newAuctionId);
+  };
+
   const loadDealerDetail = async (dealerId: number) => {
     const res = await fetch(`/api/admin?action=dealer&id=${dealerId}`);
     const data = await res.json();
@@ -253,7 +267,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     checkAuth().then(isAuth => {
-      if (isAuth) loadData();
+      if (isAuth) loadData(false, true);
     });
   }, [checkAuth, loadData]);
 
@@ -261,13 +275,18 @@ export default function AdminPage() {
     if (authenticated && activeTab === 'rules') loadRules();
     if (authenticated && activeTab === 'audit') loadAudit();
     if (authenticated && activeTab === 'liveMonitor') {
-      loadLiveActivities(liveAutoRefresh, liveFilter, liveSearchQuery);
-      if (liveAutoRefresh) {
-        const interval = setInterval(() => loadLiveActivities(true, liveFilter, liveSearchQuery), 10000);
+      const currentMatch = matchDays.find(m => String(m.auctionId) === String(liveAuctionId));
+      const isCompleted = currentMatch?.status === 'COMPLETED';
+
+      loadLiveActivities(liveAutoRefresh && !isCompleted, liveFilter, liveSearchQuery, liveAuctionId);
+      if (liveAutoRefresh && !isCompleted) {
+        const interval = setInterval(() => {
+          loadLiveActivities(true, liveFilter, liveSearchQuery, liveAuctionId);
+        }, 10000);
         return () => clearInterval(interval);
       }
     }
-  }, [authenticated, activeTab, liveAutoRefresh, liveFilter, liveAuctionId, loadRules, loadAudit, loadLiveActivities]);
+  }, [authenticated, activeTab, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadLiveActivities]);
 
   const [syncing, setSyncing] = useState(false);
 
@@ -282,9 +301,12 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`⚡ Live Auction #${targetId} Synced! ${data.processed} activities processed, ${data.pointsAwarded} points awarded.`);
-        loadData();
-        loadLiveActivities(false);
+        const msg = data.processed > 0
+          ? `⚡ Live Auction #${targetId} Synced! ${data.processed} new activities processed, ${data.pointsAwarded} points awarded.`
+          : `⚡ Live Auction #${targetId} Synced! All activities up-to-date (${data.totalActivitiesFound ?? 0} total records).`;
+        showToast(msg);
+        loadData(true, false);
+        loadLiveActivities(false, liveFilter, liveSearchQuery, targetId);
       } else {
         showToast(data.error || 'Failed to sync live auction', 'error');
       }
@@ -529,7 +551,7 @@ export default function AdminPage() {
                 onClick={handleSyncLiveAuction}
                 disabled={syncing}
               >
-                {syncing ? `⏳ Syncing Auction #${liveAuctionId || '1991'}...` : '⚡ Sync 2 PM Live Auction'}
+                {syncing ? `⏳ Syncing Auction #${liveAuctionId || '1991'}...` : `⚡ Sync Auction #${liveAuctionId || '1991'}`}
               </button>
               <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginBottom: 'var(--space-sm)' }} onClick={handleRecalculate}>
                 🔄 Recalculate
@@ -679,7 +701,7 @@ export default function AdminPage() {
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Match:</span>
                               <select
                                 value={liveAuctionId}
-                                onChange={(e) => setLiveAuctionId(e.target.value)}
+                                onChange={(e) => handleMatchSelect(e.target.value)}
                                 style={{
                                   background: 'transparent',
                                   border: 'none',
@@ -704,7 +726,7 @@ export default function AdminPage() {
                             <input
                               type="text"
                               value={liveAuctionId}
-                              onChange={(e) => setLiveAuctionId(e.target.value)}
+                              onChange={(e) => handleMatchSelect(e.target.value)}
                               style={{
                                 width: '55px',
                                 background: 'transparent',

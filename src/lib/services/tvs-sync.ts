@@ -275,7 +275,7 @@ export async function syncAuctionActivities(
 export async function syncLiveAuction(
   auctionId?: string,
   token?: string
-): Promise<{ success: boolean; processed: number; pointsAwarded: number; auctionId: string }> {
+): Promise<{ success: boolean; processed: number; pointsAwarded: number; totalActivitiesFound?: number; auctionId: string }> {
   const campaign = await prisma.campaign.findFirst({
     where: { type: 'SUPER_CUP', status: 'ACTIVE' },
     include: { matchDays: true },
@@ -283,7 +283,7 @@ export async function syncLiveAuction(
   });
 
   if (!campaign) {
-    return { success: false, processed: 0, pointsAwarded: 0, auctionId: auctionId || '1991' };
+    return { success: false, processed: 0, pointsAwarded: 0, totalActivitiesFound: 0, auctionId: auctionId || '1991' };
   }
 
   const liveMatch = campaign.matchDays.find(m => m.status === 'LIVE') ||
@@ -297,6 +297,7 @@ export async function syncLiveAuction(
     success: true,
     processed: result.processed,
     pointsAwarded: result.pointsAwarded,
+    totalActivitiesFound: result.totalActivitiesFound,
     auctionId: targetAuctionId,
   };
 }
