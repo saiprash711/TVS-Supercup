@@ -60,6 +60,28 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
+  // Helper: compute the next auction date label (auctions are every Thursday at 2 PM IST)
+  const getNextAuctionDateLabel = () => {
+    const now = new Date();
+    const auctionDate = new Date(now);
+    const dayOfWeek = auctionDate.getDay();
+    const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
+    if (daysUntilThursday === 0) {
+      const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      if (istNow.getHours() >= 16) {
+        auctionDate.setDate(auctionDate.getDate() + 7);
+      }
+    } else {
+      auctionDate.setDate(auctionDate.getDate() + daysUntilThursday);
+    }
+    const isToday = now.toDateString() === auctionDate.toDateString();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
+    if (isToday) return 'Today';
+    if (isTomorrow) return 'Tomorrow';
+    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+
   const handleLogout = async () => {
     await fetch('/api/auth/login', { method: 'DELETE' });
     router.push('/');
@@ -68,7 +90,12 @@ export default function DashboardPage() {
   if (loading || !data) {
     return (
       <div className="page-container">
-        <div className="loading-container" style={{ minHeight: '100vh' }}>
+        {/* Background decorations */}
+        <div className="floating-orb orb-1"></div>
+        <div className="floating-orb orb-2"></div>
+        <div className="floating-orb orb-3"></div>
+        <div className="grid-overlay"></div>
+        <div className="loading-container" style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
           <div className="loading-spinner"></div>
           <span>Loading your dashboard...</span>
         </div>
@@ -81,6 +108,29 @@ export default function DashboardPage() {
 
   return (
     <div className="page-container">
+      {/* ✨ Animated Background */}
+      <div className="floating-orb orb-1"></div>
+      <div className="floating-orb orb-2"></div>
+      <div className="floating-orb orb-3"></div>
+      <div className="floating-orb orb-4"></div>
+      <div className="grid-overlay"></div>
+
+      {/* Decorative particles */}
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="particle"
+          style={{
+            top: `${15 + (i * 11) % 70}%`,
+            left: `${8 + (i * 17) % 84}%`,
+            width: `${2 + (i % 3)}px`,
+            height: `${2 + (i % 3)}px`,
+            animation: `floatSlow ${18 + i * 3}s ease-in-out infinite ${i * 0.7}s`,
+            opacity: 0.25 + (i % 3) * 0.1,
+          }}
+        />
+      ))}
+
       {/* Navigation */}
       <nav className="navbar">
         <div className="navbar-inner">
@@ -284,9 +334,9 @@ export default function DashboardPage() {
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h2 className="card-title">📡 My Live Auction Activity Log</h2>
-              <p className="card-subtitle">Real-time captured interactions from today's 2 PM auction (Auction #1978)</p>
+              <p className="card-subtitle">Real-time captured interactions from {getNextAuctionDateLabel()}&apos;s 2 PM auction</p>
             </div>
-            <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>Live TVS Sync</span>
+            <span className="badge badge-info" style={{ fontSize: '0.75rem', boxShadow: '0 0 12px rgba(59, 130, 246, 0.15)' }}>Live TVS Sync</span>
           </div>
 
           {data.recentActivities && data.recentActivities.length > 0 ? (
@@ -329,20 +379,20 @@ export default function DashboardPage() {
                           {act.metadata?.vehicleName ? <strong>{String(act.metadata.vehicleName)}</strong> : null}
                           {act.metadata?.regNo ? <span style={{ color: 'var(--text-muted)' }}>({String(act.metadata.regNo)})</span> : null}
                           {act.metadata?.bidAmount ? <span style={{ color: '#60A5FA', fontWeight: 600 }}>• Bid: ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}</span> : null}
-                          {act.metadata?.winningBid ? <span style={{ color: '#10B981', fontWeight: 600 }}>• Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}</span> : null}
+                          {act.metadata?.winningBid ? <span style={{ color: '#06d6a0', fontWeight: 600 }}>• Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}</span> : null}
                           {act.metadata?.depositAmount ? <span>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span> : null}
                           {Boolean(act.metadata?.isLeadingBid) ? (
-                            <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.18)', color: '#10B981', fontSize: '0.72rem', fontWeight: 700 }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(6, 214, 160, 0.12)', color: '#06d6a0', fontSize: '0.72rem', fontWeight: 700 }}>
                               🏆 Leading Bid
                             </span>
                           ) : null}
                           {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
-                            <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#F87171', fontSize: '0.72rem' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(255, 0, 110, 0.1)', color: '#ff5c9e', fontSize: '0.72rem' }}>
                               Outbid (#{String(act.metadata.bidRank)})
                             </span>
                           ) : null}
                           {Boolean(act.metadata?.isPreBid) ? (
-                            <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', color: '#60A5FA', fontSize: '0.72rem' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', color: '#60A5FA', fontSize: '0.72rem' }}>
                               ⚡ Pre-Bid
                             </span>
                           ) : null}
@@ -356,11 +406,11 @@ export default function DashboardPage() {
                           )}
                         </div>
                       </td>
-                      <td style={{ fontWeight: 700, color: 'var(--tvs-lime)', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontWeight: 700, color: 'var(--neon-cyan)', whiteSpace: 'nowrap', textShadow: '0 0 10px rgba(6, 214, 160, 0.3)' }}>
                         +{act.points} pts
                       </td>
                       <td>
-                        <span style={{ fontSize: '0.75rem', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', color: '#06d6a0', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           ✓ Saved
                         </span>
                       </td>
@@ -370,13 +420,13 @@ export default function DashboardPage() {
               </table>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: 'var(--space-xl) var(--space-md)', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px dashed var(--border-subtle)' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--space-xl) var(--space-md)', background: 'rgba(124, 58, 237, 0.03)', borderRadius: '12px', border: '1px dashed rgba(124, 58, 237, 0.15)' }}>
               <div style={{ fontSize: '2rem', marginBottom: 'var(--space-xs)' }}>⚡</div>
               <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
                 No Live Auction Activity Recorded Yet Today
               </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto' }}>
-                Today's live event starts at <strong>2:00 PM IST (Auction #1978 — 147 vehicles)</strong>. Place bids, win vehicles, or join the auction room in TVS Certified to automatically earn points here!
+                Next live event: <strong>{getNextAuctionDateLabel()} at 2:00 PM IST</strong>. Place bids, win vehicles, or join the auction room in TVS Certified to automatically earn points here!
               </p>
             </div>
           )}
@@ -403,14 +453,14 @@ export default function DashboardPage() {
               <div className="stat-value lime">+15</div>
               <div className="stat-label">2 PM Match Room</div>
             </div>
-            <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.4)' }}>
+            <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.3)' }}>
               <div className="stat-icon">🔨</div>
-              <div className="stat-value" style={{ color: '#60A5FA' }}>+2</div>
+              <div className="stat-value" style={{ color: '#60A5FA', textShadow: '0 0 15px rgba(59, 130, 246, 0.3)' }}>+2</div>
               <div className="stat-label">Live Bid Placed</div>
             </div>
-            <div className="stat-card" style={{ borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+            <div className="stat-card" style={{ borderColor: 'rgba(255, 214, 10, 0.3)' }}>
               <div className="stat-icon">🔍</div>
-              <div className="stat-value" style={{ color: '#FBBF24' }}>+1</div>
+              <div className="stat-value" style={{ color: '#ffd60a', textShadow: '0 0 15px rgba(255, 214, 10, 0.3)' }}>+1</div>
               <div className="stat-label">Vehicle Inspection</div>
             </div>
             <div className="stat-card gold">

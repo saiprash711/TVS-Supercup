@@ -271,10 +271,36 @@ export async function GET(request: NextRequest) {
             totalWatchlist,
             totalActivities,
             activeDealersCount: activeDealersCount.length,
-            auctionId: '1978',
-            auctionTitle: 'TVS Certified Auction #1978',
-            auctionTime: '2:00 PM IST (Today, Sept 10)',
-            totalVehicles: 147,
+            auctionId: syncAuctionId,
+            auctionTitle: `TVS Certified Auction #${syncAuctionId}`,
+            auctionTime: (() => {
+              // Use the match day date if available, otherwise compute next Thursday
+              const now = new Date();
+              let auctionDate: Date;
+              if (match?.date) {
+                auctionDate = new Date(match.date);
+              } else {
+                // Compute next Thursday (or today if today is Thursday)
+                auctionDate = new Date(now);
+                const dayOfWeek = auctionDate.getDay(); // 0=Sun, 4=Thu
+                const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
+                if (daysUntilThursday === 0) {
+                  // Today is Thursday, check if auction time (2 PM IST) has passed
+                  const istHour = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours();
+                  if (istHour >= 16) {
+                    // After 4 PM IST, show next Thursday
+                    auctionDate.setDate(auctionDate.getDate() + 7);
+                  }
+                } else {
+                  auctionDate.setDate(auctionDate.getDate() + daysUntilThursday);
+                }
+              }
+              const isToday = now.toDateString() === auctionDate.toDateString();
+              const isTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString() === auctionDate.toDateString();
+              const dateLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+              return `2:00 PM IST (${dateLabel})`;
+            })(),
+            totalVehicles: totalActivities > 0 ? totalActivities : 0,
           },
         });
       }

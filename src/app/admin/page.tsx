@@ -122,6 +122,29 @@ export default function AdminPage() {
   // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<{ dealerId: number; dealerName: string } | null>(null);
   const [adjustPoints, setAdjustPoints] = useState('');
+
+  // Helper: compute the next auction date label (auctions are every Thursday at 2 PM IST)
+  const getNextAuctionDateLabel = () => {
+    const now = new Date();
+    const auctionDate = new Date(now);
+    const dayOfWeek = auctionDate.getDay(); // 0=Sun, 4=Thu
+    const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
+    if (daysUntilThursday === 0) {
+      // Today is Thursday — check if it's past auction time
+      const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      if (istNow.getHours() >= 16) {
+        auctionDate.setDate(auctionDate.getDate() + 7);
+      }
+    } else {
+      auctionDate.setDate(auctionDate.getDate() + daysUntilThursday);
+    }
+    const isToday = now.toDateString() === auctionDate.toDateString();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
+    if (isToday) return 'Today';
+    if (isTomorrow) return 'Tomorrow';
+    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
   const [adjustReason, setAdjustReason] = useState('');
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -343,7 +366,7 @@ export default function AdminPage() {
       showToast('Downloading All Live Bids & Activities Feed CSV...');
     } else if (type === 'activities') {
       window.open('/api/admin?action=export&type=activities', '_blank');
-      showToast('Downloading Auction #1978 Results (Won Vehicles) CSV...');
+      showToast(`Downloading Auction #${liveAuctionId || '1978'} Results (Won Vehicles) CSV...`);
     } else {
       window.open('/api/admin?action=export&type=dealers', '_blank');
       showToast('Downloading Dealer Leaderboard Summary CSV...');
@@ -355,7 +378,7 @@ export default function AdminPage() {
     setTimeout(() => {
       window.open('/api/admin?action=export&type=dealers', '_blank');
     }, 600);
-    showToast('Downloading Auction #1978 Results & Dealer Summary CSVs...');
+    showToast(`Downloading Auction #${liveAuctionId || '1978'} Results & Dealer Summary CSVs...`);
   };
 
   // ─── Login Screen ──────────────────────────────────────────────────
@@ -621,7 +644,7 @@ export default function AdminPage() {
                             📡 2 PM Live Auction Monitor & Interactions
                           </h2>
                           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
-                            Auction <strong>#1978</strong> • 147 Vehicles • Chennai / TN • Today at <strong>2:00 PM IST</strong> • All captured activities stored permanently in SQLite (<code style={{ color: '#60A5FA' }}>dev.db</code>)
+                            Auction <strong>#{liveStats?.auctionId || liveAuctionId}</strong> • {liveStats?.totalVehicles ?? '—'} Activities • Chennai / TN • {getNextAuctionDateLabel()} at <strong>2:00 PM IST</strong> • All captured activities stored permanently in SQLite (<code style={{ color: '#60A5FA' }}>dev.db</code>)
                           </p>
                         </div>
 
@@ -903,7 +926,7 @@ export default function AdminPage() {
                               Live Auction Stream Ready
                             </h3>
                             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '520px', margin: '0 auto var(--space-md)' }}>
-                              Today's live event begins at <strong>2:00 PM IST (Auction #1978 — 147 vehicles)</strong>. Incoming bids, buyer wins, room attendees, and vehicle inspections will stream and store here in real-time.
+                              Next live event: <strong>{getNextAuctionDateLabel()} at 2:00 PM IST (Auction #{liveAuctionId})</strong>. Incoming bids, buyer wins, room attendees, and vehicle inspections will stream and store here in real-time.
                             </p>
                             <button className="btn btn-primary btn-sm" onClick={handleSyncLiveAuction} disabled={syncing}>
                               {syncing ? '⏳ Syncing TVS...' : '⚡ Test Live Sync Now'}
@@ -1283,7 +1306,7 @@ export default function AdminPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-              {/* Option 1: Auction Results (#1978 Won Vehicles) */}
+              {/* Option 1: Auction Results (Won Vehicles) */}
               <div style={{
                 background: 'rgba(16, 185, 129, 0.05)',
                 border: '1px solid rgba(16, 185, 129, 0.4)',
@@ -1296,10 +1319,10 @@ export default function AdminPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#10B981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>🚗</span> Auction #1978 Results — Won Vehicles (23 Columns)
+                      <span>🚗</span> Auction #{liveAuctionId} Results — Won Vehicles (23 Columns)
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                      Official final results for TVS Certified Auction #1978: all 145 won vehicles sorted by Lot # (1–147) in chronological order (2:02 PM to 4:35 PM IST). Includes winning bid amounts (₹), starting bids, car specs (model, registration number, fuel, transmission, year of mfg, speedometer KM), winning dealer phone &amp; city, points awarded, and exact IST timestamps.
+                      Official final results for TVS Certified Auction #{liveAuctionId}: all won vehicles sorted by Lot # in chronological order. Includes winning bid amounts (₹), starting bids, car specs (model, registration number, fuel, transmission, year of mfg, speedometer KM), winning dealer phone &amp; city, points awarded, and exact IST timestamps.
                     </div>
                   </div>
                 </div>
@@ -1318,7 +1341,7 @@ export default function AdminPage() {
                       triggerCsvDownload('activities');
                     }}
                   >
-                    📥 Export Auction #1978 Results CSV (supercup-auction-activities-2026-09-10.csv)
+                    📥 Export Auction #{liveAuctionId} Results CSV
                   </button>
                 </div>
               </div>
@@ -1378,7 +1401,7 @@ export default function AdminPage() {
                       <span>⚡</span> Complete Live Bids &amp; Activities Feed (28 Columns)
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                      Every individual real-time interaction captured during Auction #1978 (1,790+ records): every live bid placed, pre-bid, and won vehicle with exact IST timestamps.
+                      Every individual real-time interaction captured during Auction #{liveAuctionId}: all live bids placed, pre-bids, and won vehicles with exact IST timestamps.
                     </div>
                   </div>
                 </div>

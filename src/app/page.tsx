@@ -82,7 +82,12 @@ export default function LoginPage() {
   if (checkingAuth) {
     return (
       <div className="login-container">
-        <div className="loading-container">
+        {/* Floating Orbs */}
+        <div className="floating-orb orb-1"></div>
+        <div className="floating-orb orb-2"></div>
+        <div className="floating-orb orb-3"></div>
+        <div className="grid-overlay"></div>
+        <div className="loading-container" style={{ position: 'relative', zIndex: 1 }}>
           <div className="loading-spinner"></div>
           <span>Verifying TVS session...</span>
         </div>
@@ -92,11 +97,49 @@ export default function LoginPage() {
 
   return (
     <div className="login-container">
+      {/* ✨ Animated Background Elements */}
+      <div className="floating-orb orb-1"></div>
+      <div className="floating-orb orb-2"></div>
+      <div className="floating-orb orb-3"></div>
+      <div className="floating-orb orb-4"></div>
+      <div className="grid-overlay"></div>
+
+      {/* Decorative particles */}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div
+          key={i}
+          className="particle"
+          style={{
+            top: `${10 + (i * 7) % 80}%`,
+            left: `${5 + (i * 13) % 90}%`,
+            width: `${2 + (i % 3)}px`,
+            height: `${2 + (i % 3)}px`,
+            animation: `floatSlow ${15 + i * 2}s ease-in-out infinite ${i * 0.5}s`,
+            opacity: 0.3 + (i % 4) * 0.1,
+          }}
+        />
+      ))}
+
       <div className="login-card">
         {/* Header */}
         <div className="login-header">
           <div className="login-trophy">🏆</div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 82, 204, 0.15)', border: '1px solid rgba(0, 82, 204, 0.3)', padding: '4px 12px', borderRadius: '9999px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--tvs-blue-light)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 'var(--space-sm)' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'rgba(124, 58, 237, 0.12)',
+            border: '1px solid rgba(124, 58, 237, 0.3)',
+            padding: '5px 14px',
+            borderRadius: '9999px',
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            color: 'var(--tvs-blue-light)',
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.1em',
+            marginBottom: 'var(--space-sm)',
+            boxShadow: '0 0 15px rgba(124, 58, 237, 0.15)',
+          }}>
             <span>🔒</span> TVS Certified Portal
           </div>
           <h1 className="login-title">
@@ -178,7 +221,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                style={{ accentColor: 'var(--tvs-blue)' }}
+                style={{ accentColor: 'var(--neon-purple)' }}
               />
               <span>Remember TVS Dealer ID</span>
             </label>
@@ -212,8 +255,8 @@ export default function LoginPage() {
 
         {/* TVS Certified Notice */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(124, 58, 237, 0.04)',
+          border: '1px solid rgba(124, 58, 237, 0.12)',
           borderRadius: 'var(--radius-md)',
           padding: '12px 14px',
           margin: 'var(--space-md) 0 var(--space-sm)',
@@ -263,12 +306,12 @@ export default function LoginPage() {
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-md)' }}>
               Your Super Cup login uses your standard <strong>TVS Certified Auction Portal</strong> credentials.
             </p>
-            <div style={{ background: 'var(--surface-primary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-lg)', fontSize: '0.85rem', lineHeight: '1.6' }}>
+            <div style={{ background: 'rgba(124, 58, 237, 0.06)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-lg)', fontSize: '0.85rem', lineHeight: '1.6', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
               <p>📞 <strong>Dealer Help Desk:</strong> 1800-TVS-CERT</p>
               <p>✉️ <strong>Support Email:</strong> support@tvscertified.in</p>
               <p>🏢 Or contact your assigned TVS Area Territory Manager.</p>
-              <p style={{ marginTop: '8px', color: 'var(--tvs-lime)' }}>
-                <em>For demo testing, use password: <code>tvs123</code></em>
+              <p style={{ marginTop: '8px', color: 'var(--neon-cyan)' }}>
+                <em>For demo testing, use password: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 8px', borderRadius: '4px' }}>tvs123</code></em>
               </p>
             </div>
             <div className="modal-actions">
