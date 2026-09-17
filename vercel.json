@@ -3,7 +3,7 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "functions": {
-    "src/app/api/internal/events/route.ts": {
+    "src/app/api/**/*": {
       "maxDuration": 60
     }
   },

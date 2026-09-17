@@ -249,6 +249,7 @@ export async function syncAuctionActivities(
         externalTransactionId: act.transactionId,
         metadata: act.metadata,
         timestamp: act.timestamp,
+        skipDedupeCheck: true,
       });
 
       if (res.success && !res.duplicate) {

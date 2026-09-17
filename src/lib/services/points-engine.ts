@@ -24,10 +24,22 @@ interface PointRuleMap {
   [key: string]: number;
 }
 
+const pointRulesCache = new Map<number, { rules: PointRuleMap; expiry: number }>();
+
+export function clearPointRulesCache(campaignId?: number) {
+  if (campaignId) pointRulesCache.delete(campaignId);
+  else pointRulesCache.clear();
+}
+
 /**
  * Get the active point rules for a campaign.
  */
 export async function getPointRules(campaignId: number): Promise<PointRuleMap> {
+  const cached = pointRulesCache.get(campaignId);
+  if (cached && Date.now() < cached.expiry) {
+    return cached.rules;
+  }
+
   const rules = await prisma.pointRule.findMany({
     where: { campaignId, active: true },
   });
@@ -36,6 +48,7 @@ export async function getPointRules(campaignId: number): Promise<PointRuleMap> {
   for (const rule of rules) {
     ruleMap[rule.activityType] = rule.points;
   }
+  pointRulesCache.set(campaignId, { rules: ruleMap, expiry: Date.now() + 30000 });
   return ruleMap;
 }
 
@@ -62,24 +75,27 @@ export async function recordActivity(params: {
   externalTransactionId: string;
   metadata?: string | Record<string, unknown>;
   timestamp?: Date;
+  skipDedupeCheck?: boolean;
 }) {
   const matchId = params.matchId ?? null;
   const externalTransactionId = params.externalTransactionId ?? null;
 
-  // Check if this activity is already recorded (prevents unnecessary unique constraint errors and Prisma error logs)
-  const existing = await prisma.dealerActivity.findFirst({
-    where: {
-      dealerId: params.dealerId,
-      campaignId: params.campaignId,
-      matchId,
-      activityType: params.activityType,
-      externalTransactionId,
-    },
-    select: { id: true },
-  });
+  if (!params.skipDedupeCheck) {
+    // Check if this activity is already recorded (prevents unnecessary unique constraint errors and Prisma error logs)
+    const existing = await prisma.dealerActivity.findFirst({
+      where: {
+        dealerId: params.dealerId,
+        campaignId: params.campaignId,
+        matchId,
+        activityType: params.activityType,
+        externalTransactionId,
+      },
+      select: { id: true },
+    });
 
-  if (existing) {
-    return { success: false, duplicate: true, points: 0 };
+    if (existing) {
+      return { success: false, duplicate: true, points: 0 };
+    }
   }
 
   const points = await calculatePoints(params.campaignId, params.activityType);

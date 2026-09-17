@@ -14,7 +14,58 @@ import { MASKING_ENABLED } from './masking';
  * This aggregates all dealer_activities and updates dealer_scores.
  */
 export async function recalculateRankings(campaignId: number) {
-  // Get all dealers with activities in this campaign
+  const isPostgres = Boolean(
+    process.env.DATABASE_URL?.startsWith('postgres') ||
+    process.env.POSTGRES_URL?.startsWith('postgres')
+  );
+
+  if (isPostgres) {
+    try {
+      // 1 single atomic SQL query in PostgreSQL: computes total points and rank, upserts all dealer_scores
+      await prisma.$executeRawUnsafe(`
+        WITH point_totals AS (
+          SELECT 
+            d.id AS dealer_id,
+            COALESCE(SUM(da.points), 0)::int AS total_points,
+            ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(da.points), 0) DESC, d.id ASC)::int AS rank
+          FROM dealers d
+          LEFT JOIN dealer_activities da 
+            ON da.dealer_id = d.id AND da.campaign_id = $1
+          WHERE d.status = 'ACTIVE'
+          GROUP BY d.id
+        )
+        INSERT INTO dealer_scores (dealer_id, campaign_id, total_points, rank, updated_at)
+        SELECT 
+          pt.dealer_id,
+          $1,
+          pt.total_points,
+          pt.rank,
+          NOW()
+        FROM point_totals pt
+        ON CONFLICT (dealer_id, campaign_id)
+        DO UPDATE SET
+          total_points = EXCLUDED.total_points,
+          rank = EXCLUDED.rank,
+          updated_at = NOW();
+      `, campaignId);
+
+      const top = await prisma.dealerScore.findFirst({
+        where: { campaignId },
+        orderBy: { rank: 'asc' },
+        select: { totalPoints: true },
+      });
+
+      return {
+        totalDealers: await prisma.dealer.count({ where: { status: 'ACTIVE' } }),
+        topScore: top?.totalPoints || 0,
+        updatedAt: new Date(),
+      };
+    } catch (sqlErr) {
+      console.warn('Postgres atomic ranking recalculation error, falling back to batched execution:', sqlErr);
+    }
+  }
+
+  // Fallback for SQLite / dev
   const dealerTotals = await prisma.dealerActivity.groupBy({
     by: ['dealerId'],
     where: { campaignId },
@@ -22,29 +73,24 @@ export async function recalculateRankings(campaignId: number) {
     orderBy: { _sum: { points: 'desc' } },
   });
 
-  // Get all active dealers (including those with 0 points)
   const allDealers = await prisma.dealer.findMany({
     where: { status: 'ACTIVE' },
     select: { id: true },
   });
 
-  // Build a map of dealer points
   const pointsMap = new Map<number, number>();
   for (const dt of dealerTotals) {
     pointsMap.set(dt.dealerId, dt._sum.points || 0);
   }
 
-  // Include dealers with 0 points
   for (const dealer of allDealers) {
     if (!pointsMap.has(dealer.id)) {
       pointsMap.set(dealer.id, 0);
     }
   }
 
-  // Sort by points descending
   const sorted = [...pointsMap.entries()].sort((a, b) => b[1] - a[1]);
 
-  // Upsert scores with ranks in fast batched transactions
   const batchSize = 100;
   for (let i = 0; i < sorted.length; i += batchSize) {
     const batch = sorted.slice(i, i + batchSize);

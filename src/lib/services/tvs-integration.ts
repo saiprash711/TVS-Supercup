@@ -841,9 +841,12 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     //  - Skip catalog vehicles ('listed'/'upcoming' without active bidding) to avoid 150+ redundant slow HTTP requests
     if (Array.isArray(vehicles) && vehicles.length > 0) {
       const vehiclesToQuery = vehicles.filter((veh: any) => {
-        if (veh.stage === 'live') return true;
+        const stage = String(veh.stage || '').toLowerCase().trim();
+        const isLive = stage === 'live' || stage === 'active' || stage === 'running' || stage === 'bidding';
+        if (isLive) return true;
         if (this.settledVehicleIds.has(veh.id)) return false;
-        const hasFinished = veh.winner_id != null || (veh.stage && veh.stage !== 'listed' && veh.stage !== 'upcoming');
+        const isCatalog = stage === 'listed' || stage === 'upcoming' || stage === 'pending' || stage === '';
+        const hasFinished = veh.winner_id != null || (!isCatalog && stage !== '');
         const hasBids = Number(veh.current_bid || 0) > 0;
         return hasFinished || hasBids;
       });
@@ -876,9 +879,15 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
                     const bidAmount = Number(bid.bid_value || bid.bid_amount || 0);
                     const bidId = bid.id || `${bidAmount}-${bid.bid_time || ''}`;
                     const bidTime = bid.bid_time ? new Date(bid.bid_time) : (bid.created_at ? new Date(bid.created_at) : new Date());
+                    const isPreBid = Boolean(bid.isprebid) || Boolean(bid.isPreBid);
+
+                    // Align transaction ID with pre-bid format to prevent double-counting pre-bids
+                    const txnId = isPreBid
+                      ? `PREBID-${auctionId}-${veh.vehicle_id || veh.id}-${dealerId}-${bidAmount}`
+                      : `BID-${auctionId}-${veh.id}-${bidId}`;
 
                     activities.push({
-                      transactionId: `BID-${auctionId}-${veh.id}-${bidId}`,
+                      transactionId: txnId,
                       dealerId,
                       auctionId,
                       activityType: 'BID_PLACED',
@@ -893,7 +902,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
                         bidRank: bid.rn,
                         isLeadingBid: bid.rn === 1,
                         totalBids: bid.total_bids,
-                        isPreBid: Boolean(bid.isprebid),
+                        isPreBid,
                         fuelType: veh.fuel_type,
                         transmission: veh.transmission,
                         yearOfMfg: veh.year_of_mfg,
@@ -908,7 +917,9 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
                 }
 
                 // If vehicle has ended, mark settled so we don't query it on every cycle
-                if (veh.stage !== 'live' && (veh.winner_id != null || veh.stage !== 'listed')) {
+                const stage = String(veh.stage || '').toLowerCase().trim();
+                const isLive = stage === 'live' || stage === 'active' || stage === 'running' || stage === 'bidding';
+                if (!isLive && (veh.winner_id != null || (stage !== 'listed' && stage !== 'upcoming' && stage !== ''))) {
                   this.settledVehicleIds.add(veh.id);
                 }
               }

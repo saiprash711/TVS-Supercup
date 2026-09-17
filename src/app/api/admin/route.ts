@@ -14,6 +14,11 @@ import { isAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { recalculateRankings } from '@/lib/services/ranking-engine';
 import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
+import { clearPointRulesCache } from '@/lib/services/points-engine';
+
+// Serverless function config for live auction stream processing
+export const maxDuration = 60; // 60 seconds max execution on Vercel
+export const dynamic = 'force-dynamic';
 
 // Middleware check
 async function requireAdmin() {
@@ -223,32 +228,31 @@ export async function GET(request: NextRequest) {
           take,
         });
 
-        const totalBids = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'BID_PLACED' },
-        });
-        const totalBuys = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'BUY' },
-        });
-        const totalSells = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'SELL' },
-        });
-        const totalParticipation = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'MATCH_PARTICIPATION' },
-        });
-        const totalInspections = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'VEHICLE_INSPECTED' },
-        });
-        const totalWatchlist = await prisma.dealerActivity.count({
-          where: { ...auctionFilter, activityType: 'WATCHLIST_ADD' },
-        });
-        const totalActivities = await prisma.dealerActivity.count({
-          where: auctionFilter,
-        });
+        const [activityCounts, activeDealersCount] = await Promise.all([
+          prisma.dealerActivity.groupBy({
+            by: ['activityType'],
+            where: auctionFilter,
+            _count: true,
+          }),
+          prisma.dealerActivity.groupBy({
+            by: ['dealerId'],
+            where: auctionFilter,
+          }),
+        ]);
 
-        const activeDealersCount = await prisma.dealerActivity.groupBy({
-          by: ['dealerId'],
-          where: auctionFilter,
-        });
+        const countMap: Record<string, number> = {};
+        let totalActivities = 0;
+        for (const item of activityCounts) {
+          countMap[item.activityType] = item._count;
+          totalActivities += item._count;
+        }
+
+        const totalBids = countMap['BID_PLACED'] || 0;
+        const totalBuys = countMap['BUY'] || 0;
+        const totalSells = countMap['SELL'] || 0;
+        const totalParticipation = countMap['MATCH_PARTICIPATION'] || 0;
+        const totalInspections = countMap['VEHICLE_INSPECTED'] || 0;
+        const totalWatchlist = countMap['WATCHLIST_ADD'] || 0;
 
         return NextResponse.json({
           activities: activities.map(a => {
@@ -849,6 +853,8 @@ export async function POST(request: NextRequest) {
           where: { id: parseInt(ruleId) },
           data: updateData,
         });
+
+        clearPointRulesCache(campaign.id);
 
         await prisma.auditLog.create({
           data: {

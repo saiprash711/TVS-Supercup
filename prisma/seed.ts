@@ -47,6 +47,9 @@ async function main() {
     { activityType: 'BUY', points: 10, description: 'Points per buy transaction' },
     { activityType: 'SELL', points: 10, description: 'Points per sell transaction' },
     { activityType: 'MATCH_PARTICIPATION', points: 15, description: 'Points for participating in a match day' },
+    { activityType: 'BID_PLACED', points: 2, description: 'Points per live/pre auction bid placed' },
+    { activityType: 'WATCHLIST_ADD', points: 1, description: 'Points per vehicle added to watchlist / interested' },
+    { activityType: 'VEHICLE_INSPECTED', points: 1, description: 'Points per vehicle inspection viewed' },
     { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Bonus for participating in all 4 matches' },
   ];
 
