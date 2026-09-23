@@ -3,6 +3,31 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import confetti from 'canvas-confetti';
+import { 
+  Award, 
+  ShoppingCart, 
+  DollarSign, 
+  Gavel, 
+  Search, 
+  Star, 
+  Calendar, 
+  ShieldCheck, 
+  CheckCircle2, 
+  LogOut, 
+  Radio, 
+  TrendingUp, 
+  Clock, 
+  Sparkles,
+  ArrowUp,
+  ArrowDown,
+  Layers,
+  Zap,
+  ChevronRight
+} from 'lucide-react';
+import ScrollVideoHero from '../components/ScrollVideoHero';
+import TickerMarquee from '../components/TickerMarquee';
+import SwitchMode from '../components/watermelon/switch-mode';
 
 interface DashboardData {
   dealer: { displayName?: string; maskedName: string; city: string };
@@ -54,7 +79,20 @@ export default function DashboardPage() {
         return res.json();
       })
       .then(d => {
-        if (d) setData(d);
+        if (d) {
+          setData(d);
+          // Trigger celebratory confetti if dealer is in top 10
+          if (d.position?.rank && d.position.rank <= 10) {
+            setTimeout(() => {
+              confetti({
+                particleCount: 60,
+                spread: 70,
+                origin: { y: 0.7 },
+                colors: ['#e11d48', '#38bdf8', '#06d6a0', '#f59e0b']
+              });
+            }, 800);
+          }
+        }
       })
       .catch(() => router.push('/'))
       .finally(() => setLoading(false));
@@ -77,9 +115,9 @@ export default function DashboardPage() {
     const isToday = now.toDateString() === auctionDate.toDateString();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
-    if (isToday) return 'Today';
-    if (isTomorrow) return 'Tomorrow';
-    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    if (isToday) return 'Today at 2:00 PM IST';
+    if (isTomorrow) return 'Tomorrow at 2:00 PM IST';
+    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ' at 2:00 PM IST';
   };
 
   const handleLogout = async () => {
@@ -90,14 +128,15 @@ export default function DashboardPage() {
   if (loading || !data) {
     return (
       <div className="page-container">
-        {/* Background decorations */}
         <div className="floating-orb orb-1"></div>
         <div className="floating-orb orb-2"></div>
         <div className="floating-orb orb-3"></div>
         <div className="grid-overlay"></div>
         <div className="loading-container" style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
           <div className="loading-spinner"></div>
-          <span>Loading your dashboard...</span>
+          <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
+            CONNECTING TO TVS TELEMETRY GATEWAY...
+          </span>
         </div>
       </div>
     );
@@ -108,219 +147,314 @@ export default function DashboardPage() {
 
   return (
     <div className="page-container">
-      {/* ✨ Animated Background */}
+      {/* Background Ambient Orbs & Grid */}
       <div className="floating-orb orb-1"></div>
       <div className="floating-orb orb-2"></div>
       <div className="floating-orb orb-3"></div>
-      <div className="floating-orb orb-4"></div>
       <div className="grid-overlay"></div>
 
-      {/* Decorative particles */}
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={i}
-          className="particle"
-          style={{
-            top: `${15 + (i * 11) % 70}%`,
-            left: `${8 + (i * 17) % 84}%`,
-            width: `${2 + (i % 3)}px`,
-            height: `${2 + (i % 3)}px`,
-            animation: `floatSlow ${18 + i * 3}s ease-in-out infinite ${i * 0.7}s`,
-            opacity: 0.25 + (i % 3) * 0.1,
-          }}
-        />
-      ))}
-
-      {/* Navigation */}
+      {/* Floating Island Navbar */}
       <nav className="navbar">
         <div className="navbar-inner">
-          <div className="navbar-brand">
-            <span className="navbar-logo">TVS Super Cup</span>
-            <span className="navbar-badge">SEP 2026</span>
-          </div>
+          <Link href="/dashboard" className="navbar-brand">
+            <div className="navbar-logo-wrap">
+              <span className="navbar-logo">
+                <span>TVS</span> SUPERCUP
+              </span>
+              <span className="navbar-badge">SEP 2026</span>
+            </div>
+          </Link>
+
           <ul className="navbar-nav">
-            <li><Link href="/leaderboard" className="navbar-link">Leaderboard</Link></li>
-            <li><span className="navbar-link active">My Dashboard</span></li>
+            <li>
+              <Link href="/leaderboard" className="navbar-link">
+                <Award className="w-4 h-4 text-amber-400" />
+                <span>Leaderboard</span>
+              </Link>
+            </li>
+            <li>
+              <span className="navbar-link active">
+                <Layers className="w-4 h-4 text-rose-500" />
+                <span>My Dashboard</span>
+              </span>
+            </li>
           </ul>
+
           <div className="navbar-user">
-            <div className="navbar-avatar">{dealerName.charAt(0)}</div>
-            <span className="navbar-username">{dealerName}</span>
-            <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Logout</button>
+            <SwitchMode width={58} height={28} />
+            <div className="navbar-user-pill">
+              <div className="navbar-avatar">
+                {dealerName.charAt(0).toUpperCase()}
+              </div>
+              <span className="navbar-username">{dealerName}</span>
+            </div>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={handleLogout}
+              title="Logout of session"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </div>
       </nav>
 
-      <div className="content-wrapper">
-        {/* Welcome Header */}
-        <div className="hero" style={{ padding: 'var(--space-2xl) 0 var(--space-lg)' }}>
-          <div className="hero-badge">
-            <span>👋</span> WELCOME BACK
-          </div>
-          <h1 className="hero-title" style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)' }}>
-            Welcome, <span className="hero-title-accent">{dealerName}</span>
-          </h1>
-          <p className="hero-subtitle">{dealer.city} • Super Cup September 2026</p>
-        </div>
+      {/* Real-Time Live Ticker Marquee */}
+      <TickerMarquee />
 
-        {/* Score Display */}
-        <div className="card animate-in" style={{ textAlign: 'center', marginBottom: 'var(--space-lg)' }}>
-          <div className="score-display" style={{ padding: 'var(--space-xl) 0' }}>
-            <div className="score-label">YOUR SUPER CUP POSITION</div>
-            <div className="score-rank">#{position?.rank || '-'}</div>
-            <div className="score-points">{position?.points || 0}</div>
-            <div className="score-points-label">Total Points</div>
+      <main className="content-wrapper">
+        {/* Executive Scroll-Driven Analyst Video Hero */}
+        <ScrollVideoHero
+          dealerName={dealerName}
+          rank={position?.rank || '-'}
+          points={position?.points?.toLocaleString('en-IN') || '0'}
+          city={dealer.city || 'TVS Certified Hub'}
+          nextAuctionLabel={getNextAuctionDateLabel()}
+          tagline="A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW"
+        />
+
+        {/* Primary Score & Standings Matrix (Double-Bezel Architecture) */}
+        <div className="card double-bezel" style={{ marginBottom: '24px' }}>
+          <div className="inner-bezel-core score-display">
+            <div className="score-display-bg-glow"></div>
+            
+            <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck className="w-4 h-4 text-rose-500" />
+              OFFICIAL SUPER CUP NATIONAL STANDINGS
+            </div>
+
+            <div className="score-rank">
+              <span style={{ fontSize: '0.6em', opacity: 0.7, marginRight: '4px' }}>#</span>
+              {position?.rank || '-'}
+            </div>
+
+            <div className="score-points">
+              {position?.points?.toLocaleString('en-IN') || 0}
+            </div>
+            <div className="score-points-label">Total Verified Points</div>
 
             {/* Gap Indicators */}
             <div className="gap-indicators">
               {position?.above && (
                 <div className="gap-indicator behind">
-                  ↑ {position.above.gap} POINTS BEHIND #{position.above.rank}
+                  <ArrowUp className="w-3.5 h-3.5" />
+                  <span>{position.above.gap} PTS BEHIND #{position.above.rank} ({position.above.dealer})</span>
                 </div>
               )}
               {position?.below && (
                 <div className="gap-indicator ahead">
-                  ↓ {position.below.gap} POINTS AHEAD OF #{position.below.rank}
+                  <ArrowDown className="w-3.5 h-3.5" />
+                  <span>{position.below.gap} PTS AHEAD OF #{position.below.rank} ({position.below.dealer})</span>
                 </div>
               )}
             </div>
           </div>
         </div>
 
+        {/* 2-Column Grid: Activity Breakdown & Position Comparison */}
         <div className="grid-2">
-          {/* Activity Breakdown */}
-          <div className="card animate-in">
+          {/* Financial-Grade Activity Breakdown */}
+          <div className="card">
             <div className="card-header">
               <div>
-                <h2 className="card-title">📊 Activity Breakdown</h2>
-                <p className="card-subtitle">Points earned by activity type</p>
+                <h2 className="card-title">
+                  <TrendingUp className="w-5 h-5 text-emerald-400" />
+                  Activity Breakdown
+                </h2>
+                <p className="card-subtitle">Verified point accruals by transaction type</p>
               </div>
+              <span className="badge badge-success">Audit Verified</span>
             </div>
 
             <table className="breakdown-table">
               <tbody>
                 <tr>
-                  <td>🛒 Buy Transactions</td>
-                  <td>{breakdown.buyTransactions.count} × {breakdown.buyTransactions.perUnit}</td>
-                  <td>{breakdown.buyTransactions.points}</td>
+                  <td>
+                    <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
+                    Buy Transactions (Won Vehicles)
+                  </td>
+                  <td>{breakdown.buyTransactions.count} × {breakdown.buyTransactions.perUnit} pts</td>
+                  <td>+{breakdown.buyTransactions.points}</td>
                 </tr>
                 <tr>
-                  <td>💰 Sell Transactions</td>
-                  <td>{breakdown.sellTransactions.count} × {breakdown.sellTransactions.perUnit}</td>
-                  <td>{breakdown.sellTransactions.points}</td>
+                  <td>
+                    <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
+                    Sell Transactions (Sold Vehicles)
+                  </td>
+                  <td>{breakdown.sellTransactions.count} × {breakdown.sellTransactions.perUnit} pts</td>
+                  <td>+{breakdown.sellTransactions.points}</td>
                 </tr>
                 <tr>
-                  <td>🏏 Match Participation</td>
-                  <td>{breakdown.matchParticipation.count} × {breakdown.matchParticipation.perUnit}</td>
-                  <td>{breakdown.matchParticipation.points}</td>
+                  <td>
+                    <Radio className="w-4 h-4 text-amber-400 mr-2" />
+                    2 PM Match Room Attendance
+                  </td>
+                  <td>{breakdown.matchParticipation.count} × {breakdown.matchParticipation.perUnit} pts</td>
+                  <td>+{breakdown.matchParticipation.points}</td>
                 </tr>
                 {breakdown.bidsPlaced && (
                   <tr>
-                    <td>🔨 Live Bids Placed</td>
-                    <td>{breakdown.bidsPlaced.count} × {breakdown.bidsPlaced.perUnit}</td>
-                    <td>{breakdown.bidsPlaced.points}</td>
+                    <td>
+                      <Gavel className="w-4 h-4 text-blue-400 mr-2" />
+                      Live Bids Placed in Room
+                    </td>
+                    <td>{breakdown.bidsPlaced.count} × {breakdown.bidsPlaced.perUnit} pts</td>
+                    <td>+{breakdown.bidsPlaced.points}</td>
                   </tr>
                 )}
                 {breakdown.vehicleInspected && (
                   <tr>
-                    <td>🔍 Vehicle Inspections</td>
-                    <td>{breakdown.vehicleInspected.count} × {breakdown.vehicleInspected.perUnit}</td>
-                    <td>{breakdown.vehicleInspected.points}</td>
+                    <td>
+                      <Search className="w-4 h-4 text-yellow-400 mr-2" />
+                      Vehicle Technical Inspections
+                    </td>
+                    <td>{breakdown.vehicleInspected.count} × {breakdown.vehicleInspected.perUnit} pts</td>
+                    <td>+{breakdown.vehicleInspected.points}</td>
                   </tr>
                 )}
                 {breakdown.watchlistAdd && (
                   <tr>
-                    <td>⭐ Watchlist Bookmarks</td>
-                    <td>{breakdown.watchlistAdd.count} × {breakdown.watchlistAdd.perUnit}</td>
-                    <td>{breakdown.watchlistAdd.points}</td>
+                    <td>
+                      <Star className="w-4 h-4 text-purple-400 mr-2" />
+                      Watchlist Bookmarks Added
+                    </td>
+                    <td>{breakdown.watchlistAdd.count} × {breakdown.watchlistAdd.perUnit} pts</td>
+                    <td>+{breakdown.watchlistAdd.points}</td>
                   </tr>
                 )}
                 <tr>
-                  <td>🌟 All 4 Matches Bonus</td>
-                  <td></td>
-                  <td>{breakdown.allMatchesBonus.points}</td>
+                  <td>
+                    <Sparkles className="w-4 h-4 text-rose-500 mr-2" />
+                    All 4 Matches Completion Bonus
+                  </td>
+                  <td style={{ color: 'var(--text-muted)' }}>Completion Perk</td>
+                  <td>+{breakdown.allMatchesBonus.points}</td>
                 </tr>
                 <tr className="breakdown-total">
-                  <td>TOTAL</td>
+                  <td>TOTAL SUPERCUP SCORE</td>
                   <td></td>
-                  <td>{breakdown.totalPoints}</td>
+                  <td>{breakdown.totalPoints} PTS</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {/* Position Comparison */}
-          <div className="card animate-in">
+          {/* Position Comparison Radar */}
+          <div className="card">
             <div className="card-header">
               <div>
-                <h2 className="card-title">📍 Position Comparison</h2>
-                <p className="card-subtitle">Your neighbors on the leaderboard</p>
+                <h2 className="card-title">
+                  <Award className="w-5 h-5 text-amber-400" />
+                  Leaderboard Neighbor Radar
+                </h2>
+                <p className="card-subtitle">Real-time dealer delta analysis</p>
               </div>
+              <span className="badge badge-info">Rankings Live</span>
             </div>
 
             <div className="position-comparison">
               {position?.above && (
                 <>
                   <div className="position-item">
-                    <span className="position-rank">#{position.above.rank}</span>
-                    <span className="position-name">{position.above.dealer}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span className="position-rank">#{position.above.rank}</span>
+                      <span className="position-name">{position.above.dealer}</span>
+                    </div>
                     <span className="position-points">{position.above.points} pts</span>
                   </div>
                   <div className="position-gap">
-                    <span className="arrow">↑</span>
-                    <span className="points">{position.above.gap} points</span>
-                    <span className="arrow">↑</span>
+                    <ArrowUp className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Deficit: {position.above.gap} points to overtake</span>
+                    <ArrowUp className="w-3.5 h-3.5 text-rose-500" />
                   </div>
                 </>
               )}
 
               <div className="position-item current">
-                <span className="position-rank">#{position?.rank}</span>
-                <span className="position-name">YOU</span>
-                <span className="position-points">{position?.points} pts</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span className="position-rank">#{position?.rank}</span>
+                  <span className="position-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>YOU ({dealerName})</span>
+                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>ACTIVE</span>
+                  </span>
+                </div>
+                <span className="position-points" style={{ fontSize: '1.1rem' }}>
+                  {position?.points} pts
+                </span>
               </div>
 
               {position?.below && (
                 <>
                   <div className="position-gap">
-                    <span className="arrow">↓</span>
-                    <span className="points">{position.below.gap} points</span>
-                    <span className="arrow">↓</span>
+                    <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Lead: {position.below.gap} points cushion</span>
+                    <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                   <div className="position-item">
-                    <span className="position-rank">#{position.below.rank}</span>
-                    <span className="position-name">{position.below.dealer}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span className="position-rank">#{position.below.rank}</span>
+                      <span className="position-name">{position.below.dealer}</span>
+                    </div>
                     <span className="position-points">{position.below.points} pts</span>
                   </div>
                 </>
               )}
             </div>
+
+            <div style={{ marginTop: '20px', padding: '12px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-hairline)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Climb higher by winning auction lots this Thursday.
+                </span>
+                <Link href="/leaderboard" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 600 }}>
+                  Full Board <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Match Day Tracker */}
-        <div className="card animate-in" style={{ marginTop: 'var(--space-lg)' }}>
+        {/* Match Day Tracker Roadmap */}
+        <div className="card" style={{ marginTop: '24px' }}>
           <div className="card-header">
             <div>
-              <h2 className="card-title">🗓️ Match Day Tracker</h2>
-              <p className="card-subtitle">Thursdays at 2:00 PM • Participate in all 4 for +20 bonus points</p>
+              <h2 className="card-title">
+                <Calendar className="w-5 h-5 text-sky-400" />
+                Match Day Schedule & Attendance Tracker
+              </h2>
+              <p className="card-subtitle">Every Thursday at 2:00 PM IST • Participate in all 4 matches for a +20 PTS bonus</p>
             </div>
+            <span className="badge badge-primary">Super Cup 4-Series</span>
           </div>
 
           <div className="match-tracker">
             {matchTracker.map((match) => (
-              <div key={match.matchNumber} className={`match-item ${match.participated ? 'participated' : ''} ${match.status === 'UPCOMING' ? 'upcoming' : ''}`}>
-                <div className="match-number">Match {match.matchNumber}</div>
+              <div 
+                key={match.matchNumber} 
+                className={`match-item ${match.participated ? 'participated' : ''} ${match.status === 'UPCOMING' ? 'upcoming' : ''}`}
+              >
+                <div className="match-number">Match #{match.matchNumber}</div>
                 <div className="match-icon">
-                  {match.participated ? '✅' : match.status === 'UPCOMING' ? '📅' : match.status === 'LIVE' ? '🔴' : '❌'}
+                  {match.participated ? (
+                    <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                  ) : match.status === 'UPCOMING' ? (
+                    <Clock className="w-7 h-7 text-sky-400" />
+                  ) : match.status === 'LIVE' ? (
+                    <Radio className="w-7 h-7 text-rose-500 animate-pulse" />
+                  ) : (
+                    <span style={{ opacity: 0.4 }}>✖</span>
+                  )}
                 </div>
                 <div className="match-date">
                   {new Date(match.date).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'short',
+                    weekday: 'short'
                   })}
                 </div>
                 <div className={`match-status ${match.status.toLowerCase()}`}>
-                  {match.status === 'COMPLETED' && match.participated ? 'PLAYED' :
+                  {match.status === 'COMPLETED' && match.participated ? 'PLAYED (+15)' :
                    match.status === 'COMPLETED' && !match.participated ? 'MISSED' :
                    match.status}
                 </div>
@@ -329,14 +463,22 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Live Auction Activity Log */}
-        <div className="card animate-in" style={{ marginTop: 'var(--space-lg)' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Live Auction Activity Stream Table */}
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div className="card-header">
             <div>
-              <h2 className="card-title">📡 My Live Auction Activity Log</h2>
-              <p className="card-subtitle">Real-time captured interactions from {getNextAuctionDateLabel()}&apos;s 2 PM auction</p>
+              <h2 className="card-title">
+                <Zap className="w-5 h-5 text-emerald-400" />
+                My Live Auction Telemetry Feed
+              </h2>
+              <p className="card-subtitle">
+                Real-time activity captured from {getNextAuctionDateLabel()}
+              </p>
             </div>
-            <span className="badge badge-info" style={{ fontSize: '0.75rem', boxShadow: '0 0 12px rgba(59, 130, 246, 0.15)' }}>Live TVS Sync</span>
+            <span className="badge badge-success" style={{ boxShadow: '0 0 12px rgba(6, 214, 160, 0.25)' }}>
+              <span className="stream-indicator" style={{ marginRight: '4px' }} />
+              Live Gateway Sync
+            </span>
           </div>
 
           {data.recentActivities && data.recentActivities.length > 0 ? (
@@ -344,17 +486,17 @@ export default function DashboardPage() {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Activity</th>
-                    <th>Details</th>
-                    <th>Points</th>
-                    <th>Status</th>
+                    <th>Timestamp</th>
+                    <th>Activity Type</th>
+                    <th>Vehicle & Bidding Telemetry</th>
+                    <th>Score Awarded</th>
+                    <th>Verification</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.recentActivities.map(act => (
                     <tr key={act.id}>
-                      <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
                         {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td>
@@ -365,34 +507,48 @@ export default function DashboardPage() {
                           act.activityType === 'BID_PLACED' ? 'badge-primary' :
                           'badge-warning'
                         }`}>
-                          {act.activityType === 'BUY' ? '🏆 WON VEHICLE' :
+                          {act.activityType === 'BUY' ? '🏆 WON LOT' :
                            act.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
                            act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
-                           act.activityType === 'MATCH_PARTICIPATION' ? '🏏 ATTENDED ROOM' :
+                           act.activityType === 'MATCH_PARTICIPATION' ? '🏏 2PM ROOM' :
                            act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
                            act.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
                            act.activityType.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td style={{ fontSize: '0.85rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                          {act.metadata?.vehicleName ? <strong>{String(act.metadata.vehicleName)}</strong> : null}
-                          {act.metadata?.regNo ? <span style={{ color: 'var(--text-muted)' }}>({String(act.metadata.regNo)})</span> : null}
-                          {act.metadata?.bidAmount ? <span style={{ color: '#60A5FA', fontWeight: 600 }}>• Bid: ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}</span> : null}
-                          {act.metadata?.winningBid ? <span style={{ color: '#06d6a0', fontWeight: 600 }}>• Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}</span> : null}
-                          {act.metadata?.depositAmount ? <span>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span> : null}
+                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          {act.metadata?.vehicleName ? (
+                            <strong style={{ color: '#ffffff' }}>{String(act.metadata.vehicleName)}</strong>
+                          ) : null}
+                          {act.metadata?.regNo ? (
+                            <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>({String(act.metadata.regNo)})</span>
+                          ) : null}
+                          {act.metadata?.bidAmount ? (
+                            <span style={{ color: 'var(--accent-blue)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                              • Bid: ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}
+                            </span>
+                          ) : null}
+                          {act.metadata?.winningBid ? (
+                            <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                              • Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}
+                            </span>
+                          ) : null}
+                          {act.metadata?.depositAmount ? (
+                            <span style={{ color: 'var(--text-muted)' }}>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span>
+                          ) : null}
                           {Boolean(act.metadata?.isLeadingBid) ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(6, 214, 160, 0.12)', color: '#06d6a0', fontSize: '0.72rem', fontWeight: 700 }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(6, 214, 160, 0.15)', color: 'var(--accent-cyan)', fontSize: '0.72rem', fontWeight: 700, border: '1px solid rgba(6, 214, 160, 0.3)' }}>
                               🏆 Leading Bid
                             </span>
                           ) : null}
                           {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(255, 0, 110, 0.1)', color: '#ff5c9e', fontSize: '0.72rem' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(225, 29, 72, 0.15)', color: '#fda4af', fontSize: '0.72rem', border: '1px solid rgba(225, 29, 72, 0.3)' }}>
                               Outbid (#{String(act.metadata.bidRank)})
                             </span>
                           ) : null}
                           {Boolean(act.metadata?.isPreBid) ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', color: '#60A5FA', fontSize: '0.72rem' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-blue)', fontSize: '0.72rem', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                               ⚡ Pre-Bid
                             </span>
                           ) : null}
@@ -402,16 +558,16 @@ export default function DashboardPage() {
                             </span>
                           ) : null}
                           {!act.metadata?.vehicleName && !act.metadata?.bidAmount && !act.metadata?.depositAmount && (
-                            <span>{act.externalTransactionId}</span>
+                            <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{act.externalTransactionId}</span>
                           )}
                         </div>
                       </td>
-                      <td style={{ fontWeight: 700, color: 'var(--neon-cyan)', whiteSpace: 'nowrap', textShadow: '0 0 10px rgba(6, 214, 160, 0.3)' }}>
-                        +{act.points} pts
+                      <td style={{ fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                        +{act.points} PTS
                       </td>
                       <td>
-                        <span style={{ fontSize: '0.75rem', color: '#06d6a0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          ✓ Saved
+                        <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Immutable
                         </span>
                       </td>
                     </tr>
@@ -420,50 +576,62 @@ export default function DashboardPage() {
               </table>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: 'var(--space-xl) var(--space-md)', background: 'rgba(124, 58, 237, 0.03)', borderRadius: '12px', border: '1px dashed rgba(124, 58, 237, 0.15)' }}>
-              <div style={{ fontSize: '2rem', marginBottom: 'var(--space-xs)' }}>⚡</div>
-              <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                No Live Auction Activity Recorded Yet Today
+            <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📡</div>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', marginBottom: '6px' }}>
+                No Live Auction Events Recorded In Current Window
               </h4>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto' }}>
-                Next live event: <strong>{getNextAuctionDateLabel()} at 2:00 PM IST</strong>. Place bids, win vehicles, or join the auction room in TVS Certified to automatically earn points here!
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
+                Next live session: <strong style={{ color: '#ffffff' }}>{getNextAuctionDateLabel()}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
               </p>
             </div>
           )}
         </div>
 
-        {/* How to Earn Points */}
-        <div className="card animate-in" style={{ marginTop: 'var(--space-lg)' }}>
+        {/* Incentive Protocol: How to Earn Points */}
+        <div className="card" style={{ marginTop: '24px' }}>
           <div className="card-header">
-            <h2 className="card-title">💡 How to Earn More Points</h2>
+            <div>
+              <h2 className="card-title">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                Scoring Protocol & Earning Directives
+              </h2>
+              <p className="card-subtitle">Maximize your rank during every Thursday event</p>
+            </div>
           </div>
-          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: 0 }}>
-            <div className="stat-card blue">
+
+          <div className="stats-grid">
+            <div className="stat-card">
               <div className="stat-icon">🛒</div>
               <div className="stat-value blue">+10</div>
               <div className="stat-label">Won Vehicle (BUY)</div>
             </div>
-            <div className="stat-card blue">
+
+            <div className="stat-card">
               <div className="stat-icon">💰</div>
               <div className="stat-value blue">+10</div>
               <div className="stat-label">Sold Vehicle (SELL)</div>
             </div>
-            <div className="stat-card lime">
+
+            <div className="stat-card">
               <div className="stat-icon">🏏</div>
               <div className="stat-value lime">+15</div>
-              <div className="stat-label">2 PM Match Room</div>
+              <div className="stat-label">2 PM Match Room Attendance</div>
             </div>
-            <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+
+            <div className="stat-card">
               <div className="stat-icon">🔨</div>
-              <div className="stat-value" style={{ color: '#60A5FA', textShadow: '0 0 15px rgba(59, 130, 246, 0.3)' }}>+2</div>
+              <div className="stat-value blue">+2</div>
               <div className="stat-label">Live Bid Placed</div>
             </div>
-            <div className="stat-card" style={{ borderColor: 'rgba(255, 214, 10, 0.3)' }}>
+
+            <div className="stat-card">
               <div className="stat-icon">🔍</div>
-              <div className="stat-value" style={{ color: '#ffd60a', textShadow: '0 0 15px rgba(255, 214, 10, 0.3)' }}>+1</div>
-              <div className="stat-label">Vehicle Inspection</div>
+              <div className="stat-value gold">+1</div>
+              <div className="stat-label">Vehicle Technical Inspection</div>
             </div>
-            <div className="stat-card gold">
+
+            <div className="stat-card">
               <div className="stat-icon">🌟</div>
               <div className="stat-value gold">+20</div>
               <div className="stat-label">All 4 Matches Bonus</div>
@@ -471,14 +639,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', padding: 'var(--space-2xl) 0 var(--space-xl)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          <p>TVS Certified Dealer Super Cup © 2026</p>
-          <p style={{ marginTop: 'var(--space-xs)' }}>
-            <Link href="/leaderboard" style={{ color: 'var(--text-muted)' }}>View Full Leaderboard →</Link>
+        {/* World-Class Corporate Footer */}
+        <footer style={{ textAlign: 'center', padding: '48px 0 24px', borderTop: '1px solid var(--border-hairline)', marginTop: '48px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
+            <span>TVS Certified Network</span>
+            <span>•</span>
+            <span>Dealer Super Cup 2026</span>
+            <span>•</span>
+            <span>People • Platform • Progress</span>
+          </div>
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+            Official TVS Certified Dealership Portal. All points and ranks are subject to automated verification.
           </p>
-        </div>
-      </div>
+          <div style={{ marginTop: '12px' }}>
+            <Link href="/leaderboard" style={{ color: 'var(--accent-blue)', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none' }}>
+              View Public Leaderboard →
+            </Link>
+          </div>
+        </footer>
+      </main>
     </div>
   );
 }

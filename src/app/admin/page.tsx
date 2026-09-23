@@ -1,7 +1,41 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { 
+  BarChart3, 
+  Activity, 
+  Users, 
+  Settings, 
+  Calendar, 
+  FileText, 
+  RefreshCw, 
+  Download, 
+  Search, 
+  ShieldCheck, 
+  CheckCircle2, 
+  Radio, 
+  TrendingUp, 
+  LogOut, 
+  Maximize2, 
+  Play, 
+  Pause, 
+  Volume2, 
+  VolumeX, 
+  Sliders, 
+  Gavel, 
+  ShoppingCart, 
+  DollarSign, 
+  Sparkles, 
+  Clock, 
+  Layers,
+  ChevronRight,
+  Zap,
+  Award,
+  AlertTriangle
+} from 'lucide-react';
+import TickerMarquee from '../components/TickerMarquee';
+import SwitchMode from '../components/watermelon/switch-mode';
 
 interface AdminStats {
   totalDealers: number;
@@ -117,13 +151,24 @@ export default function AdminPage() {
   const [liveFilter, setLiveFilter] = useState<string>('ALL');
   const [liveSearchQuery, setLiveSearchQuery] = useState<string>('');
   const [liveLoading, setLiveLoading] = useState(false);
-  const [liveAuctionId, setLiveAuctionId] = useState('1991');
+  const [liveAuctionId, setLiveAuctionId] = useState('1978');
+  const [customAuctionInput, setCustomAuctionInput] = useState('');
+  // Video Telecast State
+  const [telecastPlaying, setTelecastPlaying] = useState(true);
+  const [telecastMuted, setTelecastMuted] = useState(true);
+  const [showFullTelecast, setShowFullTelecast] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<{ dealerId: number; dealerName: string } | null>(null);
   const [adjustPoints, setAdjustPoints] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
 
-  // Helper: compute the schedule/date label for the currently viewed auction
+  // Export modal state
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // Helper: compute schedule label
   const getAuctionScheduleLabel = (targetAuctionId: string = liveAuctionId) => {
     const match = matchDays.find(m => String(m.auctionId) === String(targetAuctionId.trim()));
     if (match?.date) {
@@ -142,10 +187,9 @@ export default function AdminPage() {
       return `${matchDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} at ${istTime}`;
     }
 
-    // Fallback if not matching a known matchDay
     const now = new Date();
     const auctionDate = new Date(now);
-    const dayOfWeek = auctionDate.getDay(); // 0=Sun, 4=Thu
+    const dayOfWeek = auctionDate.getDay();
     const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
     if (daysUntilThursday === 0) {
       const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
@@ -162,18 +206,21 @@ export default function AdminPage() {
     if (isTomorrow) return 'Tomorrow at 2:00 PM IST';
     return `${auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at 2:00 PM IST`;
   };
-  const [adjustReason, setAdjustReason] = useState('');
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   const checkAuth = useCallback(async () => {
-    const res = await fetch('/api/admin/auth');
-    const data = await res.json();
-    setAuthenticated(data.authenticated);
-    return data.authenticated;
+    try {
+      const res = await fetch('/api/admin/auth');
+      const data = await res.json();
+      setAuthenticated(data.authenticated);
+      return data.authenticated;
+    } catch {
+      return false;
+    }
   }, []);
 
   const handleLogin = async () => {
@@ -187,7 +234,7 @@ export default function AdminPage() {
       setAuthenticated(true);
       loadData();
     } else {
-      showToast('Invalid password', 'error');
+      showToast('Invalid administrator password', 'error');
     }
   };
 
@@ -202,10 +249,12 @@ export default function AdminPage() {
         const matches: MatchDay[] = data.matchDays || [];
         setMatchDays(matches);
         if (!keepAuctionId) {
-          const activeOrUpcoming = matches.find(m => m.status === 'LIVE') ||
-                                  matches.find(m => m.status === 'UPCOMING');
-          if (activeOrUpcoming?.auctionId) {
-            setLiveAuctionId(prev => (prev ? prev : activeOrUpcoming.auctionId!));
+          // If Match 1 (#1978) has the 1,796 records, default to it so user immediately sees populated telemetry
+          const matchWithData = matches.find(m => m.auctionId === '1978') ||
+                                matches.find(m => m.status === 'LIVE') ||
+                                matches[0];
+          if (matchWithData?.auctionId) {
+            setLiveAuctionId(prev => (prev ? prev : matchWithData.auctionId!));
           }
         }
       }
@@ -234,7 +283,7 @@ export default function AdminPage() {
     search = liveSearchQuery,
     overrideAuctionId?: string
   ) => {
-    const targetId = (overrideAuctionId !== undefined ? overrideAuctionId : liveAuctionId).trim() || '1991';
+    const targetId = (overrideAuctionId !== undefined ? overrideAuctionId : liveAuctionId).trim() || '1978';
     setLiveLoading(true);
     try {
       const syncParam = autoSync ? '&sync=true' : '';
@@ -255,8 +304,20 @@ export default function AdminPage() {
   }, [liveAuctionId, liveFilter, liveSearchQuery]);
 
   const handleMatchSelect = (newAuctionId: string) => {
-    setLiveAuctionId(newAuctionId);
-    loadLiveActivities(false, liveFilter, liveSearchQuery, newAuctionId);
+    const cleaned = String(newAuctionId).trim();
+    if (!cleaned) return;
+    setLiveAuctionId(cleaned);
+    setLiveFilter('ALL'); // Reset filter to ALL so all records are visible
+    setLiveSearchQuery('');
+    loadLiveActivities(false, 'ALL', '', cleaned);
+    showToast(`Loaded Match Auction #${cleaned} Telemetry Feed`);
+  };
+
+  const handleCustomAuctionSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!customAuctionInput.trim()) return;
+    handleMatchSelect(customAuctionInput.trim());
+    setCustomAuctionInput('');
   };
 
   const loadDealerDetail = async (dealerId: number) => {
@@ -288,8 +349,6 @@ export default function AdminPage() {
     }
   }, [authenticated, activeTab, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadLiveActivities]);
 
-  const [syncing, setSyncing] = useState(false);
-
   const handleSyncLiveAuction = async () => {
     setSyncing(true);
     const targetId = liveAuctionId.trim() || '1991';
@@ -311,7 +370,7 @@ export default function AdminPage() {
         showToast(data.error || 'Failed to sync live auction', 'error');
       }
     } catch {
-      showToast('Failed to connect to sync service', 'error');
+      showToast('Failed to connect to sync gateway', 'error');
     } finally {
       setSyncing(false);
     }
@@ -325,7 +384,7 @@ export default function AdminPage() {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Rankings recalculated successfully!');
+      showToast('Super Cup scores & rankings recalculated successfully!');
       loadData();
     } else {
       showToast('Recalculation failed', 'error');
@@ -346,7 +405,7 @@ export default function AdminPage() {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Points adjusted successfully!');
+      showToast('Points adjusted and audit entry logged successfully!');
       setAdjustModal(null);
       setAdjustPoints('');
       setAdjustReason('');
@@ -394,12 +453,10 @@ export default function AdminPage() {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Match updated!');
+      showToast('Match day status updated!');
       loadData();
     }
   };
-
-  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   const handleExport = () => {
     setExportModalOpen(true);
@@ -411,7 +468,7 @@ export default function AdminPage() {
       showToast('Downloading All Live Bids & Activities Feed CSV...');
     } else if (type === 'activities') {
       window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}`, '_blank');
-      showToast(`Downloading Auction #${liveAuctionId || '1991'} Results (Won Vehicles) CSV...`);
+      showToast(`Downloading Auction #${liveAuctionId || '1991'} Results CSV...`);
     } else {
       window.open('/api/admin?action=export&type=dealers', '_blank');
       showToast('Downloading Dealer Leaderboard Summary CSV...');
@@ -426,38 +483,97 @@ export default function AdminPage() {
     showToast(`Downloading Auction #${liveAuctionId || '1991'} Results & Dealer Summary CSVs...`);
   };
 
-  // ─── Login Screen ──────────────────────────────────────────────────
+  const toggleTelecastPlay = () => {
+    if (!videoRef.current) return;
+    if (telecastPlaying) {
+      videoRef.current.pause();
+      setTelecastPlaying(false);
+    } else {
+      videoRef.current.play().catch(() => {});
+      setTelecastPlaying(true);
+    }
+  };
+
+  const toggleTelecastMute = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !videoRef.current.muted;
+    setTelecastMuted(videoRef.current.muted);
+  };
+
+  // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!authenticated) {
     return (
       <div className="login-container">
-        <div className="login-card" style={{ maxWidth: '380px' }}>
-          <div className="login-header">
-            <div className="login-trophy" style={{ fontSize: '2.5rem' }}>🔒</div>
-            <h1 className="login-title" style={{ fontSize: '1.3rem' }}>Admin Access</h1>
-            <p className="login-subtitle">Enter admin password to continue</p>
-          </div>
-          <div className="form-group">
-            <input
-              type="password"
-              className="form-input"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            />
-          </div>
-          <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={handleLogin}>
-            Sign In
-          </button>
-          <div style={{ textAlign: 'center', marginTop: 'var(--space-md)' }}>
-            <Link href="/" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>← Back to Super Cup</Link>
+        <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 50 }}>
+          <SwitchMode width={58} height={28} />
+        </div>
+        <div className="floating-orb orb-1"></div>
+        <div className="floating-orb orb-2"></div>
+        <div className="grid-overlay"></div>
+
+        <div className="login-card double-bezel" style={{ maxWidth: '420px' }}>
+          <div className="inner-bezel-core" style={{ padding: '36px 30px' }}>
+            <div className="login-header">
+              <div className="admin-trophy-badge" style={{ margin: '0 auto 16px', width: '56px', height: '56px', fontSize: '1.8rem' }}>
+                🛡️
+              </div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(225, 29, 72, 0.15)',
+                border: '1px solid rgba(225, 29, 72, 0.35)',
+                padding: '4px 12px',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                color: 'var(--tvs-red-light)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                marginBottom: '12px'
+              }}>
+                Executive Security Clearance
+              </div>
+              <h1 className="login-title" style={{ fontSize: '1.5rem' }}>Admin Command Portal</h1>
+              <p className="login-subtitle">Enter privileged credentials to access Super Cup control room</p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Administrator Password</label>
+              <div className="input-with-icon">
+                <span className="input-icon-left">🔒</span>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="Enter administrator password..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <button 
+              className="btn btn-primary btn-lg" 
+              style={{ width: '100%', marginTop: '8px' }} 
+              onClick={handleLogin}
+            >
+              Sign In to Command Center
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: '20px' }}>
+              <Link href="/" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                ← Return to Public Dealer Portal
+              </Link>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // ─── Admin Dashboard ──────────────────────────────────────────────
+  // ─── Main Admin Command Center ─────────────────────────────────────────────
   const filteredLeaderboard = leaderboard.filter(d =>
     d.dealerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.externalId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -478,373 +594,609 @@ export default function AdminPage() {
 
   return (
     <div className="page-container">
+      {/* Background Ambient Orbs & Grid */}
+      <div className="floating-orb orb-1"></div>
+      <div className="floating-orb orb-2"></div>
+      <div className="floating-orb orb-3"></div>
+      <div className="grid-overlay"></div>
+
+      {/* Floating Island Navbar */}
       <nav className="navbar">
         <div className="navbar-inner">
-          <div className="navbar-brand">
-            <span className="navbar-logo">TVS Super Cup</span>
-            <span className="navbar-badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#F87171' }}>ADMIN</span>
-          </div>
+          <Link href="/admin" className="navbar-brand">
+            <div className="navbar-logo-wrap">
+              <span className="navbar-logo">
+                <span>TVS</span> SUPERCUP
+              </span>
+              <span className="navbar-badge" style={{ background: 'rgba(225, 29, 72, 0.2)', color: 'var(--tvs-red-light)', borderColor: 'rgba(225, 29, 72, 0.4)' }}>
+                ADMIN MISSION CONTROL
+              </span>
+            </div>
+          </Link>
+
           <ul className="navbar-nav">
-            <li><Link href="/" className="navbar-link">Dealer View</Link></li>
-            <li><Link href="/leaderboard" className="navbar-link">Leaderboard</Link></li>
+            <li>
+              <Link href="/dashboard" className="navbar-link">
+                <Users className="w-4 h-4 text-sky-400" />
+                <span>Dealer View</span>
+              </Link>
+            </li>
+            <li>
+              <Link href="/leaderboard" className="navbar-link">
+                <TrendingUp className="w-4 h-4 text-amber-400" />
+                <span>Leaderboard</span>
+              </Link>
+            </li>
           </ul>
+
           <div className="navbar-user">
-            <button className="btn btn-ghost btn-sm" onClick={() => { fetch('/api/admin/auth', { method: 'DELETE' }); setAuthenticated(false); }}>
-              Logout
+            <SwitchMode width={58} height={28} />
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={() => { fetch('/api/admin/auth', { method: 'DELETE' }); setAuthenticated(false); }}
+              title="Logout admin session"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Logout</span>
             </button>
           </div>
         </div>
       </nav>
 
-      <div className="content-wrapper">
+      {/* Real-Time Live Ticker Marquee */}
+      <TickerMarquee />
+
+      <main className="content-wrapper">
         <div className="admin-grid">
-          {/* Sidebar */}
-          <aside className="admin-sidebar">
-            <div style={{ marginBottom: 'var(--space-lg)' }}>
-              <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--space-md)' }}>
-                Navigation
-              </h3>
-              {([
-                { key: 'overview', icon: '📊', label: 'Overview' },
-                { key: 'liveMonitor', icon: '📡', label: 'Live Monitor', badge: 'LIVE' },
-                { key: 'dealers', icon: '👥', label: 'Dealers' },
-                { key: 'rules', icon: '⚙️', label: 'Point Rules' },
-                { key: 'matches', icon: '🗓️', label: 'Match Days' },
-                { key: 'audit', icon: '📋', label: 'Audit Log' },
-              ] as const).map(item => (
-                <div
-                  key={item.key}
-                  className={`admin-nav-item ${activeTab === item.key ? 'active' : ''}`}
-                  onClick={() => { setActiveTab(item.key); setSelectedDealer(null); }}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </div>
-                  {'badge' in item && (
-                    <span style={{
-                      background: 'rgba(239, 68, 68, 0.2)',
-                      color: '#EF4444',
-                      fontSize: '0.65rem',
-                      fontWeight: 800,
-                      padding: '2px 6px',
-                      borderRadius: '999px',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
-                    }}>
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-              ))}
+          {/* Executive Header & Quick Operations Bar */}
+          <div className="admin-header-strip">
+            <div className="admin-title-area">
+              <div className="admin-trophy-badge">
+                🏆
+              </div>
+              <div>
+                <h1 className="admin-page-title">Super Cup Executive Command Center</h1>
+                <p className="admin-page-subtitle">
+                  September 2026 Campaign • Real-Time Auction Telemetry & Fleet Management
+                </p>
+              </div>
             </div>
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-md)' }}>
+
+            <div className="admin-actions">
               <button
                 className="btn btn-primary btn-sm"
-                style={{
-                  width: '100%',
-                  marginBottom: 'var(--space-sm)',
-                  background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
-                  color: '#fff',
-                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
-                }}
                 onClick={handleSyncLiveAuction}
                 disabled={syncing}
+                title="Force synchronize active TVS Certified auction data"
               >
-                {syncing ? `⏳ Syncing Auction #${liveAuctionId || '1991'}...` : `⚡ Sync Auction #${liveAuctionId || '1991'}`}
+                <Zap className="w-4 h-4" />
+                <span>{syncing ? `Syncing #${liveAuctionId || '1991'}...` : `Sync Auction #${liveAuctionId || '1991'}`}</span>
               </button>
-              <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginBottom: 'var(--space-sm)' }} onClick={handleRecalculate}>
-                🔄 Recalculate
+
+              <button 
+                className="btn btn-ghost btn-sm" 
+                onClick={handleRecalculate}
+                title="Recalculate dealer points and ranks"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Recalculate</span>
               </button>
-              <button className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={handleExport}>
-                📥 Export CSV
+
+              <button 
+                className="btn btn-ghost btn-sm" 
+                onClick={handleExport}
+                title="Download CSV summaries"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
               </button>
             </div>
-          </aside>
+          </div>
 
-          {/* Content */}
-          <main className="admin-content">
+          {/* Executive Video Telecast Card (Analyst Telemetry Monitor) */}
+          <div className="card double-bezel" style={{ padding: '6px' }}>
+            <div className="inner-bezel-core" style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="live-ping">
+                    <span className="ping-dot"></span>
+                    <span className="ping-ring"></span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--tvs-red-light)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                      TELEMETRY FEED
+                    </span>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Executive Trading Desk & Analytics Stream
+                    </h3>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    onClick={toggleTelecastPlay} 
+                    className="control-icon-btn"
+                    title={telecastPlaying ? 'Pause video' : 'Play video'}
+                  >
+                    {telecastPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                  </button>
+                  <button 
+                    onClick={toggleTelecastMute} 
+                    className="control-icon-btn"
+                    title={telecastMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {telecastMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  </button>
+                  <button 
+                    onClick={() => setShowFullTelecast(!showFullTelecast)} 
+                    className="control-icon-btn"
+                    title="Toggle Expanded View"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Video Monitor Frame */}
+              <div style={{
+                position: 'relative',
+                borderRadius: 'var(--radius-lg)',
+                overflow: 'hidden',
+                aspectRatio: showFullTelecast ? '16 / 9' : '24 / 9',
+                minHeight: showFullTelecast ? '540px' : '320px',
+                maxHeight: showFullTelecast ? '85vh' : '440px',
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                background: '#000',
+              }}>
+                <video
+                  ref={videoRef}
+                  src="/analyst_dashboard.mp4"
+                  poster="/scroll_banner_analyst.png"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <div className="video-scrim-bottom" style={{ height: '80px' }}></div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '12px',
+                  left: '16px',
+                  right: '16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  zIndex: 5,
+                  fontSize: '0.78rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'rgba(255, 255, 255, 0.9)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="badge badge-success">AUCTION #{liveAuctionId} ACTIVE</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>• {getAuctionScheduleLabel(liveAuctionId)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    <span>DEALERS: <strong>{stats?.activeDealers ?? 0} ACTIVE</strong></span>
+                    <span>POINTS POOL: <strong style={{ color: 'var(--accent-cyan)' }}>{stats?.totalPoints?.toLocaleString() ?? 0} PTS</strong></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Segmented Corporate Tabs */}
+          <div className="admin-tabs">
+            {([
+              { key: 'overview', icon: <BarChart3 className="w-4 h-4" />, label: 'Overview' },
+              { key: 'liveMonitor', icon: <Radio className="w-4 h-4 text-rose-500" />, label: 'War Room (Live Monitor)' },
+              { key: 'dealers', icon: <Users className="w-4 h-4" />, label: 'Dealer Fleet' },
+              { key: 'rules', icon: <Settings className="w-4 h-4" />, label: 'Scoring Rules Engine' },
+              { key: 'matches', icon: <Calendar className="w-4 h-4" />, label: 'Match Schedule' },
+              { key: 'audit', icon: <FileText className="w-4 h-4" />, label: 'Audit Trail' },
+            ] as const).map(item => (
+              <button
+                key={item.key}
+                className={`admin-tab ${activeTab === item.key ? 'active' : ''}`}
+                onClick={() => { setActiveTab(item.key); setSelectedDealer(null); }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Content Area */}
+          <div className="admin-content">
             {loading ? (
-              <div className="loading-container">
+              <div className="loading-container" style={{ padding: '60px 0' }}>
                 <div className="loading-spinner"></div>
-                <span>Loading...</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>FETCHING COMMAND SYSTEM DATA...</span>
               </div>
             ) : (
               <>
-                {/* ── Overview Tab ─────────────────────────────────────── */}
+                {/* ── 1. Overview Tab ──────────────────────────────────────────────── */}
                 {activeTab === 'overview' && stats && (
-                  <>
-                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
-                      📊 Campaign Overview
-                    </h2>
-
-                    <div className="stats-grid">
-                      <div className="stat-card blue animate-in">
-                        <div className="stat-icon">👥</div>
-                        <div className="stat-value blue">{stats.totalDealers}</div>
-                        <div className="stat-label">Total Dealers</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* 6 Key Performance Metric Tiles */}
+                    <div className="admin-stats-grid">
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Total Fleet Dealers</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
+                          {stats.totalDealers}
+                        </div>
                       </div>
-                      <div className="stat-card lime animate-in">
-                        <div className="stat-icon">✅</div>
-                        <div className="stat-value lime">{stats.activeDealers}</div>
-                        <div className="stat-label">Active Dealers</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Active Transacting</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
+                          {stats.activeDealers}
+                        </div>
                       </div>
-                      <div className="stat-card gold animate-in">
-                        <div className="stat-icon">💰</div>
-                        <div className="stat-value gold">{stats.totalPoints.toLocaleString()}</div>
-                        <div className="stat-label">Total Points</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Total Accrued Points</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
+                          {stats.totalPoints.toLocaleString()}
+                        </div>
                       </div>
-                      <div className="stat-card animate-in">
-                        <div className="stat-icon">🏏</div>
-                        <div className="stat-value white">{stats.matchParticipation}</div>
-                        <div className="stat-label">Match Participations</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Room Attendances</span>
+                        <div className="admin-stat-val">
+                          {stats.matchParticipation}
+                        </div>
                       </div>
-                      <div className="stat-card animate-in">
-                        <div className="stat-icon">🛒</div>
-                        <div className="stat-value white">{stats.buyTransactions}</div>
-                        <div className="stat-label">Buy Transactions</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Vehicles Bought (BUY)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
+                          {stats.buyTransactions}
+                        </div>
                       </div>
-                      <div className="stat-card animate-in">
-                        <div className="stat-icon">💰</div>
-                        <div className="stat-value white">{stats.sellTransactions}</div>
-                        <div className="stat-label">Sell Transactions</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Vehicles Sold (SELL)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
+                          {stats.sellTransactions}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Leaderboard */}
-                    <div className="card" style={{ marginTop: 'var(--space-md)' }}>
+                    {/* Unmasked Leaderboard Roster */}
+                    <div className="card">
                       <div className="card-header">
-                        <h3 className="card-title">🏆 Leaderboard (Unmasked)</h3>
-                        <span className="card-subtitle">{leaderboard.length} dealers</span>
-                      </div>
-                      <div className="search-wrapper">
-                        <span className="search-icon">🔍</span>
-                        <input
-                          type="text"
-                          className="search-input"
-                          placeholder="Search dealers..."
-                          value={searchQuery}
-                          onChange={e => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                      <table className="admin-table">
-                        <thead>
-                          <tr>
-                            <th>Rank</th>
-                            <th>Dealer Name</th>
-                            <th>ID</th>
-                            <th>City</th>
-                            <th>Points</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredLeaderboard.slice(0, 25).map(d => (
-                            <tr key={d.dealerId}>
-                              <td style={{ fontFamily: 'var(--font-display)', fontWeight: 700 }}>
-                                {d.rank <= 3 ? ['🥇', '🥈', '🥉'][d.rank - 1] : `#${d.rank}`}
-                              </td>
-                              <td style={{ fontWeight: 600 }}>{d.dealerName}</td>
-                              <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{d.externalId}</td>
-                              <td>{d.city}</td>
-                              <td style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--tvs-lime)' }}>{d.points}</td>
-                              <td>
-                                <button className="btn btn-ghost btn-sm" onClick={() => loadDealerDetail(d.dealerId)}>View</button>
-                                <button className="btn btn-sm" style={{ marginLeft: '4px', background: 'rgba(0,82,204,0.1)', color: 'var(--tvs-blue-light)', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', fontFamily: 'var(--font-primary)', fontSize: '0.8rem', fontWeight: 600 }} onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}>Adjust</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Live Monitor Tab ─────────────────────────────────── */}
-                {activeTab === 'liveMonitor' && (
-                  <>
-                    {/* Header Banner */}
-                    <div className="card" style={{
-                      background: '#ffffff',
-                      borderColor: '#e2e8f0',
-                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                      marginBottom: 'var(--space-lg)',
-                    }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-md)' }}>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                            <span style={{
-                              display: 'inline-block',
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: '#10B981',
-                              boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
-                            }}></span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10B981', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                              Live Stream Connected to TVS Certified
-                            </span>
-                          </div>
-                          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
-                            📡 2 PM Live Auction Monitor & Interactions
-                          </h2>
-                          <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '4px' }}>
-                            Auction <strong>#{liveStats?.auctionId || liveAuctionId}</strong>
-                            {matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ? ` (Match #${matchDays.find(m => String(m.auctionId) === String(liveAuctionId))?.matchNumber})` : ''} • {liveStats?.totalActivities ?? 0} Activities • Chennai / TN • {getAuctionScheduleLabel(liveAuctionId)}
+                          <h3 className="card-title">
+                            <Award className="w-5 h-5 text-amber-400" />
+                            Official Super Cup Leaderboard (Unmasked Fleet)
+                          </h3>
+                          <p className="card-subtitle">
+                            Viewing verified rankings for {leaderboard.length} TVS dealerships
                           </p>
                         </div>
+                      </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          {/* Quick Match Selection */}
-                          {matchDays.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>Match:</span>
-                              <select
-                                value={liveAuctionId}
-                                onChange={(e) => handleMatchSelect(e.target.value)}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#2563eb',
-                                  fontWeight: 600,
-                                  fontSize: '0.875rem',
-                                  outline: 'none',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {matchDays.map(m => (
-                                  <option key={m.id} value={m.auctionId || ''} style={{ background: '#ffffff', color: '#0f172a' }}>
-                                    Match #{m.matchNumber} {m.auctionId ? `(#${m.auctionId})` : ''} — {m.status === 'LIVE' ? '🟢 LIVE' : m.status === 'COMPLETED' ? '✓ Completed' : '⏳ Upcoming'}
-                                  </option>
-                                ))}
-                              </select>
+                      <div className="search-bar-wrap">
+                        <div className="search-input-box">
+                          <Search className="w-4 h-4 search-icon-left" />
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="Filter by dealer name, ID, or city..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Rank</th>
+                              <th>Dealership Name</th>
+                              <th>External ID</th>
+                              <th>City / Hub</th>
+                              <th>Super Cup Points</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredLeaderboard.slice(0, 30).map(d => (
+                              <tr key={d.dealerId}>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                                  {d.rank === 1 ? '🥇 #1' :
+                                   d.rank === 2 ? '🥈 #2' :
+                                   d.rank === 3 ? '🥉 #3' :
+                                   `#${d.rank}`}
+                                </td>
+                                <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  {d.dealerName}
+                                </td>
+                                <td style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                                  {d.externalId}
+                                </td>
+                                <td>{d.city}</td>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)', fontSize: '0.95rem' }}>
+                                  {d.points} PTS
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button 
+                                      className="btn btn-ghost btn-sm" 
+                                      onClick={() => loadDealerDetail(d.dealerId)}
+                                    >
+                                      Inspect
+                                    </button>
+                                    <button 
+                                      className="btn btn-sm" 
+                                      style={{ background: 'rgba(225, 29, 72, 0.15)', color: 'var(--tvs-red-light)', border: '1px solid rgba(225, 29, 72, 0.3)' }}
+                                      onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
+                                    >
+                                      Adjust
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 2. Live Monitor (War Room) Tab ─────────────────────────────────── */}
+                {activeTab === 'liveMonitor' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Executive Auction & Match Command Selector */}
+                    <div className="card double-bezel" style={{ padding: '6px' }}>
+                      <div className="inner-bezel-core" style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span className="stream-indicator"></span>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+                                Live TVS Certified Auction Gateway Active
+                              </span>
                             </div>
-                          )}
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>Auction ID:</span>
-                            <input
-                              type="text"
-                              value={liveAuctionId}
-                              onChange={(e) => handleMatchSelect(e.target.value)}
-                              style={{
-                                width: '55px',
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#2563eb',
-                                fontWeight: 600,
-                                fontSize: '0.875rem',
-                                outline: 'none',
-                              }}
-                              title="TVS Certified Auction ID"
-                            />
+                            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                              Auction Telemetry & Match Selector
+                            </h2>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                              Select any match below to immediately view and populate real-time bidding events, vehicle transactions, and dealer participation
+                            </p>
                           </div>
 
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              background: liveAutoRefresh ? '#dcfce7' : '#f8fafc',
-                              color: liveAutoRefresh ? '#16a34a' : '#64748b',
-                              border: `1px solid ${liveAutoRefresh ? '#bbf7d0' : '#e2e8f0'}`,
-                              fontWeight: 600,
-                            }}
-                            onClick={() => setLiveAutoRefresh(!liveAutoRefresh)}
-                          >
-                            {liveAutoRefresh ? '🟢 Auto-Sync ON (10s)' : '⚪ Auto-Sync PAUSED'}
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              className="btn btn-sm"
+                              style={{
+                                background: liveAutoRefresh ? 'rgba(6, 214, 160, 0.15)' : 'rgba(255,255,255,0.05)',
+                                color: liveAutoRefresh ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                                border: `1px solid ${liveAutoRefresh ? 'rgba(6, 214, 160, 0.4)' : 'var(--border-subtle)'}`,
+                              }}
+                              onClick={() => setLiveAutoRefresh(!liveAutoRefresh)}
+                            >
+                              {liveAutoRefresh ? '🟢 Auto-Sync (10s)' : '⚪ Auto-Sync Off'}
+                            </button>
 
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => loadLiveActivities(false)}
-                            disabled={liveLoading}
-                            style={{ border: '1px solid #e2e8f0' }}
-                          >
-                            {liveLoading ? '🔄 Fetching...' : '🔄 Refresh View'}
-                          </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => loadLiveActivities(false, liveFilter, liveSearchQuery, liveAuctionId)}
+                              disabled={liveLoading}
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${liveLoading ? 'animate-spin' : ''}`} />
+                              <span>{liveLoading ? 'Fetching...' : 'Refresh'}</span>
+                            </button>
 
-                          <button
-                            className="btn btn-primary btn-sm"
-                            style={{
-                              background: '#2563eb',
-                              color: '#fff',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                              fontWeight: 600,
-                              border: 'none',
-                            }}
-                            onClick={handleSyncLiveAuction}
-                            disabled={syncing}
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={handleSyncLiveAuction}
+                              disabled={syncing}
+                            >
+                              <Zap className="w-3.5 h-3.5" />
+                              <span>{syncing ? `Syncing #${liveAuctionId}...` : `Force Sync #${liveAuctionId}`}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Interactive Match Selector Cards Grid */}
+                        <div className="match-selection-grid">
+                          {/* Match 1 Card */}
+                          <div 
+                            className={`match-select-card ${String(liveAuctionId) === '1978' ? 'active' : ''}`}
+                            onClick={() => handleMatchSelect('1978')}
                           >
-                            {syncing ? '⏳ Syncing...' : `⚡ Sync Auction #${liveAuctionId || '1991'}`}
-                          </button>
+                            <div className="match-card-top">
+                              <span className="match-card-number">MATCH #1</span>
+                              <span className="match-card-badge completed">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                1,796 Events Stored
+                              </span>
+                            </div>
+                            <div className="match-card-title">
+                              Auction #1978
+                            </div>
+                            <div className="match-card-metrics">
+                              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>145 Won</span> • 
+                              <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>1,650 Bids</span> • 
+                              <span style={{ color: 'var(--text-muted)' }}>Sep 10 Completed</span>
+                            </div>
+                            {String(liveAuctionId) === '1978' && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                <span className="stream-indicator" /> ACTIVE MONITORING FEED
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Match 2 Card */}
+                          <div 
+                            className={`match-select-card ${String(liveAuctionId) === '1991' ? 'active' : ''}`}
+                            onClick={() => handleMatchSelect('1991')}
+                          >
+                            <div className="match-card-top">
+                              <span className="match-card-number">MATCH #2</span>
+                              <span className="match-card-badge live">
+                                <span className="live-ping" style={{ display: 'inline-flex' }}>
+                                  <span className="ping-dot" />
+                                  <span className="ping-ring" />
+                                </span>
+                                LIVE WAR ROOM
+                              </span>
+                            </div>
+                            <div className="match-card-title">
+                              Auction #1991
+                            </div>
+                            <div className="match-card-metrics">
+                              <span style={{ color: 'var(--text-primary)' }}>Live Gateway</span> • 
+                              <span style={{ color: 'var(--accent-gold)' }}>Sep 17 (Tomorrow 2 PM)</span>
+                            </div>
+                            {String(liveAuctionId) === '1991' && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--tvs-red-light)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                <span className="stream-indicator" style={{ background: 'var(--tvs-red)' }} /> ACTIVE LIVE STREAM
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Match 3 Card */}
+                          <div 
+                            className={`match-select-card ${String(liveAuctionId) === 'TVSC-SEP-24' ? 'active' : ''}`}
+                            onClick={() => handleMatchSelect('TVSC-SEP-24')}
+                          >
+                            <div className="match-card-top">
+                              <span className="match-card-number">MATCH #3</span>
+                              <span className="match-card-badge upcoming">
+                                <Clock className="w-3 h-3 text-sky-400" />
+                                UPCOMING
+                              </span>
+                            </div>
+                            <div className="match-card-title">
+                              TVSC-SEP-24
+                            </div>
+                            <div className="match-card-metrics">
+                              <span style={{ color: 'var(--accent-blue)' }}>Next Thursday</span> • 
+                              <span style={{ color: 'var(--text-muted)' }}>Sep 24 at 2:00 PM IST</span>
+                            </div>
+                            {String(liveAuctionId) === 'TVSC-SEP-24' && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                <span className="stream-indicator" style={{ background: 'var(--accent-blue)' }} /> ACTIVE UPCOMING PREVIEW
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Dynamic Match Days if any extra are found */}
+                          {matchDays
+                            .filter(m => !['1978', '1991', 'TVSC-SEP-24'].includes(String(m.auctionId)))
+                            .map(m => (
+                              <div 
+                                key={m.id}
+                                className={`match-select-card ${String(liveAuctionId) === String(m.auctionId) ? 'active' : ''}`}
+                                onClick={() => handleMatchSelect(m.auctionId || String(m.id))}
+                              >
+                                <div className="match-card-top">
+                                  <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                  <span className={`match-card-badge ${m.status.toLowerCase()}`}>
+                                    {m.status}
+                                  </span>
+                                </div>
+                                <div className="match-card-title">
+                                  Auction #{m.auctionId || m.id}
+                                </div>
+                                <div className="match-card-metrics">
+                                  <span>{new Date(m.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+
+                        {/* Custom Auction ID Entry Bar */}
+                        <div className="custom-auction-bar">
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                            Direct Auction Entry:
+                          </span>
+                          <form 
+                            onSubmit={handleCustomAuctionSubmit}
+                            style={{ display: 'flex', gap: '8px', flex: '1 1 240px', alignItems: 'center' }}
+                          >
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Enter custom Auction ID (e.g. 1978, 1991)..."
+                              value={customAuctionInput}
+                              onChange={e => setCustomAuctionInput(e.target.value)}
+                              style={{ padding: '6px 12px', fontSize: '0.82rem', height: '34px', maxWidth: '300px' }}
+                            />
+                            <button
+                              type="submit"
+                              className="btn btn-primary btn-sm"
+                              style={{ height: '34px', padding: '0 16px' }}
+                            >
+                              Load Auction
+                            </button>
+                          </form>
+                          <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            Active: <strong style={{ color: 'var(--text-primary)' }}>Auction #{liveAuctionId}</strong> ({liveStats?.totalActivities ?? 0} events)
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Metric Cards Grid */}
-                    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', marginBottom: 'var(--space-lg)' }}>
-                      <div className="stat-card blue">
-                        <div className="stat-icon">🔨</div>
-                        <div className="stat-value blue">{liveStats?.totalBids ?? 0}</div>
-                        <div className="stat-label">Live Bids Placed (+2 pts)</div>
+                    {/* Live Metric Tiles Grid */}
+                    <div className="admin-stats-grid">
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Live Bids Placed (+2)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
+                          {liveStats?.totalBids ?? 0}
+                        </div>
                       </div>
-
-                      <div className="stat-card" style={{ borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-                        <div className="stat-icon">🏆</div>
-                        <div className="stat-value" style={{ color: '#10B981' }}>{liveStats?.totalBuys ?? 0}</div>
-                        <div className="stat-label">Vehicles Won (+10 pts)</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Lots Won (+10)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
+                          {liveStats?.totalBuys ?? 0}
+                        </div>
                       </div>
-
-                      <div className="stat-card" style={{ borderColor: 'rgba(139, 92, 246, 0.3)' }}>
-                        <div className="stat-icon">💰</div>
-                        <div className="stat-value" style={{ color: '#A78BFA' }}>{liveStats?.totalSells ?? 0}</div>
-                        <div className="stat-label">Vehicles Sold (+10 pts)</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Vehicles Sold (+10)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-indigo)' }}>
+                          {liveStats?.totalSells ?? 0}
+                        </div>
                       </div>
-
-                      <div className="stat-card lime">
-                        <div className="stat-icon">👥</div>
-                        <div className="stat-value lime">{liveStats?.totalParticipation ?? 0}</div>
-                        <div className="stat-label">Room Attendees (+15 pts)</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Room Attendees (+15)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
+                          {liveStats?.totalParticipation ?? 0}
+                        </div>
                       </div>
-
-                      <div className="stat-card" style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }}>
-                        <div className="stat-icon">🔍</div>
-                        <div className="stat-value" style={{ color: '#FBBF24' }}>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Inspections (+1)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
                           {(liveStats?.totalInspections ?? 0) + (liveStats?.totalWatchlist ?? 0)}
                         </div>
-                        <div className="stat-label">Inspections & Watch (+1 pt)</div>
                       </div>
-
-                      <div className="stat-card" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
-                        <div className="stat-icon">💾</div>
-                        <div className="stat-value white">{liveStats?.totalActivities ?? 0}</div>
-                        <div className="stat-label">Total Stored Records</div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Total Stored Records</span>
+                        <div className="admin-stat-val">
+                          {liveStats?.totalActivities ?? 0}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Filter Pills & Search */}
-                    <div className="card" style={{ marginBottom: 'var(--space-md)', padding: 'var(--space-md)' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-md)' }}>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {/* Filter Pills & Live Search */}
+                    <div className="card" style={{ padding: '16px 20px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                        <div className="filter-pills">
                           {[
-                            { key: 'ALL', label: 'All Activities' },
-                            { key: 'BID_PLACED', label: '🔨 Bids' },
-                            { key: 'BUY', label: '🏆 Buys' },
-                            { key: 'SELL', label: '💰 Sells' },
-                            { key: 'MATCH_PARTICIPATION', label: '👥 Attendees' },
-                            { key: 'VEHICLE_INSPECTED', label: '🔍 Inspections' },
-                            { key: 'WATCHLIST_ADD', label: '⭐ Watchlist' },
+                            { key: 'ALL', label: `All Activities (${liveStats?.totalActivities ?? 0})` },
+                            { key: 'BID_PLACED', label: `🔨 Bids (${liveStats?.totalBids ?? 0})` },
+                            { key: 'BUY', label: `🏆 Buys (${liveStats?.totalBuys ?? 0})` },
+                            { key: 'SELL', label: `💰 Sells (${liveStats?.totalSells ?? 0})` },
+                            { key: 'MATCH_PARTICIPATION', label: `👥 Attendees (${liveStats?.totalParticipation ?? 0})` },
+                            { key: 'VEHICLE_INSPECTED', label: `🔍 Inspections (${(liveStats?.totalInspections ?? 0) + (liveStats?.totalWatchlist ?? 0)})` },
+                            { key: 'WATCHLIST_ADD', label: `⭐ Watchlist (${liveStats?.totalWatchlist ?? 0})` },
                           ].map(pill => (
                             <button
                               key={pill.key}
-                              className={`btn btn-sm ${liveFilter === pill.key ? 'btn-primary' : 'btn-ghost'}`}
-                              style={{
-                                fontSize: '0.8rem',
-                                padding: '4px 10px',
-                                ...(liveFilter !== pill.key ? { border: '1px solid var(--border-subtle)' } : {}),
-                              }}
+                              className={`filter-pill ${liveFilter === pill.key ? 'active' : ''}`}
                               onClick={() => {
                                 setLiveFilter(pill.key);
-                                loadLiveActivities(false, pill.key, liveSearchQuery);
+                                loadLiveActivities(false, pill.key, liveSearchQuery, liveAuctionId);
                               }}
                             >
                               {pill.label}
@@ -852,43 +1204,48 @@ export default function AdminPage() {
                           ))}
                         </div>
 
-                        <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', flex: '1 1 300px', maxWidth: '520px', justifyContent: 'flex-end' }}>
-                          <div className="search-wrapper" style={{ margin: 0, minWidth: '200px', flex: '1 1 200px' }}>
-                            <span className="search-icon">🔍</span>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: '1 1 300px', maxWidth: '480px' }}>
+                          <div className="search-input-box">
+                            <Search className="w-4 h-4 search-icon-left" />
                             <input
                               type="text"
-                              className="search-input"
+                              className="form-input"
                               placeholder="Search dealer, vehicle, reg no..."
                               value={liveSearchQuery}
                               onChange={e => setLiveSearchQuery(e.target.value)}
                               onKeyDown={e => {
                                 if (e.key === 'Enter') {
-                                  loadLiveActivities(false, liveFilter, liveSearchQuery);
+                                  loadLiveActivities(false, liveFilter, liveSearchQuery, liveAuctionId);
                                 }
                               }}
                             />
                           </div>
                           <button
                             className="btn btn-ghost btn-sm"
-                            style={{ border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', height: '38px', padding: '0 12px' }}
                             onClick={() => triggerCsvDownload('activities')}
-                            title="Export all live auction activities to CSV"
+                            title="Export live auction activities to CSV"
                           >
-                            📥 Export Feed CSV
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Feed CSV</span>
                           </button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Chronological Real-Time Table */}
+                    {/* Real-Time Live Feed Table */}
                     <div className="card">
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="card-header">
                         <div>
-                          <h3 className="card-title">⚡ Real-Time Auction Interaction Feed</h3>
-                          <p className="card-subtitle">Showing latest live interactions captured from TVS Certified</p>
+                          <h3 className="card-title">
+                            <Zap className="w-5 h-5 text-emerald-400" />
+                            Chronological Telemetry Feed
+                          </h3>
+                          <p className="card-subtitle">
+                            Displaying real-time bids, room events, and vehicle transactions
+                          </p>
                         </div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          Showing {filteredLiveActivities.length} interactions
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          {filteredLiveActivities.length} interactions matching
                         </span>
                       </div>
 
@@ -898,627 +1255,642 @@ export default function AdminPage() {
                             <tr>
                               <th>Time</th>
                               <th>Dealer Name</th>
-                              <th>ID / City</th>
+                              <th>External ID / City</th>
                               <th>Interaction</th>
-                              <th>Details & Amount</th>
-                              <th>Points</th>
-                              <th>Persistence</th>
+                              <th>Vehicle & Bid Details</th>
+                              <th>Awarded</th>
+                              <th>Integrity</th>
                             </tr>
                           </thead>
                           <tbody>
                             {filteredLiveActivities.map(act => (
-                                <tr key={act.id}>
-                                  <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
-                                    {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                  </td>
-                                  <td style={{ fontWeight: 600 }}>
-                                    {act.dealerName}
-                                  </td>
-                                  <td style={{ fontSize: '0.8rem' }}>
-                                    <span style={{ color: 'var(--tvs-blue-light)' }}>{act.externalDealerId}</span>
-                                    <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>• {act.city}</span>
-                                  </td>
-                                  <td>
-                                    <span className={`badge ${
-                                      act.activityType === 'BUY' ? 'badge-success' :
-                                      act.activityType === 'SELL' ? 'badge-info' :
-                                      act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
-                                      act.activityType === 'BID_PLACED' ? 'badge-primary' :
-                                      'badge-warning'
-                                    }`}>
-                                      {act.activityType === 'BUY' ? '🏆 WON VEHICLE' :
-                                       act.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
-                                       act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
-                                       act.activityType === 'MATCH_PARTICIPATION' ? '👥 ATTENDED ROOM' :
-                                       act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
-                                       act.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
-                                       act.activityType.replace(/_/g, ' ')}
-                                    </span>
-                                  </td>
-                                  <td style={{ fontSize: '0.85rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                      {act.metadata?.vehicleName ? <strong>{String(act.metadata.vehicleName)}</strong> : null}
-                                      {act.metadata?.regNo ? <span style={{ color: 'var(--text-muted)' }}>({String(act.metadata.regNo)})</span> : null}
-                                      {act.metadata?.bidAmount ? <span style={{ color: '#60A5FA', fontWeight: 600 }}>• ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}</span> : null}
-                                      {act.metadata?.winningBid ? <span style={{ color: '#10B981', fontWeight: 600 }}>• Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}</span> : null}
-                                      {act.metadata?.price ? <span style={{ color: '#A78BFA', fontWeight: 600 }}>• ₹{Number(act.metadata.price).toLocaleString('en-IN')}</span> : null}
-                                      {act.metadata?.depositAmount ? <span>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span> : null}
-                                      {Boolean(act.metadata?.isLeadingBid) ? (
-                                        <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.18)', color: '#10B981', fontSize: '0.72rem', fontWeight: 700 }}>
-                                          🏆 Leading Bid
-                                        </span>
-                                      ) : null}
-                                      {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
-                                        <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#F87171', fontSize: '0.72rem' }}>
-                                          Rank #{String(act.metadata.bidRank)}
-                                        </span>
-                                      ) : null}
-                                      {Boolean(act.metadata?.isPreBid) ? (
-                                        <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', color: '#60A5FA', fontSize: '0.72rem' }}>
-                                          ⚡ Pre-Bid
-                                        </span>
-                                      ) : null}
-                                      {act.metadata?.totalBids ? (
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                                          ({String(act.metadata.totalBids)} bids)
-                                        </span>
-                                      ) : null}
-                                      {act.metadata?.fuelType ? (
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                                          • {String(act.metadata.fuelType)} {act.metadata.yearOfMfg ? `'${String(act.metadata.yearOfMfg).slice(-2)}` : ''}
-                                        </span>
-                                      ) : null}
-                                      {!act.metadata?.vehicleName && !act.metadata?.bidAmount && !act.metadata?.price && !act.metadata?.depositAmount && (
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Live stream event captured</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td style={{ fontWeight: 700, color: 'var(--tvs-lime)', whiteSpace: 'nowrap' }}>
-                                    +{act.points}
-                                  </td>
-                                  <td>
-                                    <span style={{ fontSize: '0.75rem', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      💾 Stored in DB
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
+                              <tr key={act.id}>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                                  {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </td>
+                                <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  {act.dealerName}
+                                </td>
+                                <td style={{ fontSize: '0.8rem' }}>
+                                  <span style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>{act.externalDealerId}</span>
+                                  <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>• {act.city}</span>
+                                </td>
+                                <td>
+                                  <span className={`badge ${
+                                    act.activityType === 'BUY' ? 'badge-success' :
+                                    act.activityType === 'SELL' ? 'badge-info' :
+                                    act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
+                                    act.activityType === 'BID_PLACED' ? 'badge-primary' :
+                                    'badge-warning'
+                                  }`}>
+                                    {act.activityType === 'BUY' ? '🏆 WON LOT' :
+                                     act.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
+                                     act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
+                                     act.activityType === 'MATCH_PARTICIPATION' ? '👥 ROOM ATTENDEE' :
+                                     act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
+                                     act.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
+                                     act.activityType.replace(/_/g, ' ')}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize: '0.85rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                    {act.metadata?.vehicleName ? <strong style={{ color: 'var(--text-primary)' }}>{String(act.metadata.vehicleName)}</strong> : null}
+                                    {act.metadata?.regNo ? <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>({String(act.metadata.regNo)})</span> : null}
+                                    {act.metadata?.bidAmount ? <span style={{ color: 'var(--accent-blue)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>• ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}</span> : null}
+                                    {act.metadata?.winningBid ? <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>• Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}</span> : null}
+                                    {act.metadata?.price ? <span style={{ color: 'var(--accent-indigo)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>• ₹{Number(act.metadata.price).toLocaleString('en-IN')}</span> : null}
+                                    {act.metadata?.depositAmount ? <span>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span> : null}
+                                    {Boolean(act.metadata?.isLeadingBid) ? (
+                                      <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(6, 214, 160, 0.15)', color: 'var(--accent-cyan)', fontSize: '0.72rem', fontWeight: 700, border: '1px solid rgba(6, 214, 160, 0.3)' }}>
+                                        🏆 Leading Bid
+                                      </span>
+                                    ) : null}
+                                    {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
+                                      <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(225, 29, 72, 0.15)', color: '#fda4af', fontSize: '0.72rem', border: '1px solid rgba(225, 29, 72, 0.3)' }}>
+                                        Rank #{String(act.metadata.bidRank)}
+                                      </span>
+                                    ) : null}
+                                    {Boolean(act.metadata?.isPreBid) ? (
+                                      <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-blue)', fontSize: '0.72rem', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                                        ⚡ Pre-Bid
+                                      </span>
+                                    ) : null}
+                                    {act.metadata?.fuelType ? (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                        • {String(act.metadata.fuelType)} {act.metadata.yearOfMfg ? `'${String(act.metadata.yearOfMfg).slice(-2)}` : ''}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td style={{ fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                                  +{act.points} PTS
+                                </td>
+                                <td>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <CheckCircle2 className="w-3.5 h-3.5" /> Stored
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+
                             {filteredLiveActivities.length === 0 && (
                               <tr>
-                                <td colSpan={7} style={{ textAlign: 'center', padding: 'var(--space-xl)', color: 'var(--text-muted)' }}>
-                                  {liveLoading ? '⏳ Loading live feed...' : `No ${liveFilter !== 'ALL' ? liveFilter.replace(/_/g, ' ').toLowerCase() : 'activity'} interactions found.`}
+                                <td colSpan={7} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '1.8rem' }}>📡</span>
+                                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                                      {liveLoading ? 'Fetching real-time interactions...' : `No ${liveFilter !== 'ALL' ? liveFilter.replace(/_/g, ' ').toLowerCase() : 'activity'} interactions captured for Auction #${liveAuctionId}`}
+                                    </div>
+                                    <p style={{ fontSize: '0.82rem', maxWidth: '480px', color: 'var(--text-secondary)', margin: '0' }}>
+                                      {String(liveAuctionId) !== '1978' ? (
+                                        <>Match #1 (Auction #1978) contains 1,796 verified event records. Click below to load its full telemetry feed.</>
+                                      ) : (
+                                        <>No interactions matched the active filter or search. Try selecting &quot;All Activities&quot; or clear the search query.</>
+                                      )}
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                      {String(liveAuctionId) !== '1978' && (
+                                        <button
+                                          className="btn btn-primary btn-sm"
+                                          onClick={() => handleMatchSelect('1978')}
+                                        >
+                                          <Zap className="w-3.5 h-3.5" />
+                                          <span>Load Match #1 (Auction #1978 — 1,796 Events)</span>
+                                        </button>
+                                      )}
+                                      {liveFilter !== 'ALL' && (
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          onClick={() => {
+                                            setLiveFilter('ALL');
+                                            loadLiveActivities(false, 'ALL', liveSearchQuery, liveAuctionId);
+                                          }}
+                                        >
+                                          Reset to All Activities
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
                                 </td>
                               </tr>
                             )}
                           </tbody>
                         </table>
-
-                        {liveActivities.length === 0 && (
-                          <div style={{ textAlign: 'center', padding: 'var(--space-2xl) var(--space-md)' }}>
-                            <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-xs)' }}>📡</div>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                              Live Auction Stream Ready
-                            </h3>
-                            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '520px', margin: '0 auto var(--space-md)' }}>
-                              Live event schedule: <strong>{getAuctionScheduleLabel(liveAuctionId)} (Auction #{liveAuctionId})</strong>. Incoming bids, buyer wins, room attendees, and vehicle inspections will stream and store here in real-time.
-                            </p>
-                            <button className="btn btn-primary btn-sm" onClick={handleSyncLiveAuction} disabled={syncing}>
-                              {syncing ? '⏳ Syncing TVS...' : '⚡ Test Live Sync Now'}
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
 
-                {/* ── Dealers Tab ──────────────────────────────────────── */}
+                {/* ── 3. Dealers Fleet Management Tab ──────────────────────────────── */}
                 {activeTab === 'dealers' && !selectedDealer && (
-                  <>
-                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
-                      👥 Dealer Management
-                    </h2>
-                    <div className="card">
-                      <div className="search-wrapper">
-                        <span className="search-icon">🔍</span>
+                  <div className="card">
+                    <div className="card-header">
+                      <div>
+                        <h3 className="card-title">
+                          <Users className="w-5 h-5 text-sky-400" />
+                          Dealer Fleet Directory & Score Oversight
+                        </h3>
+                        <p className="card-subtitle">
+                          Manage enrolled dealers, inspect individual transactions, and make score adjustments
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="search-bar-wrap">
+                      <div className="search-input-box">
+                        <Search className="w-4 h-4 search-icon-left" />
                         <input
                           type="text"
-                          className="search-input"
-                          placeholder="Search dealers..."
+                          className="form-input"
+                          placeholder="Search dealer by name, ID, or city..."
                           value={searchQuery}
                           onChange={e => setSearchQuery(e.target.value)}
                         />
                       </div>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
                       <table className="admin-table">
                         <thead>
                           <tr>
                             <th>Rank</th>
-                            <th>Dealer</th>
+                            <th>Dealer Name</th>
                             <th>ID</th>
                             <th>City</th>
-                            <th>Points</th>
-                            <th></th>
+                            <th>Total Points</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filteredLeaderboard.map(d => (
                             <tr key={d.dealerId}>
-                              <td style={{ fontWeight: 700 }}>#{d.rank}</td>
-                              <td style={{ fontWeight: 600 }}>{d.dealerName}</td>
-                              <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{d.externalId}</td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>#{d.rank}</td>
+                              <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{d.dealerName}</td>
+                              <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{d.externalId}</td>
                               <td>{d.city}</td>
-                              <td style={{ fontWeight: 700, color: 'var(--tvs-lime)' }}>{d.points}</td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>{d.points} PTS</td>
                               <td>
-                                <button className="btn btn-primary btn-sm" onClick={() => loadDealerDetail(d.dealerId)}>Details</button>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button className="btn btn-primary btn-sm" onClick={() => loadDealerDetail(d.dealerId)}>
+                                    Details
+                                  </button>
+                                  <button 
+                                    className="btn btn-ghost btn-sm" 
+                                    onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
+                                  >
+                                    Adjust
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  </>
+                  </div>
                 )}
 
-                {/* ── Dealer Detail View ───────────────────────────────── */}
+                {/* Dealer Detail Subview */}
                 {activeTab === 'dealers' && selectedDealer && (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDealer(null)}>← Back</button>
-                      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700 }}>
-                        {selectedDealer.displayName}
-                      </h2>
-                      <span className="badge badge-info">{selectedDealer.externalDealerId}</span>
-                    </div>
-
-                    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                      <div className="stat-card">
-                        <div className="stat-value lime">#{selectedDealer.scores[0]?.rank || '-'}</div>
-                        <div className="stat-label">Rank</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-value gold">{selectedDealer.scores[0]?.totalPoints || 0}</div>
-                        <div className="stat-label">Total Points</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-value white">{selectedDealer.activities.length}</div>
-                        <div className="stat-label">Activities</div>
-                      </div>
-                    </div>
-
-                    <div className="card" style={{ marginTop: 'var(--space-md)' }}>
-                      <div className="card-header">
-                        <h3 className="card-title">Activity History</h3>
-                        <button className="btn btn-sm" style={{ background: 'rgba(0,82,204,0.1)', color: 'var(--tvs-blue-light)', border: 'none', cursor: 'pointer', padding: '4px 12px', borderRadius: '6px', fontFamily: 'var(--font-primary)', fontSize: '0.8rem', fontWeight: 600 }} onClick={() => setAdjustModal({ dealerId: selectedDealer.id, dealerName: selectedDealer.displayName })}>
-                          ± Adjust Points
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDealer(null)}>
+                          ← Back to Directory
                         </button>
+                        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {selectedDealer.displayName}
+                        </h2>
+                        <span className="badge badge-info">{selectedDealer.externalDealerId}</span>
                       </div>
-                      <table className="admin-table">
-                        <thead>
-                          <tr>
-                            <th>Type</th>
-                            <th>Points</th>
-                            <th>Match</th>
-                            <th>Transaction ID</th>
-                            <th>Timestamp</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedDealer.activities.map(a => (
-                            <tr key={a.id}>
-                              <td>
-                                <span className={`badge ${
-                                  a.activityType === 'BUY' ? 'badge-info' :
-                                  a.activityType === 'SELL' ? 'badge-success' :
-                                  a.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
-                                  'badge-warning'
-                                }`}>
-                                  {a.activityType.replace('_', ' ')}
-                                </span>
-                              </td>
-                              <td style={{ fontWeight: 700, color: 'var(--tvs-lime)' }}>+{a.points}</td>
-                              <td>{a.match ? `Match ${a.match.matchNumber}` : '-'}</td>
-                              <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{a.externalTransactionId}</td>
-                              <td style={{ fontSize: '0.8rem' }}>{new Date(a.timestamp).toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
 
-                {/* ── Rules Tab ────────────────────────────────────────── */}
-                {activeTab === 'rules' && (
-                  <>
-                    <div style={{ marginBottom: 'var(--space-lg)' }}>
-                      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: '4px' }}>
-                        ⚙️ Point Rules Configuration & Customization
-                      </h2>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        Customize point values or toggle any activity rule ON/OFF in real time. All dealer interactions continue to be permanently captured in the database (<code style={{ color: '#60A5FA' }}>dev.db</code>) regardless of rule settings.
-                      </p>
+                      <button 
+                        className="btn btn-primary btn-sm" 
+                        onClick={() => setAdjustModal({ dealerId: selectedDealer.id, dealerName: selectedDealer.displayName })}
+                      >
+                        ± Adjust Points
+                      </button>
                     </div>
 
-                    <div className="card" style={{
-                      background: 'rgba(59, 130, 246, 0.05)',
-                      borderColor: 'rgba(59, 130, 246, 0.25)',
-                      marginBottom: 'var(--space-md)',
-                      padding: 'var(--space-md)',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '1.2rem' }}>ℹ️</span>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                          <strong>Flexible Point Policy:</strong> You can alter point values or disable rules at any time without code changes. Point totals automatically calculate according to active rules.
-                        </span>
+                    <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Current Standings</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
+                          #{selectedDealer.scores[0]?.rank || '-'}
+                        </div>
+                      </div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Total Verified Points</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
+                          {selectedDealer.scores[0]?.totalPoints || 0}
+                        </div>
+                      </div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Logged Interactions</span>
+                        <div className="admin-stat-val">
+                          {selectedDealer.activities.length}
+                        </div>
                       </div>
                     </div>
 
                     <div className="card">
-                      <table className="admin-table">
-                        <thead>
-                          <tr>
-                            <th>Activity Type</th>
-                            <th>TVS Source / Description</th>
-                            <th>Points</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rules.map(r => (
-                            <tr key={r.id}>
-                              <td>
-                                <span className={`badge ${
-                                  r.activityType === 'BUY' ? 'badge-success' :
-                                  r.activityType === 'SELL' ? 'badge-info' :
-                                  r.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
-                                  r.activityType === 'BID_PLACED' ? 'badge-primary' :
-                                  'badge-warning'
-                                }`}>
-                                  {r.activityType.replace(/_/g, ' ')}
-                                </span>
-                              </td>
-                              <td style={{ fontSize: '0.85rem' }}>{r.description}</td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <input
-                                    type="number"
-                                    className="form-input"
-                                    style={{ width: '70px', padding: '4px 8px' }}
-                                    defaultValue={r.points}
-                                    id={`rule-${r.id}`}
-                                  />
-                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>pts</span>
-                                </div>
-                              </td>
-                              <td>
-                                <span className={`badge ${r.active ? 'badge-success' : 'badge-error'}`}>
-                                  {r.active ? '● Active' : '○ Inactive'}
-                                </span>
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button className="btn btn-primary btn-sm" onClick={() => {
-                                    const input = document.getElementById(`rule-${r.id}`) as HTMLInputElement;
-                                    handleUpdateRule(r.id, parseInt(input.value));
-                                  }}>
-                                    Save
-                                  </button>
-                                  <button
-                                    className={`btn btn-sm ${r.active ? 'btn-ghost' : 'btn-secondary'}`}
-                                    style={{
-                                      border: '1px solid var(--border-subtle)',
-                                      fontSize: '0.75rem',
-                                    }}
-                                    onClick={() => handleToggleRule(r.id, r.active)}
-                                  >
-                                    {r.active ? 'Disable' : 'Enable'}
-                                  </button>
-                                </div>
-                              </td>
+                      <div className="card-header">
+                        <h3 className="card-title">Activity Audit Trail</h3>
+                      </div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Activity Type</th>
+                              <th>Points Awarded</th>
+                              <th>Match Association</th>
+                              <th>Transaction Reference</th>
+                              <th>Timestamp</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {selectedDealer.activities.map(a => (
+                              <tr key={a.id}>
+                                <td>
+                                  <span className={`badge ${
+                                    a.activityType === 'BUY' ? 'badge-info' :
+                                    a.activityType === 'SELL' ? 'badge-success' :
+                                    a.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
+                                    'badge-warning'
+                                  }`}>
+                                    {a.activityType.replace('_', ' ')}
+                                  </span>
+                                </td>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>
+                                  +{a.points} PTS
+                                </td>
+                                <td>{a.match ? `Match #${a.match.matchNumber}` : 'General Season'}</td>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  {a.externalTransactionId}
+                                </td>
+                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  {new Date(a.timestamp).toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </>
+                  </div>
                 )}
 
-                {/* ── Matches Tab ──────────────────────────────────────── */}
+                {/* ── 4. Scoring Rules Engine Tab ──────────────────────────────────── */}
+                {activeTab === 'rules' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="card" style={{ padding: '16px 20px', background: 'rgba(56, 189, 248, 0.05)', borderColor: 'rgba(56, 189, 248, 0.2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Sliders className="w-5 h-5 text-sky-400" />
+                        <div>
+                          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            Dynamic Point Scoring Engine
+                          </h4>
+                          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                            Update point values or toggle rules without codebase changes. Changes apply dynamically across leaderboard evaluations.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card">
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Activity Identifier</th>
+                              <th>Description & TVS Source</th>
+                              <th>Points Value</th>
+                              <th>Rule State</th>
+                              <th>Configuration</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rules.map(r => (
+                              <tr key={r.id}>
+                                <td>
+                                  <span className={`badge ${
+                                    r.activityType === 'BUY' ? 'badge-success' :
+                                    r.activityType === 'SELL' ? 'badge-info' :
+                                    r.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
+                                    r.activityType === 'BID_PLACED' ? 'badge-primary' :
+                                    'badge-warning'
+                                  }`}>
+                                    {r.activityType.replace(/_/g, ' ')}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize: '0.85rem' }}>{r.description}</td>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <input
+                                      type="number"
+                                      className="form-input"
+                                      style={{ width: '80px', padding: '6px 10px', fontFamily: 'var(--font-mono)' }}
+                                      defaultValue={r.points}
+                                      id={`rule-${r.id}`}
+                                    />
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>pts</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`badge ${r.active ? 'badge-success' : 'badge-warning'}`}>
+                                    {r.active ? '● Active' : '○ Inactive'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button 
+                                      className="btn btn-primary btn-sm" 
+                                      onClick={() => {
+                                        const input = document.getElementById(`rule-${r.id}`) as HTMLInputElement;
+                                        handleUpdateRule(r.id, parseInt(input.value));
+                                      }}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() => handleToggleRule(r.id, r.active)}
+                                    >
+                                      {r.active ? 'Disable' : 'Enable'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 5. Match Schedule Configuration Tab ──────────────────────────── */}
                 {activeTab === 'matches' && (
-                  <>
-                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
-                      🗓️ Match Day Configuration
-                    </h2>
-                    <div className="match-tracker" style={{ marginBottom: 'var(--space-lg)' }}>
+                  <div className="card">
+                    <div className="card-header">
+                      <div>
+                        <h3 className="card-title">
+                          <Calendar className="w-5 h-5 text-sky-400" />
+                          Match Day Schedule & State Control
+                        </h3>
+                        <p className="card-subtitle">
+                          Set auction identifiers, control room states, and orchestrate weekly Thursday matches
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="match-tracker">
                       {matchDays.map(m => (
-                        <div key={m.id} className="match-item" style={{ cursor: 'default' }}>
-                          <div className="match-number">Match {m.matchNumber}</div>
-                          <div className="match-icon" style={{ fontSize: '2rem' }}>
-                            {m.status === 'COMPLETED' ? '✅' : m.status === 'LIVE' ? '🔴' : '📅'}
+                        <div key={m.id} className="match-item">
+                          <div className="match-number">Match #{m.matchNumber}</div>
+                          <div className="match-icon">
+                            {m.status === 'COMPLETED' ? (
+                              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                            ) : m.status === 'LIVE' ? (
+                              <Radio className="w-8 h-8 text-rose-500 animate-pulse" />
+                            ) : (
+                              <Clock className="w-8 h-8 text-sky-400" />
+                            )}
                           </div>
                           <div className="match-date">
                             {new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </div>
-                          <div className="match-date" style={{ marginTop: '4px' }}>
-                            ID: {m.auctionId}
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-blue)', marginTop: '2px' }}>
+                            Auction ID: {m.auctionId}
                           </div>
-                          <div style={{ marginTop: 'var(--space-sm)' }}>
+
+                          <div style={{ marginTop: '12px', width: '100%' }}>
                             <select
-                              className="form-select"
-                              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                              className="form-input"
+                              style={{ padding: '6px 10px', fontSize: '0.75rem', textAlign: 'center' }}
                               value={m.status}
                               onChange={(e) => handleUpdateMatch(m.id, e.target.value)}
                             >
                               <option value="UPCOMING">Upcoming</option>
-                              <option value="LIVE">Live</option>
+                              <option value="LIVE">Live Room</option>
                               <option value="COMPLETED">Completed</option>
                             </select>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </>
+                  </div>
                 )}
 
-                {/* ── Audit Tab ────────────────────────────────────────── */}
+                {/* ── 6. Audit Trail Tab ───────────────────────────────────────────── */}
                 {activeTab === 'audit' && (
-                  <>
-                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
-                      📋 Audit Log
-                    </h2>
-                    <div className="card">
-                      {auditLog.length === 0 ? (
-                        <div className="empty-state">
-                          <div className="empty-state-icon">📋</div>
-                          <p>No audit entries yet</p>
-                        </div>
-                      ) : (
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Time</th>
-                              <th>Admin</th>
-                              <th>Action</th>
-                              <th>Target</th>
-                              <th>Reason</th>
-                              <th>Details</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {auditLog.map(log => (
-                              <tr key={log.id}>
-                                <td style={{ fontSize: '0.8rem' }}>{new Date(log.createdAt).toLocaleString()}</td>
-                                <td>{log.adminUser}</td>
-                                <td>
-                                  <span className={`badge ${
-                                    log.action === 'POINTS_ADJUSTED' ? 'badge-warning' :
-                                    log.action === 'SCORE_RECALCULATED' ? 'badge-info' :
-                                    log.action === 'RULE_CHANGED' ? 'badge-lime' :
-                                    'badge-success'
-                                  }`}>
-                                    {log.action.replace('_', ' ')}
-                                  </span>
-                                </td>
-                                <td>{log.targetType} #{log.targetId}</td>
-                                <td>{log.reason}</td>
-                                <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {log.details}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
+                  <div className="card">
+                    <div className="card-header">
+                      <div>
+                        <h3 className="card-title">
+                          <FileText className="w-5 h-5 text-amber-400" />
+                          Governance & Security Audit Trail
+                        </h3>
+                        <p className="card-subtitle">
+                          Immutable record of all manual adjustments and configuration updates
+                        </p>
+                      </div>
                     </div>
-                  </>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>Timestamp</th>
+                            <th>Administrator</th>
+                            <th>Action Type</th>
+                            <th>Target Entity</th>
+                            <th>Reason</th>
+                            <th>Payload Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditLog.map(log => (
+                            <tr key={log.id}>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                {new Date(log.createdAt).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 600 }}>{log.adminUser}</td>
+                              <td>
+                                <span className={`badge ${
+                                  log.action === 'POINTS_ADJUSTED' ? 'badge-warning' :
+                                  log.action === 'SCORE_RECALCULATED' ? 'badge-info' :
+                                  log.action === 'RULE_CHANGED' ? 'badge-lime' :
+                                  'badge-success'
+                                }`}>
+                                  {log.action.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                                {log.targetType} #{log.targetId}
+                              </td>
+                              <td>{log.reason}</td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {log.details}
+                              </td>
+                            </tr>
+                          ))}
+
+                          {auditLog.length === 0 && (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                                No audit events recorded yet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
               </>
             )}
-          </main>
+          </div>
         </div>
-      </div>
+      </main>
 
       {/* Adjust Points Modal */}
       {adjustModal && (
         <div className="modal-overlay" onClick={() => setAdjustModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">± Adjust Points — {adjustModal.dealerName}</h3>
-            <div className="form-group">
-              <label className="form-label">Points Adjustment</label>
-              <input
-                type="number"
-                className="form-input"
-                placeholder="Enter points (positive or negative)"
-                value={adjustPoints}
-                onChange={e => setAdjustPoints(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Reason (Required)</label>
-              <textarea
-                className="form-textarea"
-                placeholder="Explain the reason for this adjustment..."
-                value={adjustReason}
-                onChange={e => setAdjustReason(e.target.value)}
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setAdjustModal(null)}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleAdjustPoints}
-                disabled={!adjustPoints || !adjustReason}
-              >
-                Apply Adjustment
-              </button>
+          <div className="modal double-bezel" onClick={e => e.stopPropagation()}>
+            <div className="inner-bezel-core" style={{ padding: '28px' }}>
+              <h3 className="modal-title">± Adjust Points — {adjustModal.dealerName}</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>
+                All manual adjustments are signed and stored in the governance audit trail.
+              </p>
+
+              <div className="form-group">
+                <label className="form-label">Points Adjustment (+ or -)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="e.g. +20 or -10"
+                  value={adjustPoints}
+                  onChange={e => setAdjustPoints(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Mandatory Audit Reason</label>
+                <textarea
+                  className="form-input"
+                  style={{ height: '80px', resize: 'vertical' }}
+                  placeholder="State the commercial or verification reason for adjustment..."
+                  value={adjustReason}
+                  onChange={e => setAdjustReason(e.target.value)}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn btn-ghost" onClick={() => setAdjustModal(null)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAdjustPoints}
+                  disabled={!adjustPoints || !adjustReason}
+                >
+                  Commit Adjustment
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Comprehensive Export CSV Modal */}
+      {/* Export CSV Reports Modal */}
       {exportModalOpen && (
         <div className="modal-overlay" onClick={() => setExportModalOpen(false)}>
-          <div className="modal" style={{ maxWidth: '640px', width: '95%' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
-              <div>
-                <h3 className="modal-title" style={{ margin: 0, fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📥</span> Export Super Cup Data to CSV
-                </h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                  All information is formatted with UTF-8 support for Microsoft Excel & Google Sheets.
-                </p>
-              </div>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setExportModalOpen(false)}
-                style={{ fontSize: '1.2rem', padding: '4px 8px', color: 'var(--text-muted)' }}
-              >
-                ✕
-              </button>
-            </div>
+          <div className="modal double-bezel" onClick={e => e.stopPropagation()}>
+            <div className="inner-bezel-core" style={{ padding: '28px' }}>
+              <h3 className="modal-title">Export Verified Super Cup Reports</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
+                Download official CSV extracts for accounting, executive audits, and dealership announcements.
+              </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-              {/* Option 1: Auction Results (Won Vehicles) */}
-              <div style={{
-                background: 'rgba(16, 185, 129, 0.05)',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 'var(--space-lg)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-sm)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#10B981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>🚗</span> Auction #{liveAuctionId} Results — Won Vehicles (23 Columns)
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                      Official final results for TVS Certified Auction #{liveAuctionId}: all won vehicles sorted by Lot # in chronological order. Includes winning bid amounts (₹), starting bids, car specs (model, registration number, fuel, transmission, year of mfg, speedometer KM), winning dealer phone &amp; city, points awarded, and exact IST timestamps.
-                    </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <button
+                  className="btn btn-ghost"
+                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
+                  onClick={() => triggerCsvDownload('dealers')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Users className="w-4 h-4 text-sky-400" />
+                    <span>Dealer Standings & Points Summary</span>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>145 Won Vehicles</span>
-                  <span className="badge badge-lime" style={{ fontSize: '0.72rem' }}>Accurate IST Timestamps</span>
-                  <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>Lot # 1–147 Order</span>
-                  <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>Winning Bids (₹)</span>
-                  <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>Buyer Contacts</span>
-                </div>
-                <div style={{ marginTop: 'var(--space-xs)' }}>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    style={{ width: '100%', background: 'linear-gradient(135deg, #059669, #10B981)', fontWeight: 600 }}
-                    onClick={() => {
-                      triggerCsvDownload('activities');
-                    }}
-                  >
-                    📥 Export Auction #{liveAuctionId} Results CSV
-                  </button>
-                </div>
-              </div>
+                  <Download className="w-4 h-4" />
+                </button>
 
-              {/* Option 2: Dealer Leaderboard */}
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 'var(--space-lg)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-sm)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>📊</span> Comprehensive Dealer Leaderboard (27 Columns)
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                      All registered dealers with rank, points, contact mobile, city, status, and full breakdowns of live bids count, vehicles won, total purchase spend (₹), detailed won vehicle list (model &amp; reg no), sold vehicles, room attendance, inspections, and watchlist bookmarks.
-                    </div>
+                <button
+                  className="btn btn-ghost"
+                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
+                  onClick={() => triggerCsvDownload('activities')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                    <span>Auction #{liveAuctionId || '1991'} Results (Won Vehicles)</span>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>All 1,531 Dealers</span>
-                  <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>Total Spend (₹)</span>
-                  <span className="badge badge-lime" style={{ fontSize: '0.72rem' }}>Won Vehicle Details</span>
-                  <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>Bids &amp; Points Breakdown</span>
-                </div>
-                <div style={{ marginTop: 'var(--space-xs)' }}>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    style={{ width: '100%', background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}
-                    onClick={() => {
-                      triggerCsvDownload('dealers');
-                    }}
-                  >
-                    📥 Export Comprehensive Dealer Summary CSV
-                  </button>
-                </div>
-              </div>
+                  <Download className="w-4 h-4" />
+                </button>
 
-              {/* Option 3: Full Live Bids & Activities Feed */}
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid rgba(148, 163, 184, 0.2)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 'var(--space-lg)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-sm)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>⚡</span> Complete Live Bids &amp; Activities Feed (28 Columns)
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                      Every individual real-time interaction captured during Auction #{liveAuctionId}: all live bids placed, pre-bids, and won vehicles with exact IST timestamps.
-                    </div>
+                <button
+                  className="btn btn-ghost"
+                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
+                  onClick={() => triggerCsvDownload('allActivities')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Activity className="w-4 h-4 text-amber-400" />
+                    <span>Full Live Activity & Bids Telemetry Log</span>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>1,790+ Records</span>
-                  <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>All Live Bids</span>
-                  <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>All Pre-Bids</span>
-                </div>
-                <div style={{ marginTop: 'var(--space-xs)' }}>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ width: '100%', border: '1px solid var(--border-medium)', color: 'var(--text-secondary)' }}
-                    onClick={() => {
-                      triggerCsvDownload('allActivities');
-                    }}
-                  >
-                    📥 Export All Live Bids &amp; Activities Feed CSV (1,790+ Rows)
-                  </button>
-                </div>
-              </div>
-            </div>
+                  <Download className="w-4 h-4" />
+                </button>
 
-            {/* Modal Actions */}
-            <div className="modal-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-md)' }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ border: '1px solid var(--border-medium)', color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '6px' }}
-                onClick={triggerDownloadBoth}
-              >
-                <span>📦</span> Download Both Reports (2 CSVs in 1 Click)
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setExportModalOpen(false)}>
-                Close
-              </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: '8px' }}
+                  onClick={triggerDownloadBoth}
+                >
+                  Download Both Summary & Auction Results
+                </button>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
+                <button className="btn btn-ghost" onClick={() => setExportModalOpen(false)}>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
+      {/* Floating System Toast */}
       {toast && (
-        <div className={`toast ${toast.type}`}>
-          {toast.type === 'success' ? '✅' : '❌'} {toast.message}
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 200,
+          background: toast.type === 'error' ? 'rgba(225, 29, 72, 0.95)' : 'rgba(6, 214, 160, 0.95)',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: 'var(--radius-full)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          {toast.type === 'error' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

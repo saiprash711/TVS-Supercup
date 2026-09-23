@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import SwitchMode from '../components/watermelon/switch-mode';
 
 interface LeaderboardEntry {
   rank: number;
@@ -162,6 +163,7 @@ export default function LeaderboardPage() {
             )}
           </ul>
           <div className="navbar-user">
+            <SwitchMode width={58} height={28} />
             {isAuthenticated ? (
               <Link href="/dashboard" className="btn btn-primary btn-sm">My Dashboard</Link>
             ) : (

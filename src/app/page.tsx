@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SwitchMode from './components/watermelon/switch-mode';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,6 +98,9 @@ export default function LoginPage() {
 
   return (
     <div className="login-container">
+      <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 50 }}>
+        <SwitchMode width={58} height={28} />
+      </div>
       {/* ✨ Animated Background Elements */}
       <div className="floating-orb orb-1"></div>
       <div className="floating-orb orb-2"></div>
