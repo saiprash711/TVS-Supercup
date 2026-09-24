@@ -62,6 +62,7 @@ export async function GET() {
 
     const matchTracker = matchDays.map(m => ({
       matchNumber: m.matchNumber,
+      auctionId: m.auctionId || String(m.id),
       date: m.date,
       status: m.status,
       participated: participatedMatchIds.has(m.id),

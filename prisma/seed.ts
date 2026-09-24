@@ -95,9 +95,9 @@ async function main() {
       {
         campaignId: campaign.id,
         matchNumber: 3,
-        auctionId: 'TVSC-SEP-24',
+        auctionId: '2003', // TVS Certified auction (TVSC Weekly Auction TN 24-Sep-2026)
         date: new Date('2026-09-24T08:30:00Z'), // September 24, 2026 Thursday 2:00 PM IST
-        status: 'UPCOMING',
+        status: 'LIVE',
       },
       {
         campaignId: campaign.id,

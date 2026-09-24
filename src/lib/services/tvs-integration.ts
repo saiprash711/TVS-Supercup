@@ -99,6 +99,11 @@ export interface TVSAuctionProvider {
    * Get all activities for an auction (all dealers).
    */
   getAuctionActivities(auctionId: string, token?: string): Promise<TVSAuctionActivity[]>;
+
+  /**
+   * Get all vehicles listed for an auction.
+   */
+  getAuctionVehicles(auctionId?: string, token?: string): Promise<any[]>;
 }
 
 // ─── Timestamp Utilities ───────────────────────────────────────────────────
@@ -735,6 +740,15 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       console.warn(`Parallel fetch error for auction ${auctionId}:`, err);
     }
 
+    // Build fast lookup map for all vehicles in this auction
+    const vehicleMap = new Map<string, any>();
+    if (Array.isArray(vehicles)) {
+      for (const veh of vehicles) {
+        if (veh.id != null) vehicleMap.set(String(veh.id), veh);
+        if (veh.vehicle_id != null) vehicleMap.set(String(veh.vehicle_id), veh);
+      }
+    }
+
     // 1. Process Winners (BUY transactions) directly from vehicles list
     if (Array.isArray(vehicles)) {
       for (const veh of vehicles) {
@@ -759,8 +773,12 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
               yearOfMfg: veh.year_of_mfg,
               speedometer: veh.speedometer,
               startBidValue: veh.start_bid_value,
+              expectedPrice: veh.expected_price,
               imageUrl: veh.image_url,
               sequence: veh.sequence,
+              lotNo: veh.sequence || veh.seq_num,
+              location: veh.location_name,
+              customerName: veh.customer_name,
             },
             timestamp: veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date(),
           });
@@ -775,6 +793,9 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         if (!rawBidderId) continue;
         const dealerId = this.resolveDealerKeyId(rawBidderId);
 
+        const vId = row.vehicle_id != null ? String(row.vehicle_id) : '';
+        const matchedVeh = vId ? vehicleMap.get(vId) : null;
+
         // Room registration attendance
         activities.push({
           transactionId: `ATTEND-${auctionId}-${dealerId}`,
@@ -784,6 +805,19 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
           metadata: {
             auctionId,
             vehicleId: row.vehicle_id,
+            vehicleName: matchedVeh?.title || matchedVeh?.make_model || (vId ? `Vehicle #${vId}` : undefined),
+            regNo: matchedVeh?.registration_number,
+            fuelType: matchedVeh?.fuel_type,
+            transmission: matchedVeh?.transmission,
+            yearOfMfg: matchedVeh?.year_of_mfg,
+            speedometer: matchedVeh?.speedometer,
+            startBidValue: matchedVeh?.start_bid_value,
+            expectedPrice: matchedVeh?.expected_price,
+            imageUrl: matchedVeh?.image_url,
+            sequence: matchedVeh?.sequence,
+            lotNo: matchedVeh?.sequence || matchedVeh?.seq_num,
+            location: matchedVeh?.location_name,
+            customerName: matchedVeh?.customer_name,
             depositAmount: row.deposit_amount,
             status: row.status,
           },
@@ -803,6 +837,19 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
             metadata: {
               auctionId,
               vehicleId: row.vehicle_id,
+              vehicleName: matchedVeh?.title || matchedVeh?.make_model || (vId ? `Vehicle #${vId}` : undefined),
+              regNo: matchedVeh?.registration_number,
+              fuelType: matchedVeh?.fuel_type,
+              transmission: matchedVeh?.transmission,
+              yearOfMfg: matchedVeh?.year_of_mfg,
+              speedometer: matchedVeh?.speedometer,
+              startBidValue: matchedVeh?.start_bid_value,
+              expectedPrice: matchedVeh?.expected_price,
+              imageUrl: matchedVeh?.image_url,
+              sequence: matchedVeh?.sequence,
+              lotNo: matchedVeh?.sequence || matchedVeh?.seq_num,
+              location: matchedVeh?.location_name,
+              customerName: matchedVeh?.customer_name,
               bidAmount: preAmount,
               isPreBid: true,
               note: 'Pre-auction bid',
@@ -819,6 +866,8 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         const rawId = row.customer_id || row.key_id || row.buyer_id || row.created_by;
         if (!rawId) continue;
         const dealerId = this.resolveDealerKeyId(rawId);
+        const vId = row.vehicle_id != null ? String(row.vehicle_id) : '';
+        const matchedVeh = vId ? vehicleMap.get(vId) : null;
         activities.push({
           transactionId: `WATCH-${auctionId}-${row.id || row.vehicle_id || dealerId}`,
           dealerId,
@@ -827,7 +876,17 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
           vehicleId: String(row.vehicle_id || ''),
           metadata: {
             auctionId,
-            regNo: row.reg_num || row.registration_number,
+            vehicleId: row.vehicle_id,
+            vehicleName: matchedVeh?.title || matchedVeh?.make_model,
+            regNo: matchedVeh?.registration_number || row.reg_num || row.registration_number,
+            fuelType: matchedVeh?.fuel_type,
+            transmission: matchedVeh?.transmission,
+            yearOfMfg: matchedVeh?.year_of_mfg,
+            speedometer: matchedVeh?.speedometer,
+            imageUrl: matchedVeh?.image_url,
+            sequence: matchedVeh?.sequence,
+            lotNo: matchedVeh?.sequence || matchedVeh?.seq_num,
+            location: matchedVeh?.location_name,
           },
           timestamp: row.created_at ? new Date(row.created_at) : new Date(),
         });
@@ -935,6 +994,25 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
 
     return activities;
   }
+
+  async getAuctionVehicles(auctionId: string = '2003', token?: string): Promise<any[]> {
+    let authToken = await this.getValidToken(token);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = authToken;
+    try {
+      const res = await fetch(`${this.baseUrl}/getAuctionvehicleList?auction_id=${encodeURIComponent(auctionId)}`, {
+        headers,
+        signal: AbortSignal.timeout(12000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json?.data || [];
+      }
+    } catch (err) {
+      console.warn(`Error querying vehicles for auction ${auctionId}:`, err);
+    }
+    return [];
+  }
 }
 
 // ─── Mock Implementation ────────────────────────────────────────────────────
@@ -1015,6 +1093,10 @@ export class MockTVSAuctionProvider implements TVSAuctionProvider {
   }
 
   async getAuctionActivities(): Promise<TVSAuctionActivity[]> {
+    return [];
+  }
+
+  async getAuctionVehicles(): Promise<any[]> {
     return [];
   }
 }

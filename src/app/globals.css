@@ -826,8 +826,79 @@ body {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.85);
   text-transform: uppercase;
+}
+
+/* Video Monitor Live Badge & Telemetry HUD (immune to light mode inversions on dark video) */
+.video-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.video-live-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px #34d399;
+  display: inline-block;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+[data-theme="light"] .video-live-badge {
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+}
+
+.video-bottom-hud {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 5;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: #ffffff;
+  background: rgba(8, 12, 20, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .video-bottom-hud {
+  background: rgba(8, 12, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.video-bottom-hud-text {
+  color: rgba(255, 255, 255, 0.88) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.video-bottom-hud-cyan {
+  color: #06d6a0 !important;
+  text-shadow: 0 0 8px rgba(6, 214, 160, 0.45);
 }
 
 .video-hero-title {
@@ -970,6 +1041,17 @@ body {
 .control-icon-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] .control-icon-btn {
+  background: rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .control-icon-btn:hover {
+  background: rgba(15, 23, 42, 0.1);
+  color: var(--tvs-red);
 }
 
 .control-stream-status {
@@ -3167,4 +3249,18 @@ body {
   .stats-bar-label {
     display: none;
   }
+}
+
+/* ─── Interactive Telemetry Row ───────────────────────────────────────────── */
+.interactive-telemetry-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.interactive-telemetry-row:hover {
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+[data-theme="light"] .interactive-telemetry-row:hover {
+  background: rgba(14, 165, 233, 0.08) !important;
 }

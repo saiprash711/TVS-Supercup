@@ -16,8 +16,8 @@
 | Match | Date | Day | Time | Auction ID | Status |
 |-------|------|-----|------|------------|--------|
 | **#1** | **September 10, 2026** | Thursday | 2:00 PM IST | 1978 | COMPLETED |
-| **#2** | **September 17, 2026** | Thursday | 2:00 PM IST | 1991 | LIVE |
-| **#3** | **September 24, 2026** | Thursday | 2:00 PM IST | TVSC-SEP-24 | UPCOMING |
+| **#2** | **September 17, 2026** | Thursday | 2:00 PM IST | 1991 | COMPLETED |
+| **#3** | **September 24, 2026** | Thursday | 2:00 PM IST | 2003 | LIVE |
 
 ### October 2026 (5 Matches)
 

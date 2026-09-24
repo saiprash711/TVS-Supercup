@@ -56,7 +56,7 @@ export async function syncDealerActivities(
 
     // Default to the current live or upcoming match if unmapped
     const liveMatch = matchDays.find(m => m.status === 'LIVE') || matchDays.find(m => m.status === 'UPCOMING') || matchDays[0];
-    const targetAuctionId = liveMatch?.auctionId || '1991';
+    const targetAuctionId = liveMatch?.auctionId || '2003';
 
     // 1. Fetch live activities from TVS APIs strictly for this auction
     const liveActivities = await provider.getDealerActivities(externalDealerId, targetAuctionId, token);
@@ -142,7 +142,7 @@ export async function syncDealerActivities(
  * Sync activities for an entire match auction (all dealers).
  */
 export async function syncAuctionActivities(
-  auctionId: string = '1991',
+  auctionId: string = '2003',
   campaignId: number,
   token?: string
 ): Promise<{ processed: number; pointsAwarded: number; totalActivitiesFound: number }> {
@@ -284,13 +284,13 @@ export async function syncLiveAuction(
   });
 
   if (!campaign) {
-    return { success: false, processed: 0, pointsAwarded: 0, totalActivitiesFound: 0, auctionId: auctionId || '1991' };
+    return { success: false, processed: 0, pointsAwarded: 0, totalActivitiesFound: 0, auctionId: auctionId || '2003' };
   }
 
   const liveMatch = campaign.matchDays.find(m => m.status === 'LIVE') ||
                     campaign.matchDays.find(m => m.status === 'UPCOMING') ||
                     campaign.matchDays[0];
-  const targetAuctionId = auctionId || liveMatch?.auctionId || '1991';
+  const targetAuctionId = auctionId || liveMatch?.auctionId || '2003';
 
   const result = await syncAuctionActivities(targetAuctionId, campaign.id, token);
 

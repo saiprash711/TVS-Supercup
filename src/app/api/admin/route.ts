@@ -14,6 +14,7 @@ import { isAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { recalculateRankings } from '@/lib/services/ranking-engine';
 import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
+import { getTVSProvider } from '@/lib/services/tvs-integration';
 import { clearPointRulesCache } from '@/lib/services/points-engine';
 
 // Serverless function config for live auction stream processing
@@ -56,17 +57,26 @@ export async function GET(request: NextRequest) {
           _sum: { totalPoints: true },
         });
 
-        const matchParticipation = await prisma.dealerActivity.count({
-          where: { campaignId: campaign.id, activityType: 'MATCH_PARTICIPATION' },
+        // Group by activityType to get exact counts across all activities
+        const activityCounts = await prisma.dealerActivity.groupBy({
+          by: ['activityType'],
+          where: { campaignId: campaign.id },
+          _count: true,
         });
 
-        const buyTransactions = await prisma.dealerActivity.count({
-          where: { campaignId: campaign.id, activityType: 'BUY' },
-        });
+        const countMap: Record<string, number> = {};
+        let totalActivities = 0;
+        for (const item of activityCounts) {
+          countMap[item.activityType] = item._count;
+          totalActivities += item._count;
+        }
 
-        const sellTransactions = await prisma.dealerActivity.count({
-          where: { campaignId: campaign.id, activityType: 'SELL' },
-        });
+        const totalBids = countMap['BID_PLACED'] || 0;
+        const buyTransactions = countMap['BUY'] || 0;
+        const sellTransactions = countMap['SELL'] || 0;
+        const matchParticipation = countMap['MATCH_PARTICIPATION'] || 0;
+        const totalInspections = countMap['VEHICLE_INSPECTED'] || 0;
+        const totalWatchlist = countMap['WATCHLIST_ADD'] || 0;
 
         const matchDays = await prisma.matchDay.findMany({
           where: { campaignId: campaign.id },
@@ -80,6 +90,29 @@ export async function GET(request: NextRequest) {
           take: 50,
         });
 
+        // Recent real-time activities for Overview telemetry stream
+        const recentActivities = await prisma.dealerActivity.findMany({
+          where: { campaignId: campaign.id },
+          include: {
+            dealer: {
+              select: {
+                id: true,
+                displayName: true,
+                externalDealerId: true,
+                city: true,
+              },
+            },
+            match: {
+              select: {
+                matchNumber: true,
+                auctionId: true,
+              },
+            },
+          },
+          orderBy: { timestamp: 'desc' },
+          take: 10,
+        });
+
         return NextResponse.json({
           stats: {
             totalDealers,
@@ -88,8 +121,32 @@ export async function GET(request: NextRequest) {
             matchParticipation,
             buyTransactions,
             sellTransactions,
+            totalBids,
+            totalInspections,
+            totalWatchlist,
+            totalActivities,
           },
           matchDays,
+          recentActivities: recentActivities.map(a => {
+            let meta: any = {};
+            try {
+              meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+            } catch {
+              meta = {};
+            }
+            return {
+              id: a.id,
+              dealerName: a.dealer.displayName,
+              externalDealerId: a.dealer.externalDealerId,
+              city: a.dealer.city,
+              activityType: a.activityType,
+              points: a.points,
+              metadata: meta,
+              timestamp: a.timestamp,
+              auctionId: a.match?.auctionId || '',
+              matchNumber: a.match?.matchNumber || 1,
+            };
+          }),
           leaderboard: leaderboard.map(s => ({
             rank: s.rank,
             dealerName: s.dealer.displayName,
@@ -159,6 +216,23 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ dealer });
       }
 
+      case 'vehicleDetails': {
+        const vehicleId = searchParams.get('vehicleId');
+        const auctionId = searchParams.get('auctionId') || '2003';
+        if (!vehicleId) {
+          return NextResponse.json({ error: 'vehicleId required' }, { status: 400 });
+        }
+        try {
+          const provider = getTVSProvider();
+          const vehicles = await provider.getAuctionVehicles(auctionId);
+          const match = (vehicles || []).find(v => String(v.vehicle_id) === String(vehicleId) || String(v.id) === String(vehicleId));
+          return NextResponse.json({ vehicle: match || null });
+        } catch (err) {
+          console.warn('Vehicle details fetch error:', err);
+          return NextResponse.json({ vehicle: null, error: String(err) });
+        }
+      }
+
       case 'liveActivities': {
         const shouldSync = searchParams.get('sync') === 'true';
         let syncAuctionId = searchParams.get('auctionId');
@@ -169,7 +243,7 @@ export async function GET(request: NextRequest) {
             where: { campaignId: campaign.id, status: 'UPCOMING' },
             orderBy: { date: 'asc' },
           });
-          syncAuctionId = liveMatch?.auctionId || '1991';
+          syncAuctionId = liveMatch?.auctionId || '2003';
         }
         const match = await prisma.matchDay.findFirst({
           where: { campaignId: campaign.id, auctionId: syncAuctionId },
@@ -274,6 +348,9 @@ export async function GET(request: NextRequest) {
               points: a.points,
               metadata: parsedMetadata,
               timestamp: a.timestamp,
+              externalTransactionId: a.externalTransactionId,
+              createdAt: a.createdAt,
+              matchId: a.matchId,
             };
           }),
           stats: {
@@ -382,7 +459,7 @@ export async function GET(request: NextRequest) {
               where: { campaignId: campaign.id, status: 'UPCOMING' },
               orderBy: { date: 'asc' },
             });
-            auctionId = liveMatch?.auctionId || '1991';
+            auctionId = liveMatch?.auctionId || '2003';
           }
           const isAll = searchParams.get('all') === 'true';
 
@@ -394,7 +471,7 @@ export async function GET(request: NextRequest) {
             ],
           };
 
-          // By default, export only the Auction Results (vehicles won / sold for #1978)
+          // By default, export only the Auction Results (vehicles won / sold)
           if (!isAll) {
             whereClause.activityType = 'BUY';
           }
@@ -736,12 +813,12 @@ export async function POST(request: NextRequest) {
             targetType: 'CAMPAIGN',
             targetId: String(campaign.id),
             details: JSON.stringify({
-              auctionId: body.auctionId || '1991',
+              auctionId: body.auctionId || '2003',
               dealersSynced: allDealers.length,
               totalNewActivities,
               totalPointsAwarded,
             }),
-            reason: body.reason || `Synced live auction ${body.auctionId || '1991'} transactions`,
+            reason: body.reason || `Synced live auction ${body.auctionId || '2003'} transactions`,
           },
         });
 
@@ -754,7 +831,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'syncLiveAuction': {
-        const auctionId = body.auctionId || '1991';
+        const auctionId = body.auctionId || '2003';
         const result = await syncLiveAuction(auctionId);
 
         await prisma.auditLog.create({
@@ -876,14 +953,18 @@ export async function POST(request: NextRequest) {
       }
 
       case 'updateMatch': {
-        const { matchId, status } = body;
-        if (!matchId || !status) {
-          return NextResponse.json({ error: 'matchId and status required' }, { status: 400 });
+        const { matchId, status, auctionId } = body;
+        if (!matchId) {
+          return NextResponse.json({ error: 'matchId required' }, { status: 400 });
         }
+
+        const updateData: any = {};
+        if (status) updateData.status = status;
+        if (auctionId !== undefined) updateData.auctionId = String(auctionId).trim();
 
         await prisma.matchDay.update({
           where: { id: parseInt(matchId) },
-          data: { status },
+          data: updateData,
         });
 
         await prisma.auditLog.create({
@@ -892,8 +973,8 @@ export async function POST(request: NextRequest) {
             action: 'MATCH_UPDATED',
             targetType: 'MATCH',
             targetId: String(matchId),
-            details: JSON.stringify({ newStatus: status }),
-            reason: body.reason || 'Match status updated',
+            details: JSON.stringify(updateData),
+            reason: body.reason || 'Match updated',
           },
         });
 

@@ -57,6 +57,7 @@ interface DashboardData {
   }>;
   matchTracker: Array<{
     matchNumber: number;
+    auctionId: string;
     date: string;
     status: string;
     participated: boolean;
@@ -435,6 +436,7 @@ export default function DashboardPage() {
                 className={`match-item ${match.participated ? 'participated' : ''} ${match.status === 'UPCOMING' ? 'upcoming' : ''}`}
               >
                 <div className="match-number">Match #{match.matchNumber}</div>
+                <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: '2px' }}>Auction #{match.auctionId}</div>
                 <div className="match-icon">
                   {match.participated ? (
                     <CheckCircle2 className="w-7 h-7 text-emerald-400" />

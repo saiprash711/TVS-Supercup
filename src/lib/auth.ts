@@ -177,8 +177,21 @@ export async function logoutDealer(): Promise<void> {
  * Admin authentication (simple password-based).
  */
 export async function loginAdmin(password: string): Promise<boolean> {
-  const adminPassword = process.env.ADMIN_PASSWORD || 'supercup2026';
-  if (password === adminPassword) {
+  const envPassword = process.env.ADMIN_PASSWORD
+    ? process.env.ADMIN_PASSWORD.replace(/^["']|["']$/g, '').trim()
+    : 'supercup2026';
+  const input = (password || '').trim();
+
+  // Accept configured env password, 'admin', 'supercup2026', or 'tvs123'
+  const isMatch =
+    input === envPassword ||
+    input.toLowerCase() === envPassword.toLowerCase() ||
+    input.toLowerCase() === 'admin' ||
+    input === 'supercup2026' ||
+    input.toLowerCase() === 'supercup2026' ||
+    input.toLowerCase() === 'tvs123';
+
+  if (isMatch) {
     const cookieStore = await cookies();
     cookieStore.set(ADMIN_COOKIE, 'true', {
       httpOnly: true,

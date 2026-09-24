@@ -12,17 +12,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { password } = body;
 
-    if (!password) {
+    if (!password || typeof password !== 'string') {
       return NextResponse.json({ error: 'Password required' }, { status: 400 });
     }
 
     const success = await loginAdmin(password);
     if (!success) {
-      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid administrator password' }, { status: 401 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Admin auth error:', error);
     return NextResponse.json({ error: 'Auth failed' }, { status: 500 });
   }
