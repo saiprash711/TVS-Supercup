@@ -27,9 +27,14 @@ import {
   ShoppingCart, 
   DollarSign, 
   Sparkles, 
-  Clock, 
+  Clock,
+  History,
+  ChevronDown,
+  ChevronUp, 
   Layers,
   ChevronRight,
+  ChevronLeft,
+  ArrowRight,
   Zap,
   Award,
   AlertTriangle,
@@ -162,7 +167,44 @@ interface LiveAuctionStats {
   totalVehicles: number;
 }
 
-type Tab = 'overview' | 'liveMonitor' | 'dealers' | 'rules' | 'matches' | 'audit';
+interface AuctionVehicleItem {
+  id: number;
+  vehicleId: string | number;
+  lotNumber: number;
+  sequence: number;
+  title: string;
+  makeModel: string;
+  makeName: string;
+  modelName: string;
+  registrationNumber: string;
+  fuelType: string;
+  transmission: string;
+  yearOfMfg: string | number;
+  speedometer: string | number;
+  startBidValue: number;
+  currentBid: number;
+  winnerBidValue: number | null;
+  winnerId: string | number | null;
+  stage: string;
+  vehicleStatus: string;
+  imageUrl: string;
+  preBidValue: number | null;
+  hasPreBid: boolean;
+  locationName: string;
+  status: 'COMPLETED' | 'ONGOING' | 'UPCOMING';
+}
+
+interface VehicleQueueStats {
+  total: number;
+  completed: number;
+  ongoing: number;
+  upcoming: number;
+  activeLotNumber: number | null;
+  isAllCompleted: boolean;
+  percentComplete: number;
+}
+
+type Tab = 'overview' | 'leaderboard' | 'liveMonitor' | 'dealers' | 'rules' | 'matches' | 'audit';
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -172,6 +214,8 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDealer[]>([]);
+  const [showMaskedPreview, setShowMaskedPreview] = useState(false);
+  const [overviewLeaderboardLimit, setOverviewLeaderboardLimit] = useState(30);
   const [matchDays, setMatchDays] = useState<MatchDay[]>([]);
   const [rules, setRules] = useState<PointRuleItem[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -191,6 +235,18 @@ export default function AdminPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveAuctionId, setLiveAuctionId] = useState('2003');
   const [customAuctionInput, setCustomAuctionInput] = useState('');
+
+  // Auction Vehicle Run Order & Upcoming Cars State
+  const [vehicleQueueStats, setVehicleQueueStats] = useState<VehicleQueueStats | null>(null);
+  const [ongoingCar, setOngoingCar] = useState<AuctionVehicleItem | null>(null);
+  const [nextCar, setNextCar] = useState<AuctionVehicleItem | null>(null);
+  const [upcomingCars, setUpcomingCars] = useState<AuctionVehicleItem[]>([]);
+  const [allAuctionVehicles, setAllAuctionVehicles] = useState<AuctionVehicleItem[]>([]);
+  const [vehicleQueueLoading, setVehicleQueueLoading] = useState(false);
+  const [vehicleViewTab, setVehicleViewTab] = useState<'UPCOMING_5' | 'ALL' | 'COMPLETED' | 'UPCOMING'>('UPCOMING_5');
+  const [vehicleSearchFilter, setVehicleSearchFilter] = useState('');
+  const [manualLotOverride, setManualLotOverride] = useState<string>('auto');
+
   // Video Telecast State
   const [telecastPlaying, setTelecastPlaying] = useState(true);
   const [telecastMuted, setTelecastMuted] = useState(true);
@@ -211,6 +267,7 @@ export default function AdminPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [copiedPayload, setCopiedPayload] = useState(false);
   const [showRawPayload, setShowRawPayload] = useState(false);
+  const [showHistorical, setShowHistorical] = useState(false);
 
   const handleOpenActivityDetails = (act: LiveActivityItem) => {
     setSelectedActivity(act);
@@ -253,6 +310,11 @@ export default function AdminPage() {
     return [
       { id: 3, matchNumber: 3, auctionId: '2003', date: '2026-09-24T08:30:00Z', status: 'LIVE' },
     ] as MatchDay[];
+  }, [matchDays]);
+
+  // Historical / completed auctions for browsing past match data
+  const historicalMatches = useMemo(() => {
+    return matchDays.filter(m => m.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [matchDays]);
 
   const currentMatch = useMemo(() => {
@@ -366,10 +428,10 @@ export default function AdminPage() {
         showToast('Administrator session expired. Please sign in.', 'error');
         return;
       }
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
+        throw new Error(data?.error || `Server returned HTTP ${res.status}`);
       }
-      const data = await res.json();
       if (data.stats) {
         setStats(data.stats);
         setLeaderboard(data.leaderboard || []);
@@ -394,12 +456,13 @@ export default function AdminPage() {
           }
         }
       } else {
-        setStatsError(data.error || 'No statistics returned from server');
+        setStatsError(data?.error || 'No statistics returned from server');
       }
     } catch (err: any) {
       console.error('Failed to load admin data:', err);
-      setStatsError(err?.message || 'Failed to fetch admin overview telemetry');
-      showToast('Failed to load overview data', 'error');
+      const msg = err?.message || 'Failed to fetch admin overview telemetry';
+      setStatsError(msg);
+      showToast(msg.length < 55 ? msg : 'Failed to load overview data', 'error');
     } finally {
       if (showFullLoader) setLoading(false);
     }
@@ -443,13 +506,105 @@ export default function AdminPage() {
     }
   }, [liveAuctionId, liveFilter, liveSearchQuery]);
 
+  const loadAuctionVehicles = useCallback(async (
+    targetAuctionId?: string,
+    currentLotOverride?: string
+  ) => {
+    const aId = (targetAuctionId || liveAuctionId || '2003').trim();
+    const lotParam = currentLotOverride !== undefined ? currentLotOverride : manualLotOverride;
+    setVehicleQueueLoading(true);
+    try {
+      const url = `/api/admin?action=auctionVehicles&auctionId=${encodeURIComponent(aId)}${lotParam !== 'auto' ? `&currentLot=${encodeURIComponent(lotParam)}` : ''}`;
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.vehicles) {
+          setAllAuctionVehicles(data.vehicles);
+          setVehicleQueueStats(data.stats);
+          setOngoingCar(data.ongoingCar || null);
+          setNextCar(data.nextCar || null);
+          setUpcomingCars(data.upcomingCars || []);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load auction vehicles queue:', err);
+    } finally {
+      setVehicleQueueLoading(false);
+    }
+  }, [liveAuctionId, manualLotOverride]);
+
+  const handleStepLot = (newLot: number | string) => {
+    const lotStr = String(newLot);
+    setManualLotOverride(lotStr);
+    loadAuctionVehicles(liveAuctionId, lotStr);
+  };
+
+  const handleOpenVehicleDetails = (veh: AuctionVehicleItem) => {
+    const mockActivity: LiveActivityItem = {
+      id: Number(veh.id || veh.vehicleId || Math.floor(Math.random() * 100000)),
+      dealerId: veh.winnerId ? Number(veh.winnerId) : 0,
+      dealerName: veh.status === 'COMPLETED' ? (veh.winnerId ? `Winner Dealer #${veh.winnerId}` : 'Hammered / Closed') : (veh.status === 'ONGOING' ? 'Active Lot on Block' : 'Upcoming in Queue'),
+      externalDealerId: veh.winnerId ? String(veh.winnerId) : 'N/A',
+      city: veh.locationName || 'Tamil Nadu',
+      activityType: veh.status === 'COMPLETED' ? 'BUY' : (veh.status === 'ONGOING' ? 'BID_PLACED' : 'VEHICLE_INSPECTED'),
+      points: veh.status === 'COMPLETED' ? 10 : (veh.status === 'ONGOING' ? 2 : 1),
+      metadata: {
+        vehicleId: veh.vehicleId || veh.id,
+        vehicleName: veh.title,
+        regNo: veh.registrationNumber,
+        fuelType: veh.fuelType,
+        transmission: veh.transmission,
+        yearOfMfg: veh.yearOfMfg,
+        speedometer: veh.speedometer,
+        startBidValue: veh.startBidValue,
+        bidAmount: veh.currentBid,
+        winningBid: veh.winnerBidValue,
+        imageUrl: veh.imageUrl,
+        sequence: veh.sequence,
+        lotNo: veh.lotNumber,
+        location: veh.locationName,
+        isPreBid: veh.hasPreBid,
+        preBidValue: veh.preBidValue,
+        stage: veh.stage,
+        auctionId: liveAuctionId,
+      },
+      timestamp: new Date().toISOString(),
+    };
+    setSelectedActivity(mockActivity);
+    setSelectedImageIndex(0);
+    setCopiedPayload(false);
+    setShowRawPayload(false);
+  };
+
+  const filteredVehiclesList = useMemo(() => {
+    let list = allAuctionVehicles;
+    if (vehicleViewTab === 'COMPLETED') {
+      list = list.filter(v => v.status === 'COMPLETED');
+    } else if (vehicleViewTab === 'UPCOMING') {
+      list = list.filter(v => v.status === 'UPCOMING');
+    }
+    if (vehicleSearchFilter.trim()) {
+      const q = vehicleSearchFilter.toLowerCase().trim();
+      list = list.filter(v => 
+        (v.title || '').toLowerCase().includes(q) ||
+        (v.registrationNumber || '').toLowerCase().includes(q) ||
+        String(v.lotNumber).includes(q) ||
+        (v.fuelType || '').toLowerCase().includes(q) ||
+        (v.transmission || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [allAuctionVehicles, vehicleViewTab, vehicleSearchFilter]);
+
   const handleMatchSelect = (newAuctionId: string) => {
     const cleaned = String(newAuctionId).trim();
     if (!cleaned) return;
     setLiveAuctionId(cleaned);
     setLiveFilter('ALL'); // Reset filter to ALL so all records are visible
     setLiveSearchQuery('');
+    setManualLotOverride('auto');
     loadLiveActivities(false, 'ALL', '', cleaned);
+    loadAuctionVehicles(cleaned, 'auto');
     showToast(`Loaded Match Auction #${cleaned} Telemetry Feed`);
   };
 
@@ -493,14 +648,17 @@ export default function AdminPage() {
       const isCompleted = currentMatch?.status === 'COMPLETED';
 
       loadLiveActivities(liveAutoRefresh && !isCompleted, liveFilter, liveSearchQuery, liveAuctionId);
+      loadAuctionVehicles(liveAuctionId);
+
       if (liveAutoRefresh && !isCompleted) {
         const interval = setInterval(() => {
           loadLiveActivities(true, liveFilter, liveSearchQuery, liveAuctionId);
+          loadAuctionVehicles(liveAuctionId);
         }, 10000);
         return () => clearInterval(interval);
       }
     }
-  }, [authenticated, activeTab, stats, loading, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadLiveActivities, loadData]);
+  }, [authenticated, activeTab, stats, loading, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadLiveActivities, loadAuctionVehicles, loadData]);
 
   const handleSyncLiveAuction = async () => {
     setSyncing(true);
@@ -1016,6 +1174,7 @@ export default function AdminPage() {
           <div className="admin-tabs">
             {([
               { key: 'overview', icon: <BarChart3 className="w-4 h-4" />, label: 'Overview' },
+              { key: 'leaderboard', icon: <Award className="w-4 h-4 text-amber-400" />, label: 'Leaderboard (Unmasked)' },
               { key: 'liveMonitor', icon: <Radio className="w-4 h-4 text-rose-500" />, label: 'War Room (Live Monitor)' },
               { key: 'dealers', icon: <Users className="w-4 h-4" />, label: 'Dealer Fleet' },
               { key: 'rules', icon: <Settings className="w-4 h-4" />, label: 'Scoring Rules Engine' },
@@ -1028,7 +1187,7 @@ export default function AdminPage() {
                 onClick={() => {
                   setActiveTab(item.key);
                   setSelectedDealer(null);
-                  if (item.key === 'overview' && !stats) {
+                  if ((item.key === 'overview' || item.key === 'leaderboard') && !stats) {
                     loadData(false, true);
                   }
                 }}
@@ -1212,6 +1371,47 @@ export default function AdminPage() {
                                   </div>
                                 );
                               })}
+
+                              {/* Historical Completed Auctions in Overview */}
+                              {historicalMatches.length > 0 && historicalMatches.map(m => (
+                                <div
+                                  key={`hist-${m.id}`}
+                                  style={{
+                                    background: 'var(--bg-card)',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    opacity: 0.8,
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.85rem' }}>
+                                        MATCH #{m.matchNumber}
+                                      </span>
+                                      <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(100, 116, 139, 0.15)', color: 'var(--text-muted)', border: '1px solid rgba(100, 116, 139, 0.3)' }}>
+                                        COMPLETED
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                      Auction #{m.auctionId} • {new Date(m.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => {
+                                      handleMatchSelect(m.auctionId || String(m.id));
+                                      setActiveTab('liveMonitor');
+                                    }}
+                                    title="View historical match data in War Room"
+                                  >
+                                    View Data →
+                                  </button>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         </div>
@@ -1220,15 +1420,59 @@ export default function AdminPage() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                           {/* Unmasked Leaderboard Roster */}
                           <div className="card">
-                            <div className="card-header">
+                            <div className="card-header" style={{ flexWrap: 'wrap', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
                               <div>
-                                <h3 className="card-title">
-                                  <Award className="w-5 h-5 text-amber-400" />
-                                  Official Super Cup Leaderboard
-                                </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <h3 className="card-title" style={{ margin: 0 }}>
+                                    <Award className="w-5 h-5 text-amber-400" />
+                                    Official Super Cup Leaderboard
+                                  </h3>
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 800,
+                                    fontFamily: 'var(--font-mono)',
+                                    padding: '2px 8px',
+                                    borderRadius: '9999px',
+                                    background: 'rgba(6, 214, 160, 0.15)',
+                                    color: 'var(--accent-cyan)',
+                                    border: '1px solid rgba(6, 214, 160, 0.4)'
+                                  }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-cyan)' }} />
+                                    {showMaskedPreview ? 'MASKED PREVIEW' : 'UNMASKED'}
+                                  </span>
+                                </div>
                                 <p className="card-subtitle">
-                                  Showing verified rankings for {leaderboard.length} TVS dealerships
+                                  Showing verified rankings for {leaderboard.length} TVS dealerships • {showMaskedPreview ? 'Public masked view preview' : 'Real dealership enterprise names active'}
                                 </p>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{
+                                    fontSize: '0.74rem',
+                                    padding: '4px 8px',
+                                    border: '1px solid var(--border-subtle)',
+                                    background: showMaskedPreview ? 'rgba(255, 255, 255, 0.08)' : 'rgba(6, 214, 160, 0.12)',
+                                    color: showMaskedPreview ? 'var(--text-secondary)' : 'var(--accent-cyan)',
+                                  }}
+                                  onClick={() => setShowMaskedPreview(!showMaskedPreview)}
+                                  title={showMaskedPreview ? 'Switch to unmasked real names' : 'Preview masked public names with asterisks'}
+                                >
+                                  {showMaskedPreview ? '👁️ Unmask Names' : '🔒 Preview Masked'}
+                                </button>
+
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{ fontSize: '0.74rem', padding: '4px 8px', color: 'var(--accent-cyan)' }}
+                                  onClick={() => setActiveTab('leaderboard')}
+                                  title="Open full leaderboard with Top 3 Podium"
+                                >
+                                  Full Standings →
+                                </button>
                               </div>
                             </div>
 
@@ -1250,7 +1494,7 @@ export default function AdminPage() {
                                 <thead>
                                   <tr>
                                     <th>Rank</th>
-                                    <th>Dealership Name</th>
+                                    <th>Dealership Name {showMaskedPreview ? '(Masked Preview)' : '(Unmasked)'}</th>
                                     <th>External ID</th>
                                     <th>City / Hub</th>
                                     <th>Points</th>
@@ -1258,7 +1502,7 @@ export default function AdminPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {filteredLeaderboard.slice(0, 30).map(d => (
+                                  {filteredLeaderboard.slice(0, overviewLeaderboardLimit).map(d => (
                                     <tr key={d.dealerId}>
                                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
                                         {d.rank === 1 ? '🥇 #1' :
@@ -1267,7 +1511,7 @@ export default function AdminPage() {
                                          `#${d.rank}`}
                                       </td>
                                       <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                                        {d.dealerName}
+                                        {showMaskedPreview ? d.maskedName : d.dealerName}
                                       </td>
                                       <td style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                                         {d.externalId}
@@ -1298,6 +1542,59 @@ export default function AdminPage() {
                                   ))}
                                 </tbody>
                               </table>
+                            </div>
+
+                            {/* Limit Toggle Footer */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 16px',
+                              borderTop: '1px solid var(--border-subtle)',
+                              fontSize: '0.78rem',
+                              color: 'var(--text-muted)'
+                            }}>
+                              <span>
+                                Showing top <strong>{Math.min(overviewLeaderboardLimit, filteredLeaderboard.length)}</strong> of <strong>{filteredLeaderboard.length}</strong> dealerships
+                              </span>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '2px 8px',
+                                    fontWeight: overviewLeaderboardLimit === 30 ? 700 : 400,
+                                    color: overviewLeaderboardLimit === 30 ? 'var(--accent-cyan)' : 'var(--text-muted)'
+                                  }}
+                                  onClick={() => setOverviewLeaderboardLimit(30)}
+                                >
+                                  Top 30
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '2px 8px',
+                                    fontWeight: overviewLeaderboardLimit === 100 ? 700 : 400,
+                                    color: overviewLeaderboardLimit === 100 ? 'var(--accent-cyan)' : 'var(--text-muted)'
+                                  }}
+                                  onClick={() => setOverviewLeaderboardLimit(100)}
+                                >
+                                  Top 100
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '2px 8px',
+                                    fontWeight: overviewLeaderboardLimit >= filteredLeaderboard.length ? 700 : 400,
+                                    color: overviewLeaderboardLimit >= filteredLeaderboard.length ? 'var(--accent-cyan)' : 'var(--text-muted)'
+                                  }}
+                                  onClick={() => setOverviewLeaderboardLimit(Math.max(500, filteredLeaderboard.length))}
+                                >
+                                  View All ({filteredLeaderboard.length})
+                                </button>
+                              </div>
                             </div>
                           </div>
 
@@ -1392,6 +1689,530 @@ export default function AdminPage() {
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* ── 1.5 Dedicated Unmasked Leaderboard Tab ────────────────────────── */}
+                {activeTab === 'leaderboard' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Header Strip & Executive Unmask Controls */}
+                    <div className="card double-bezel" style={{ padding: '6px' }}>
+                      <div className="inner-bezel-core" style={{ padding: '24px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                              <div className="admin-trophy-badge" style={{ width: '36px', height: '36px', fontSize: '1.2rem' }}>
+                                🏆
+                              </div>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: showMaskedPreview ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.18)',
+                                border: `1px solid ${showMaskedPreview ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.5)'}`,
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                color: showMaskedPreview ? '#fbbf24' : '#34d399',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.08em',
+                                fontFamily: 'var(--font-mono)'
+                              }}>
+                                <span style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background: showMaskedPreview ? '#fbbf24' : '#34d399',
+                                  boxShadow: `0 0 6px ${showMaskedPreview ? '#fbbf24' : '#34d399'}`
+                                }}></span>
+                                {showMaskedPreview ? 'MASKED PREVIEW (PUBLIC SIMULATION)' : 'UNMASKED (ADMIN MISSION CONTROL)'}
+                              </span>
+                            </div>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+                              Official Super Cup Standings
+                            </h2>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                              September 2026 Dealership Championship • Enterprise legal names and points unmasked for administration
+                            </p>
+                          </div>
+
+                          {/* Quick Controls */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              className="btn btn-sm"
+                              style={{
+                                background: showMaskedPreview ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                borderColor: showMaskedPreview ? '#10b981' : 'var(--border-subtle)',
+                                color: showMaskedPreview ? '#34d399' : 'var(--text-primary)',
+                                fontWeight: 700,
+                                fontSize: '0.8rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                              onClick={() => {
+                                setShowMaskedPreview(!showMaskedPreview);
+                                showToast(showMaskedPreview ? 'Switched to Unmasked (Admin View)' : 'Switched to Masked (Public Preview)');
+                              }}
+                              title="Toggle between full unmasked dealership names and public masked preview"
+                            >
+                              {showMaskedPreview ? (
+                                <>
+                                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Unmask Names (Admin)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Preview Masked (Public)</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={handleRecalculate}
+                              title="Recalculate leaderboard scores and ranks"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Recalculate</span>
+                            </button>
+
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={handleExport}
+                              title="Export leaderboard summary CSV"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Export Standings CSV</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Top 3 Championship Podium Cards */}
+                        {leaderboard.length >= 3 && !searchQuery && (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                            gap: '16px',
+                            marginBottom: '24px'
+                          }}>
+                            {/* Gold - Rank 1 */}
+                            {leaderboard[0] && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(15, 23, 42, 0.8))',
+                                border: '1px solid rgba(234, 179, 8, 0.45)',
+                                borderRadius: '12px',
+                                padding: '18px 20px',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-15px',
+                                  right: '-10px',
+                                  fontSize: '4.5rem',
+                                  opacity: 0.12,
+                                  userSelect: 'none'
+                                }}>
+                                  🥇
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <span style={{
+                                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                    color: '#000',
+                                    fontWeight: 900,
+                                    fontSize: '0.75rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    letterSpacing: '0.05em'
+                                  }}>
+                                    1ST PLACE • CHAMPION
+                                  </span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#fbbf24' }}>
+                                    #{leaderboard[0].externalId}
+                                  </span>
+                                </div>
+                                <h3 style={{
+                                  fontSize: '1.05rem',
+                                  fontWeight: 800,
+                                  color: 'var(--text-primary)',
+                                  marginBottom: '4px',
+                                  lineHeight: 1.3
+                                }}>
+                                  {showMaskedPreview ? leaderboard[0].maskedName : leaderboard[0].dealerName}
+                                </h3>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                  📍 {leaderboard[0].city}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                  <span style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '1.4rem',
+                                    fontWeight: 900,
+                                    color: '#fbbf24'
+                                  }}>
+                                    {leaderboard[0].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                  </span>
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    style={{ fontSize: '0.72rem', color: '#fbbf24' }}
+                                    onClick={() => loadDealerDetail(leaderboard[0].dealerId)}
+                                  >
+                                    Inspect Fleet →
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Silver - Rank 2 */}
+                            {leaderboard[1] && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0.8))',
+                                border: '1px solid rgba(148, 163, 184, 0.4)',
+                                borderRadius: '12px',
+                                padding: '18px 20px',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-15px',
+                                  right: '-10px',
+                                  fontSize: '4.5rem',
+                                  opacity: 0.1,
+                                  userSelect: 'none'
+                                }}>
+                                  🥈
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <span style={{
+                                    background: 'linear-gradient(135deg, #94a3b8, #64748b)',
+                                    color: '#000',
+                                    fontWeight: 900,
+                                    fontSize: '0.75rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    letterSpacing: '0.05em'
+                                  }}>
+                                    2ND PLACE • RUNNER UP
+                                  </span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                    #{leaderboard[1].externalId}
+                                  </span>
+                                </div>
+                                <h3 style={{
+                                  fontSize: '1.05rem',
+                                  fontWeight: 800,
+                                  color: 'var(--text-primary)',
+                                  marginBottom: '4px',
+                                  lineHeight: 1.3
+                                }}>
+                                  {showMaskedPreview ? leaderboard[1].maskedName : leaderboard[1].dealerName}
+                                </h3>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                  📍 {leaderboard[1].city}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                  <span style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '1.4rem',
+                                    fontWeight: 900,
+                                    color: '#cbd5e1'
+                                  }}>
+                                    {leaderboard[1].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                  </span>
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    style={{ fontSize: '0.72rem', color: '#cbd5e1' }}
+                                    onClick={() => loadDealerDetail(leaderboard[1].dealerId)}
+                                  >
+                                    Inspect Fleet →
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Bronze - Rank 3 */}
+                            {leaderboard[2] && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(15, 23, 42, 0.8))',
+                                border: '1px solid rgba(217, 119, 6, 0.4)',
+                                borderRadius: '12px',
+                                padding: '18px 20px',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-15px',
+                                  right: '-10px',
+                                  fontSize: '4.5rem',
+                                  opacity: 0.1,
+                                  userSelect: 'none'
+                                }}>
+                                  🥉
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <span style={{
+                                    background: 'linear-gradient(135deg, #d97706, #b45309)',
+                                    color: '#fff',
+                                    fontWeight: 900,
+                                    fontSize: '0.75rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    letterSpacing: '0.05em'
+                                  }}>
+                                    3RD PLACE • PODIUM
+                                  </span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#f59e0b' }}>
+                                    #{leaderboard[2].externalId}
+                                  </span>
+                                </div>
+                                <h3 style={{
+                                  fontSize: '1.05rem',
+                                  fontWeight: 800,
+                                  color: 'var(--text-primary)',
+                                  marginBottom: '4px',
+                                  lineHeight: 1.3
+                                }}>
+                                  {showMaskedPreview ? leaderboard[2].maskedName : leaderboard[2].dealerName}
+                                </h3>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                  📍 {leaderboard[2].city}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                  <span style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '1.4rem',
+                                    fontWeight: 900,
+                                    color: '#f59e0b'
+                                  }}>
+                                    {leaderboard[2].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                  </span>
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    style={{ fontSize: '0.72rem', color: '#f59e0b' }}
+                                    onClick={() => loadDealerDetail(leaderboard[2].dealerId)}
+                                  >
+                                    Inspect Fleet →
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Search and Summary Bar */}
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '12px',
+                          marginBottom: '16px'
+                        }}>
+                          <div style={{ flex: '1 1 320px', maxWidth: '480px' }}>
+                            <div className="search-input-box">
+                              <Search className="w-4 h-4 search-icon-left" />
+                              <input
+                                type="text"
+                                className="form-input"
+                                placeholder="Search by dealership legal name, dealer code, or city..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                              />
+                              {searchQuery && (
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)' }}
+                                  onClick={() => setSearchQuery('')}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                            Showing <strong>{filteredLeaderboard.length}</strong> active scoring dealerships
+                          </div>
+                        </div>
+
+                        {/* Standings Table */}
+                        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '80px' }}>Rank</th>
+                                <th>Dealership Legal Name {showMaskedPreview ? '(Masked Preview)' : '(Unmasked)'}</th>
+                                <th style={{ width: '120px' }}>Dealer Code</th>
+                                <th style={{ width: '140px' }}>City / Hub</th>
+                                <th style={{ width: '160px' }}>Championship Points</th>
+                                <th style={{ width: '160px' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredLeaderboard.map((d, index) => {
+                                const maxPts = leaderboard[0]?.points || 1;
+                                const pct = Math.min(100, Math.round((d.points / maxPts) * 100));
+                                return (
+                                  <tr key={d.dealerId} style={{ background: index < 3 ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
+                                    <td>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {d.rank === 1 ? (
+                                          <span style={{ fontSize: '1.1rem' }}>🥇</span>
+                                        ) : d.rank === 2 ? (
+                                          <span style={{ fontSize: '1.1rem' }}>🥈</span>
+                                        ) : d.rank === 3 ? (
+                                          <span style={{ fontSize: '1.1rem' }}>🥉</span>
+                                        ) : (
+                                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                            #{d.rank}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          fontSize: '0.88rem',
+                                          color: 'var(--text-primary)',
+                                          letterSpacing: '-0.01em'
+                                        }}>
+                                          {showMaskedPreview ? d.maskedName : d.dealerName}
+                                        </span>
+                                        {!showMaskedPreview && (
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                            Public mask: {d.maskedName}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--text-secondary)',
+                                        background: 'rgba(255, 255, 255, 0.04)',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        border: '1px solid var(--border-subtle)'
+                                      }}>
+                                        {d.externalId}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontSize: '0.85rem' }}>
+                                      {d.city}
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <span style={{
+                                          fontFamily: 'var(--font-mono)',
+                                          fontWeight: 800,
+                                          fontSize: '0.95rem',
+                                          color: 'var(--accent-cyan)'
+                                        }}>
+                                          {d.points.toLocaleString()} PTS
+                                        </span>
+                                        <div style={{
+                                          width: '100%',
+                                          height: '4px',
+                                          background: 'rgba(255, 255, 255, 0.08)',
+                                          borderRadius: '2px',
+                                          overflow: 'hidden'
+                                        }}>
+                                          <div style={{
+                                            width: `${pct}%`,
+                                            height: '100%',
+                                            background: index === 0 ? '#f59e0b' : index === 1 ? '#94a3b8' : index === 2 ? '#d97706' : 'var(--accent-cyan)',
+                                            borderRadius: '2px'
+                                          }} />
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                          onClick={() => loadDealerDetail(d.dealerId)}
+                                          title="Inspect dealership profile and complete activity stream"
+                                        >
+                                          Inspect
+                                        </button>
+                                        <button
+                                          className="btn btn-sm"
+                                          style={{
+                                            padding: '4px 8px',
+                                            fontSize: '0.75rem',
+                                            background: 'rgba(225, 29, 72, 0.15)',
+                                            color: 'var(--tvs-red-light)',
+                                            border: '1px solid rgba(225, 29, 72, 0.3)'
+                                          }}
+                                          onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
+                                          title="Manual points correction"
+                                        >
+                                          Adjust
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+
+                              {filteredLeaderboard.length === 0 && (
+                                <tr>
+                                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                                    <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🔍</div>
+                                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                      No dealerships match &ldquo;{searchQuery}&rdquo;
+                                    </div>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                                      Try searching by another dealer code, city name, or clear the search filter.
+                                    </p>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ marginTop: '12px' }}
+                                      onClick={() => setSearchQuery('')}
+                                    >
+                                      Clear Search Filter
+                                    </button>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Footer Info Notice */}
+                        <div style={{
+                          marginTop: '16px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '10px',
+                          fontSize: '0.78rem',
+                          color: 'var(--text-muted)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Executive clearance verified: Full enterprise company names are unmasked for your session.</span>
+                          </div>
+                          <div>
+                            <Link href="/leaderboard" target="_blank" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span>Open Public Leaderboard</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1508,6 +2329,103 @@ export default function AdminPage() {
                           })}
                         </div>
 
+                        {/* Historical / Completed Auctions Section */}
+                        {historicalMatches.length > 0 && (
+                          <div style={{ marginTop: '16px' }}>
+                            <button
+                              onClick={() => setShowHistorical(!showHistorical)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '8px 4px',
+                                width: '100%',
+                                textAlign: 'left',
+                              }}
+                            >
+                              <History className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                              <span style={{
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                color: 'var(--text-secondary)',
+                                fontFamily: 'var(--font-mono)',
+                                letterSpacing: '0.05em',
+                                textTransform: 'uppercase',
+                              }}>
+                                Historical Auctions ({historicalMatches.length})
+                              </span>
+                              {showHistorical
+                                ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--text-muted)', marginLeft: 'auto' }} />
+                                : <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-muted)', marginLeft: 'auto' }} />
+                              }
+                            </button>
+                            {showHistorical && (
+                              <div className="match-selection-grid" style={{ marginTop: '8px' }}>
+                                {historicalMatches.map(m => {
+                                  const isSelected = String(liveAuctionId) === String(m.auctionId);
+                                  return (
+                                    <div
+                                      key={m.id || m.auctionId}
+                                      className={`match-select-card ${isSelected ? 'active' : ''}`}
+                                      onClick={() => handleMatchSelect(m.auctionId || String(m.id))}
+                                      style={{
+                                        opacity: isSelected ? 1 : 0.85,
+                                        borderColor: isSelected ? 'var(--accent-blue)' : 'var(--border-subtle)',
+                                      }}
+                                    >
+                                      <div className="match-card-top">
+                                        <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                        <span className="match-card-badge" style={{
+                                          background: 'rgba(100, 116, 139, 0.15)',
+                                          color: 'var(--text-muted)',
+                                          border: '1px solid rgba(100, 116, 139, 0.3)',
+                                          fontSize: '0.65rem',
+                                          fontWeight: 700,
+                                          fontFamily: 'var(--font-mono)',
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                        }}>
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          COMPLETED
+                                        </span>
+                                      </div>
+                                      <div className="match-card-title">
+                                        Auction #{m.auctionId || m.id}
+                                      </div>
+                                      <div className="match-card-metrics">
+                                        <span style={{ color: 'var(--text-muted)' }}>Completed</span> •{' '}
+                                        <span style={{ color: 'var(--text-muted)' }}>
+                                          {new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+                                        </span>
+                                      </div>
+                                      {isSelected && (
+                                        <div style={{
+                                          fontSize: '0.72rem',
+                                          color: 'var(--accent-blue)',
+                                          fontWeight: 700,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          marginTop: '4px'
+                                        }}>
+                                          <span className="stream-indicator" style={{ background: 'var(--accent-blue)' }} />
+                                          VIEWING HISTORICAL DATA
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Custom Auction ID Entry Bar */}
                         <div className="custom-auction-bar">
                           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
@@ -1578,6 +2496,754 @@ export default function AdminPage() {
                           {liveStats?.totalActivities ?? 0}
                         </div>
                       </div>
+                    </div>
+
+                    {/* ── Auction Run Order & Vehicle Pipeline (Ongoing Car & Next 5 Upcoming Cars) ── */}
+                    <div className="card double-bezel" style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                      {/* Top Header Row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <Car className="w-5 h-5 text-sky-400" />
+                            <h3 className="card-title" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
+                              Auction Run Order & Vehicle Pipeline
+                            </h3>
+                            {ongoingCar && (
+                              <span className="runorder-header-badge ongoing">
+                                <span className="pulsing-live-dot" />
+                                LIVE LOT #{ongoingCar.lotNumber}
+                              </span>
+                            )}
+                            {vehicleQueueStats?.isAllCompleted && (
+                              <span className="badge" style={{ background: 'rgba(6, 214, 160, 0.15)', color: 'var(--accent-cyan)', border: '1px solid rgba(6, 214, 160, 0.3)', fontSize: '0.72rem', fontWeight: 700 }}>
+                                <CheckCircle2 className="w-3 h-3" /> ALL LOTS COMPLETED
+                              </span>
+                            )}
+                          </div>
+                          <p className="card-subtitle" style={{ margin: '4px 0 0 0', fontSize: '0.8rem' }}>
+                            Real-time block progression: track the ongoing car, preview the next car, and inspect upcoming lots in sequence order for Auction #{liveAuctionId}
+                          </p>
+                        </div>
+
+                        {/* Top Level Metric Chips */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: '6px', background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontWeight: 700 }}>
+                            {vehicleQueueStats?.total ?? allAuctionVehicles.length} Total Lots
+                          </span>
+                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: '6px', background: 'rgba(6, 214, 160, 0.12)', border: '1px solid rgba(6, 214, 160, 0.3)', color: 'var(--accent-cyan)', fontWeight: 700 }}>
+                            {vehicleQueueStats?.completed ?? 0} Completed
+                          </span>
+                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: '6px', background: 'rgba(225, 29, 72, 0.12)', border: '1px solid rgba(225, 29, 72, 0.3)', color: '#fb7185', fontWeight: 700 }}>
+                            {ongoingCar ? `Lot #${ongoingCar.lotNumber} Ongoing` : '0 Ongoing'}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', color: 'var(--accent-blue)', fontWeight: 700 }}>
+                            {vehicleQueueStats?.upcoming ?? 0} Upcoming
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Visual Progress Bar */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                          <span>
+                            {vehicleQueueStats?.percentComplete ?? 0}% Lots Hammered ({vehicleQueueStats?.completed ?? 0} of {vehicleQueueStats?.total ?? 0})
+                          </span>
+                          <span>
+                            {vehicleQueueStats?.isAllCompleted ? 'Auction Session Concluded' : `${vehicleQueueStats?.upcoming ?? 0} Lots Remaining`}
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: '7px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${vehicleQueueStats?.percentComplete ?? 0}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, var(--accent-cyan), var(--accent-blue))',
+                            borderRadius: '999px',
+                            transition: 'width 0.4s ease',
+                          }} />
+                        </div>
+                      </div>
+
+                      {/* Sub-Header Control Bar: Filter Tabs & Stepper */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        padding: '12px 14px',
+                        background: 'var(--bg-subtle)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-subtle)',
+                      }}>
+                        {/* View Tabs */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {[
+                            { key: 'UPCOMING_5', label: `⚡ Next 5 Upcoming (${upcomingCars.length})` },
+                            { key: 'ALL', label: `📋 All Vehicles (${allAuctionVehicles.length})` },
+                            { key: 'UPCOMING', label: `⏳ Upcoming Only (${vehicleQueueStats?.upcoming ?? 0})` },
+                            { key: 'COMPLETED', label: `✅ Completed Only (${vehicleQueueStats?.completed ?? 0})` },
+                          ].map(tab => (
+                            <button
+                              key={tab.key}
+                              className={`filter-pill ${vehicleViewTab === tab.key ? 'active' : ''}`}
+                              style={{ fontSize: '0.76rem', padding: '4px 12px' }}
+                              onClick={() => setVehicleViewTab(tab.key as any)}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Interactive Queue Stepper */}
+                        {(() => {
+                          const activeLotNum = vehicleQueueStats?.activeLotNumber || (ongoingCar?.lotNumber ?? 1);
+                          const totalLots = vehicleQueueStats?.total || (allAuctionVehicles.length || 1);
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                Block Position:
+                              </span>
+                              <button
+                                className="runorder-stepper-btn"
+                                onClick={() => handleStepLot(Math.max(1, activeLotNum - 1))}
+                                disabled={activeLotNum <= 1 || vehicleQueueLoading}
+                                title="Step back to previous lot"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                                <span>Prev Lot</span>
+                              </button>
+
+                              <select
+                                className="form-input"
+                                style={{ width: 'auto', padding: '3px 8px', fontSize: '0.75rem', height: '28px', fontFamily: 'var(--font-mono)' }}
+                                value={manualLotOverride === 'auto' ? String(activeLotNum) : manualLotOverride}
+                                onChange={e => handleStepLot(e.target.value)}
+                              >
+                                <option value="auto">Auto (Lot #{activeLotNum})</option>
+                                <option value="completed">All Completed (End)</option>
+                                {allAuctionVehicles.slice(0, 150).map(v => (
+                                  <option key={v.id || v.lotNumber} value={v.lotNumber}>
+                                    Lot #{v.lotNumber}: {v.title.slice(0, 22)}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                className="runorder-stepper-btn"
+                                onClick={() => handleStepLot(Math.min(totalLots, activeLotNum + 1))}
+                                disabled={activeLotNum >= totalLots || vehicleQueueLoading}
+                                title="Advance to next lot in queue"
+                              >
+                                <span>Next Lot</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+
+                              {manualLotOverride !== 'auto' && (
+                                <button
+                                  className="runorder-stepper-btn"
+                                  onClick={() => {
+                                    setManualLotOverride('auto');
+                                    loadAuctionVehicles(liveAuctionId, 'auto');
+                                  }}
+                                  title="Reset to auto-detected active lot"
+                                  style={{ color: 'var(--accent-cyan)', borderColor: 'rgba(6, 214, 160, 0.4)' }}
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${vehicleQueueLoading ? 'animate-spin' : ''}`} />
+                                  <span>Auto</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* ── Mode 1: Next 5 Upcoming Hero Showcase ── */}
+                      {vehicleViewTab === 'UPCOMING_5' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                          {/* Spotlight: Ongoing Car (Live) vs Next Car (On Deck) */}
+                          <div className="runorder-spotlight-grid">
+                            {/* Card 1: 🔴 Current Ongoing Car */}
+                            <div className="runorder-card ongoing">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                <span className="runorder-header-badge ongoing">
+                                  <span className="pulsing-live-dot" />
+                                  ONGOING CAR • LOT #{ongoingCar?.lotNumber || '-'}
+                                </span>
+                                <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#fb7185', fontWeight: 700 }}>
+                                  ACTIVE ON BLOCK
+                                </span>
+                              </div>
+
+                              {ongoingCar ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                  {/* Thumbnail & Title */}
+                                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                                    {(() => {
+                                      const images = getVehicleImages(ongoingCar.imageUrl);
+                                      const thumb = images[0];
+                                      return (
+                                        <div
+                                          onClick={() => handleOpenVehicleDetails(ongoingCar)}
+                                          style={{
+                                            width: '110px',
+                                            height: '75px',
+                                            borderRadius: '8px',
+                                            overflow: 'hidden',
+                                            background: 'rgba(0, 0, 0, 0.4)',
+                                            border: '1px solid rgba(225, 29, 72, 0.3)',
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Click to view HD gallery"
+                                        >
+                                          {thumb ? (
+                                            <img src={thumb} alt={ongoingCar.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          ) : (
+                                            <Car className="w-8 h-8 opacity-40 text-rose-400" />
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <h4 style={{
+                                        fontSize: '0.98rem',
+                                        fontWeight: 800,
+                                        color: 'var(--text-primary)',
+                                        margin: '0 0 6px 0',
+                                        lineHeight: 1.3,
+                                      }}>
+                                        {ongoingCar.title}
+                                      </h4>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        {ongoingCar.registrationNumber && (
+                                          <div className="ind-plate">
+                                            <span className="ind-plate-blue">IND</span>
+                                            <span>{ongoingCar.registrationNumber}</span>
+                                          </div>
+                                        )}
+                                        <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>
+                                          🔴 LIVE BIDDING
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Spec Chips Row */}
+                                  <div className="spec-chips-row">
+                                    {ongoingCar.fuelType && <span className="spec-chip">⛽ {ongoingCar.fuelType}</span>}
+                                    {ongoingCar.transmission && <span className="spec-chip">⚙️ {ongoingCar.transmission}</span>}
+                                    {ongoingCar.yearOfMfg && <span className="spec-chip">📅 {ongoingCar.yearOfMfg}</span>}
+                                    {ongoingCar.speedometer && <span className="spec-chip">🛣️ {ongoingCar.speedometer} KM</span>}
+                                  </div>
+
+                                  {/* Pricing & Bidding Box */}
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '10px 14px',
+                                    background: 'var(--bg-base)',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border-subtle)',
+                                    marginTop: '4px',
+                                  }}>
+                                    <div>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                                        Starting Bid
+                                      </span>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                                        ₹{Number(ongoingCar.startBidValue || 0).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <span style={{ fontSize: '0.68rem', color: '#fb7185', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', fontWeight: 700 }}>
+                                        <span className="pulsing-live-dot" style={{ width: '6px', height: '6px' }} />
+                                        Current Top Bid
+                                      </span>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '1.05rem', color: 'var(--accent-cyan)' }}>
+                                        ₹{Number(ongoingCar.currentBid || ongoingCar.startBidValue || 0).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Action CTA */}
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    style={{ width: '100%', justifyContent: 'center' }}
+                                    onClick={() => handleOpenVehicleDetails(ongoingCar)}
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Inspect Ongoing Car Details & Specs</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                                    All lots have completed for this auction session, or no vehicle is currently marked on the active block.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Card 2: ⚡ Next Car on Deck */}
+                            <div className="runorder-card next">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                <span className="runorder-header-badge next">
+                                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                  NEXT CAR IN LINE • LOT #{nextCar?.lotNumber || '-'}
+                                </span>
+                                <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)', fontWeight: 700 }}>
+                                  NEXT UP TO BAT
+                                </span>
+                              </div>
+
+                              {nextCar ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                  {/* Thumbnail & Title */}
+                                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                                    {(() => {
+                                      const images = getVehicleImages(nextCar.imageUrl);
+                                      const thumb = images[0];
+                                      return (
+                                        <div
+                                          onClick={() => handleOpenVehicleDetails(nextCar)}
+                                          style={{
+                                            width: '110px',
+                                            height: '75px',
+                                            borderRadius: '8px',
+                                            overflow: 'hidden',
+                                            background: 'rgba(0, 0, 0, 0.4)',
+                                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Click to view HD gallery"
+                                        >
+                                          {thumb ? (
+                                            <img src={thumb} alt={nextCar.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          ) : (
+                                            <Car className="w-8 h-8 opacity-40 text-amber-400" />
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <h4 style={{
+                                        fontSize: '0.98rem',
+                                        fontWeight: 800,
+                                        color: 'var(--text-primary)',
+                                        margin: '0 0 6px 0',
+                                        lineHeight: 1.3,
+                                      }}>
+                                        {nextCar.title}
+                                      </h4>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        {nextCar.registrationNumber && (
+                                          <div className="ind-plate">
+                                            <span className="ind-plate-blue">IND</span>
+                                            <span>{nextCar.registrationNumber}</span>
+                                          </div>
+                                        )}
+                                        <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>
+                                          ⚡ ON DECK
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Spec Chips Row */}
+                                  <div className="spec-chips-row">
+                                    {nextCar.fuelType && <span className="spec-chip">⛽ {nextCar.fuelType}</span>}
+                                    {nextCar.transmission && <span className="spec-chip">⚙️ {nextCar.transmission}</span>}
+                                    {nextCar.yearOfMfg && <span className="spec-chip">📅 {nextCar.yearOfMfg}</span>}
+                                    {nextCar.speedometer && <span className="spec-chip">🛣️ {nextCar.speedometer} KM</span>}
+                                  </div>
+
+                                  {/* Pricing & Pre-Bids Box */}
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '10px 14px',
+                                    background: 'var(--bg-base)',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border-subtle)',
+                                    marginTop: '4px',
+                                  }}>
+                                    <div>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                                        Starting Price
+                                      </span>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-blue)' }}>
+                                        ₹{Number(nextCar.startBidValue || 0).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                                        Pre-Bid Status
+                                      </span>
+                                      {nextCar.hasPreBid ? (
+                                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.9rem', color: 'var(--accent-cyan)' }}>
+                                          ⚡ ₹{Number(nextCar.preBidValue || nextCar.currentBid || 0).toLocaleString('en-IN')}
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                          Awaiting Pre-Bids
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Action CTA */}
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ width: '100%', justifyContent: 'center', border: '1px solid var(--border-subtle)' }}
+                                    onClick={() => handleOpenVehicleDetails(nextCar)}
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-sky-400" />
+                                    <span>Inspect Next Car Specifications</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                                    Final lot is currently on the auction block. No further lots on deck.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── Section: The Next 5 Upcoming Cars Queue ── */}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                              <div>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Clock className="w-4 h-4 text-sky-400" />
+                                  Next 5 Upcoming Cars in Queue
+                                </h4>
+                                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                                  Vehicles queued immediately next on the auction block in run-order sequence
+                                </p>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                Showing {upcomingCars.length} of {vehicleQueueStats?.upcoming || 0} upcoming
+                              </span>
+                            </div>
+
+                            {upcomingCars.length > 0 ? (
+                              <div className="upcoming-queue-grid">
+                                {upcomingCars.map((car, idx) => {
+                                  const images = getVehicleImages(car.imageUrl);
+                                  const thumb = images[0];
+                                  return (
+                                    <div
+                                      key={car.id || car.vehicleId}
+                                      className="upcoming-queue-card"
+                                      onClick={() => handleOpenVehicleDetails(car)}
+                                      title="Click to inspect vehicle specs & photos"
+                                    >
+                                      {/* Top Row: Queue Position + Lot Number */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{
+                                          fontSize: '0.68rem',
+                                          fontFamily: 'var(--font-mono)',
+                                          fontWeight: 800,
+                                          padding: '2px 7px',
+                                          borderRadius: '4px',
+                                          background: idx === 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.15)',
+                                          color: idx === 0 ? 'var(--accent-gold)' : 'var(--accent-blue)',
+                                          border: `1px solid ${idx === 0 ? 'rgba(245, 158, 11, 0.4)' : 'rgba(56, 189, 248, 0.3)'}`,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                        }}>
+                                          {idx === 0 ? <Zap className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                          {idx === 0 ? 'Next Up (#1)' : `In Queue (#${idx + 1})`}
+                                        </span>
+                                        <span className="lot-chip">
+                                          LOT #{car.lotNumber}
+                                        </span>
+                                      </div>
+
+                                      {/* Image Thumbnail */}
+                                      <div style={{
+                                        width: '100%',
+                                        height: '110px',
+                                        borderRadius: '6px',
+                                        overflow: 'hidden',
+                                        background: 'rgba(0, 0, 0, 0.35)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        position: 'relative',
+                                      }}>
+                                        {thumb ? (
+                                          <img src={thumb} alt={car.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: 'var(--text-muted)' }}>
+                                            <Car className="w-8 h-8 opacity-40 text-sky-400" />
+                                            <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>TVS CERTIFIED</span>
+                                          </div>
+                                        )}
+                                        {car.hasPreBid && (
+                                          <div style={{
+                                            position: 'absolute',
+                                            bottom: '6px',
+                                            left: '6px',
+                                            background: 'rgba(15, 23, 42, 0.85)',
+                                            border: '1px solid rgba(56, 189, 248, 0.5)',
+                                            color: 'var(--accent-blue)',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 800,
+                                            fontFamily: 'var(--font-mono)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            backdropFilter: 'blur(4px)',
+                                          }}>
+                                            <Zap className="w-2.5 h-2.5" />
+                                            <span>PRE-BID</span>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Title & Registration Plate */}
+                                      <div>
+                                        <div style={{
+                                          fontWeight: 700,
+                                          fontSize: '0.85rem',
+                                          color: 'var(--text-primary)',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                        }}>
+                                          {car.title}
+                                        </div>
+                                        <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          {car.registrationNumber && (
+                                            <div className="ind-plate" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
+                                              <span className="ind-plate-blue">IND</span>
+                                              <span>{car.registrationNumber}</span>
+                                            </div>
+                                          )}
+                                          <span className="badge" style={{
+                                            fontSize: '0.65rem',
+                                            background: 'rgba(56, 189, 248, 0.12)',
+                                            color: 'var(--accent-blue)',
+                                            border: '1px solid rgba(56, 189, 248, 0.25)',
+                                            padding: '1px 6px',
+                                          }}>
+                                            UPCOMING
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Spec Chips Row */}
+                                      <div className="spec-chips-row">
+                                        {car.fuelType && <span className="spec-chip">⛽ {car.fuelType}</span>}
+                                        {car.transmission && <span className="spec-chip">⚙️ {car.transmission}</span>}
+                                        {car.yearOfMfg && <span className="spec-chip">📅 {car.yearOfMfg}</span>}
+                                        {car.speedometer && <span className="spec-chip">🛣️ {car.speedometer} KM</span>}
+                                      </div>
+
+                                      {/* Price & Action Row */}
+                                      <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        marginTop: 'auto',
+                                        paddingTop: '8px',
+                                        borderTop: '1px solid var(--border-hairline)',
+                                      }}>
+                                        <div>
+                                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                            Starting Bid
+                                          </div>
+                                          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.88rem', color: 'var(--accent-cyan)' }}>
+                                            ₹{Number(car.startBidValue || 0).toLocaleString('en-IN')}
+                                          </div>
+                                        </div>
+                                        <button
+                                          className="btn btn-ghost btn-xs"
+                                          style={{
+                                            padding: '3px 8px',
+                                            fontSize: '0.72rem',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            borderRadius: '4px',
+                                            border: '1px solid var(--border-subtle)',
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenVehicleDetails(car);
+                                          }}
+                                        >
+                                          <Eye className="w-3 h-3 text-sky-400" />
+                                          <span>Details</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div style={{
+                                padding: '32px 16px',
+                                textAlign: 'center',
+                                background: 'var(--bg-subtle)',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid var(--border-subtle)',
+                              }}>
+                                <CheckCircle2 className="w-8 h-8 text-emerald-400" style={{ margin: '0 auto 8px auto' }} />
+                                <h5 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                                  All lots in this auction have concluded
+                                </h5>
+                                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 12px 0' }}>
+                                  Use the lot scrubber above or switch to &quot;All Vehicles&quot; tab to inspect all {allAuctionVehicles.length} vehicles.
+                                </p>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => setVehicleViewTab('ALL')}
+                                >
+                                  View Full Catalog ({allAuctionVehicles.length} Lots) →
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Mode 2: Full Catalog / Searchable Run Order List ── */}
+                      {vehicleViewTab !== 'UPCOMING_5' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {/* Search bar inside vehicle table */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <div className="search-input-box" style={{ flex: '1 1 280px', maxWidth: '420px' }}>
+                              <Search className="w-4 h-4 search-icon-left" />
+                              <input
+                                type="text"
+                                className="form-input"
+                                placeholder="Search by model, registration, lot #..."
+                                value={vehicleSearchFilter}
+                                onChange={e => setVehicleSearchFilter(e.target.value)}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              {filteredVehiclesList.length} vehicles matching
+                            </span>
+                          </div>
+
+                          <div style={{ overflowX: 'auto', maxHeight: '480px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                            <table className="admin-table">
+                              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                                <tr>
+                                  <th>Lot #</th>
+                                  <th>Status</th>
+                                  <th>Vehicle Specification</th>
+                                  <th>Registration</th>
+                                  <th>Engine & Odo</th>
+                                  <th>Starting Bid</th>
+                                  <th>Top / Winning Bid</th>
+                                  <th>Inspect</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredVehiclesList.map(veh => (
+                                  <tr
+                                    key={veh.id || veh.vehicleId}
+                                    onClick={() => handleOpenVehicleDetails(veh)}
+                                    className="interactive-telemetry-row"
+                                    style={{
+                                      background: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.08)' : undefined,
+                                    }}
+                                  >
+                                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                                      <span className="lot-chip" style={{
+                                        background: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.2)' : undefined,
+                                        color: veh.status === 'ONGOING' ? '#fb7185' : undefined,
+                                        borderColor: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.4)' : undefined,
+                                      }}>
+                                        #{veh.lotNumber}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span className={`badge ${
+                                        veh.status === 'ONGOING' ? 'badge-error' :
+                                        veh.status === 'COMPLETED' ? 'badge-success' :
+                                        'badge-primary'
+                                      }`} style={{ fontSize: '0.7rem' }}>
+                                        {veh.status === 'ONGOING' ? '🔴 ONGOING' :
+                                         veh.status === 'COMPLETED' ? '✅ COMPLETED' :
+                                         '⏳ UPCOMING'}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Car className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                                        <span>{veh.title}</span>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      {veh.registrationNumber ? (
+                                        <div className="ind-plate" style={{ fontSize: '0.72rem' }}>
+                                          <span className="ind-plate-blue">IND</span>
+                                          <span>{veh.registrationNumber}</span>
+                                        </div>
+                                      ) : '-'}
+                                    </td>
+                                    <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                      {[veh.fuelType, veh.transmission, veh.yearOfMfg ? `'${String(veh.yearOfMfg).slice(-2)}` : '', veh.speedometer ? `${veh.speedometer} KM` : ''].filter(Boolean).join(' • ') || 'N/A'}
+                                    </td>
+                                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                      ₹{Number(veh.startBidValue || 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: veh.status === 'COMPLETED' ? 'var(--accent-cyan)' : 'var(--accent-blue)' }}>
+                                      {veh.winnerBidValue
+                                        ? `Won: ₹${Number(veh.winnerBidValue).toLocaleString('en-IN')}`
+                                        : veh.currentBid
+                                        ? `₹${Number(veh.currentBid).toLocaleString('en-IN')}`
+                                        : '-'}
+                                    </td>
+                                    <td>
+                                      <button
+                                        className="btn btn-ghost btn-xs"
+                                        style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenVehicleDetails(veh);
+                                        }}
+                                      >
+                                        <Eye className="w-3 h-3 text-sky-400" />
+                                        <span>Details</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+
+                                {filteredVehiclesList.length === 0 && (
+                                  <tr>
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                      No vehicles matched the active filter or search query.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Filter Pills & Live Search */}

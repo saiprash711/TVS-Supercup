@@ -209,14 +209,18 @@ export async function syncAuctionActivities(
       if (!dealerId) {
         try {
           const profile = await provider.getDealerProfile(act.dealerId, token);
-          const displayName = profile?.dealerName || `Dealer ${act.dealerId}`;
-          const maskedName = displayName.trim().charAt(0).toUpperCase() + '*****';
+          const meta = (act.metadata || {}) as Record<string, any>;
+          const metaName = meta.customerName || meta.companyName || meta.dealerName;
+          const displayName: string = (profile?.dealerName && !profile.dealerName.startsWith('Dealer '))
+            ? profile.dealerName
+            : (metaName ? String(metaName) : (profile?.dealerName || `Dealer ${act.dealerId}`));
+          const maskedName: string = displayName.trim().charAt(0).toUpperCase() + '*****';
           const newDealer = await prisma.dealer.create({
             data: {
               externalDealerId: act.dealerId,
               displayName,
               maskedName,
-              city: profile?.city || 'Tamil Nadu',
+              city: profile?.city || (meta.location ? String(meta.location) : 'Tamil Nadu'),
               status: 'ACTIVE',
             },
           });

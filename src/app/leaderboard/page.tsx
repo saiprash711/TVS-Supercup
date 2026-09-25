@@ -7,6 +7,10 @@ import SwitchMode from '../components/watermelon/switch-mode';
 interface LeaderboardEntry {
   rank: number;
   dealer: string;
+  dealerName?: string;
+  maskedName?: string;
+  externalId?: string;
+  city?: string;
   points: number;
 }
 
@@ -22,6 +26,8 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [showMaskedNames, setShowMaskedNames] = useState(false);
 
   // Search & Pagination States
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,6 +42,9 @@ export default function LeaderboardPage() {
       if (data.leaderboard) {
         setLeaderboard(data.leaderboard);
         setCampaign(data.campaign);
+        if (data.isAdmin !== undefined) {
+          setIsAdminUser(Boolean(data.isAdmin));
+        }
         setLastUpdated(new Date());
       }
     } catch (error) {
@@ -48,16 +57,33 @@ export default function LeaderboardPage() {
   useEffect(() => {
     fetchLeaderboard();
 
-    // Check auth
+    // Check dealer auth
     fetch('/api/auth/login')
       .then(res => res.json())
       .then(data => setIsAuthenticated(data.authenticated))
+      .catch(() => {});
+
+    // Check admin auth
+    fetch('/api/admin/auth')
+      .then(res => res.json())
+      .then(data => {
+        if (data.authenticated) {
+          setIsAdminUser(true);
+        }
+      })
       .catch(() => {});
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchLeaderboard, 30000);
     return () => clearInterval(interval);
   }, [fetchLeaderboard]);
+
+  const getDisplayName = useCallback((entry: LeaderboardEntry) => {
+    if (isAdminUser && !showMaskedNames) {
+      return entry.dealerName || entry.dealer;
+    }
+    return entry.maskedName || entry.dealer;
+  }, [isAdminUser, showMaskedNames]);
 
   // Filtered leaderboard based on search query
   const filteredLeaderboard = useMemo(() => {
@@ -70,10 +96,14 @@ export default function LeaderboardPage() {
       if (!isNaN(rankNum) && entry.rank === rankNum) {
         return true;
       }
-      // Check dealer name match
-      return entry.dealer.toLowerCase().includes(q);
+      const dispName = getDisplayName(entry).toLowerCase();
+      const rawDealer = entry.dealer.toLowerCase();
+      const realName = (entry.dealerName || '').toLowerCase();
+      const extId = (entry.externalId || '').toLowerCase();
+      const city = (entry.city || '').toLowerCase();
+      return dispName.includes(q) || rawDealer.includes(q) || realName.includes(q) || extId.includes(q) || city.includes(q);
     });
-  }, [leaderboard, searchQuery]);
+  }, [leaderboard, searchQuery, getDisplayName]);
 
   // Reset to page 1 whenever search query or page size changes
   useEffect(() => {
@@ -155,16 +185,32 @@ export default function LeaderboardPage() {
           <div className="navbar-brand">
             <span className="navbar-logo">TVS Super Cup</span>
             <span className="navbar-badge">LIVE</span>
+            {isAdminUser && (
+              <Link href="/admin" className="navbar-badge" style={{ background: 'rgba(6, 214, 160, 0.2)', color: 'var(--accent-cyan)', borderColor: 'rgba(6, 214, 160, 0.4)', textDecoration: 'none' }}>
+                ADMIN MISSION CONTROL
+              </Link>
+            )}
           </div>
           <ul className="navbar-nav">
             <li><span className="navbar-link active">Leaderboard</span></li>
             {isAuthenticated && (
               <li><Link href="/dashboard" className="navbar-link">My Dashboard</Link></li>
             )}
+            {isAdminUser && (
+              <li>
+                <Link href="/admin" className="navbar-link" style={{ color: 'var(--accent-cyan)' }}>
+                  Admin Portal →
+                </Link>
+              </li>
+            )}
           </ul>
           <div className="navbar-user">
             <SwitchMode width={58} height={28} />
-            {isAuthenticated ? (
+            {isAdminUser ? (
+              <Link href="/admin" className="btn btn-primary btn-sm" style={{ background: 'var(--accent-cyan)', color: '#090d16', border: 'none' }}>
+                Admin Portal
+              </Link>
+            ) : isAuthenticated ? (
               <Link href="/dashboard" className="btn btn-primary btn-sm">My Dashboard</Link>
             ) : (
               <Link href="/" className="btn btn-primary btn-sm">Sign In</Link>
@@ -174,6 +220,73 @@ export default function LeaderboardPage() {
       </nav>
 
       <div className="content-wrapper">
+        {/* Admin Unmasked Leaderboard Notification Strip */}
+        {isAdminUser && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            background: 'linear-gradient(90deg, rgba(6, 214, 160, 0.14), rgba(15, 23, 42, 0.75))',
+            border: '1px solid rgba(6, 214, 160, 0.45)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '12px 20px',
+            marginBottom: 'var(--space-xl)',
+            boxShadow: '0 4px 20px rgba(6, 214, 160, 0.1)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'rgba(6, 214, 160, 0.2)',
+                border: '1px solid rgba(6, 214, 160, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1rem',
+              }}>
+                🛡️
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-cyan)', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Admin Mission Control • Unmasked Leaderboard</span>
+                  <span style={{ fontSize: '0.68rem', background: 'rgba(6, 214, 160, 0.25)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(6, 214, 160, 0.4)' }}>
+                    {showMaskedNames ? 'MASKED PREVIEW' : 'REAL DEALER NAMES ACTIVE'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  {showMaskedNames 
+                    ? 'Showing public masked view with asterisks (as seen by participating dealers).'
+                    : 'Showing verified, unmasked TVS dealership and enterprise legal entity names.'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                className="btn btn-sm"
+                style={{
+                  background: showMaskedNames ? 'rgba(255, 255, 255, 0.08)' : 'rgba(6, 214, 160, 0.2)',
+                  color: showMaskedNames ? 'var(--text-secondary)' : 'var(--accent-cyan)',
+                  border: `1px solid ${showMaskedNames ? 'var(--border-subtle)' : 'rgba(6, 214, 160, 0.5)'}`,
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                onClick={() => setShowMaskedNames(!showMaskedNames)}
+                title={showMaskedNames ? 'Display unmasked names' : 'Display masked names preview'}
+              >
+                {showMaskedNames ? '👁️ Unmask Dealer Names' : '🔒 Preview Public Masked View'}
+              </button>
+              <Link href="/admin" className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
+                ← Admin Console
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
         <div className="hero">
           <div className="hero-trophy">🏆</div>
@@ -205,8 +318,8 @@ export default function LeaderboardPage() {
               <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.3rem', marginBottom: 'var(--space-xs)', ...getRankStyle(entry.rank) }}>
                 #{entry.rank}
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 'var(--space-sm)', minHeight: '2.4em', display: 'flex', alignItems: 'center', justifyContent: 'center', wordBreak: 'break-word', padding: '0 4px' }}>
-                {entry.dealer}
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 'var(--space-sm)', minHeight: '2.4em', display: 'flex', alignItems: 'center', justifyContent: 'center', wordBreak: 'break-word', padding: '0 4px', color: 'var(--text-primary)' }}>
+                {getDisplayName(entry)}
               </div>
               <div className="stat-value lime" style={{ fontSize: '1.5rem' }}>
                 {entry.points}
@@ -339,7 +452,8 @@ export default function LeaderboardPage() {
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'center', width: '90px' }}>Rank</th>
-                    <th>Dealer Name</th>
+                    <th>{isAdminUser && !showMaskedNames ? 'Dealership Name (Unmasked)' : 'Dealer Name'}</th>
+                    {isAdminUser && !showMaskedNames && <th>External ID / City</th>}
                     <th style={{ textAlign: 'right', width: '120px' }}>Points</th>
                   </tr>
                 </thead>
@@ -357,7 +471,7 @@ export default function LeaderboardPage() {
                       </td>
                       <td className="dealer-cell">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{entry.dealer}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{getDisplayName(entry)}</span>
                           {entry.rank <= 3 && (
                             <span style={{
                               fontSize: '0.68rem',
@@ -373,6 +487,12 @@ export default function LeaderboardPage() {
                           )}
                         </div>
                       </td>
+                      {isAdminUser && !showMaskedNames && (
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)', fontWeight: 600 }}>{entry.externalId || '-'}</span>
+                          {entry.city ? <span style={{ marginLeft: '4px' }}>• {entry.city}</span> : ''}
+                        </td>
+                      )}
                       <td className="points-cell">{entry.points}</td>
                     </tr>
                   ))}

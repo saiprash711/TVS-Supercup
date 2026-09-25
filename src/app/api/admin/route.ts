@@ -38,13 +38,22 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get('action') || 'stats';
 
   try {
-    const campaign = await prisma.campaign.findFirst({
+    let campaign = await prisma.campaign.findFirst({
       where: { type: 'SUPER_CUP', status: 'ACTIVE' },
       orderBy: { startDate: 'desc' },
     });
 
     if (!campaign) {
-      return NextResponse.json({ error: 'No active campaign' }, { status: 404 });
+      campaign = await prisma.campaign.findFirst({
+        where: { type: 'SUPER_CUP' },
+        orderBy: { startDate: 'desc' },
+      }) || await prisma.campaign.findFirst({
+        orderBy: { startDate: 'desc' },
+      });
+    }
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'No active campaign found in database' }, { status: 404 });
     }
 
     switch (action) {
@@ -87,7 +96,7 @@ export async function GET(request: NextRequest) {
           where: { campaignId: campaign.id },
           include: { dealer: true },
           orderBy: { rank: 'asc' },
-          take: 50,
+          take: 250,
         });
 
         // Recent real-time activities for Overview telemetry stream
@@ -147,15 +156,19 @@ export async function GET(request: NextRequest) {
               matchNumber: a.match?.matchNumber || 1,
             };
           }),
-          leaderboard: leaderboard.map(s => ({
-            rank: s.rank,
-            dealerName: s.dealer.displayName,
-            maskedName: s.dealer.displayName,
-            externalId: s.dealer.externalDealerId,
-            city: s.dealer.city,
-            points: s.totalPoints,
-            dealerId: s.dealer.id,
-          })),
+          leaderboard: leaderboard.map(s => {
+            const displayName = s.dealer.displayName || `Dealer ${s.dealer.externalDealerId}`;
+            const maskedName = s.dealer.maskedName || (displayName ? displayName.charAt(0).toUpperCase() + '*****' : 'D*****');
+            return {
+              rank: s.rank,
+              dealerName: displayName,
+              maskedName: maskedName,
+              externalId: s.dealer.externalDealerId,
+              city: s.dealer.city,
+              points: s.totalPoints,
+              dealerId: s.dealer.id,
+            };
+          }),
           campaign: {
             id: campaign.id,
             name: campaign.name,
@@ -230,6 +243,203 @@ export async function GET(request: NextRequest) {
         } catch (err) {
           console.warn('Vehicle details fetch error:', err);
           return NextResponse.json({ vehicle: null, error: String(err) });
+        }
+      }
+
+      case 'auctionVehicles': {
+        let auctionId = searchParams.get('auctionId');
+        if (!auctionId) {
+          const liveMatch = await prisma.matchDay.findFirst({
+            where: { campaignId: campaign.id, status: 'LIVE' },
+          }) || await prisma.matchDay.findFirst({
+            where: { campaignId: campaign.id, status: 'UPCOMING' },
+            orderBy: { date: 'asc' },
+          });
+          auctionId = liveMatch?.auctionId || '2003';
+        }
+
+        const currentLotParam = searchParams.get('currentLot'); // e.g. "95", "123", "completed", "auto"
+
+        try {
+          const provider = getTVSProvider();
+          let rawVehicles = await provider.getAuctionVehicles(auctionId);
+
+          // If no vehicles returned (e.g. future scheduled auction), fallback to standard inventory template
+          if (!rawVehicles || rawVehicles.length === 0) {
+            rawVehicles = await provider.getAuctionVehicles('2003');
+            if (rawVehicles && rawVehicles.length > 0) {
+              rawVehicles = rawVehicles.map(v => ({
+                ...v,
+                stage: 'upcoming',
+                winner_id: null,
+                winner_bid_value: null,
+                current_bid: null,
+              }));
+            }
+          }
+
+          // Sort strictly by sequence number
+          const sorted = [...(rawVehicles || [])].sort((a: any, b: any) => {
+            const seqA = Number(a.sequence ?? a.seq_num ?? a.id ?? 0);
+            const seqB = Number(b.sequence ?? b.seq_num ?? b.id ?? 0);
+            return seqA - seqB;
+          });
+
+          const total = sorted.length;
+
+          // Check match day status
+          const match = await prisma.matchDay.findFirst({
+            where: { campaignId: campaign.id, auctionId },
+          });
+
+          // Fetch recent activity metadata to know if any vehicles have live bids/pre-bids or winners in DB
+          const recentActs = await prisma.dealerActivity.findMany({
+            where: {
+              campaignId: campaign.id,
+              OR: [
+                ...(match ? [{ matchId: match.id }] : []),
+                { externalTransactionId: { contains: auctionId } },
+              ],
+            },
+            select: { activityType: true, metadata: true, points: true, timestamp: true },
+          });
+
+          const vehicleActivityMap = new Map<string, any>();
+          for (const a of recentActs) {
+            try {
+              const meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+              const vId = String(meta.vehicleId || meta.id || '');
+              if (vId && !vehicleActivityMap.has(vId)) {
+                vehicleActivityMap.set(vId, {
+                  activityType: a.activityType,
+                  winningBid: meta.winningBid,
+                  bidAmount: meta.bidAmount,
+                  isPreBid: meta.isPreBid,
+                  isLeadingBid: meta.isLeadingBid,
+                });
+              }
+            } catch {}
+          }
+
+          // Determine active sequence
+          let activeSeq: number | null = null;
+          let isAllCompleted = false;
+
+          if (currentLotParam && currentLotParam !== 'auto') {
+            if (currentLotParam === 'completed' || currentLotParam === 'all_completed') {
+              isAllCompleted = true;
+              activeSeq = null;
+            } else {
+              const parsedLot = parseInt(currentLotParam);
+              if (!isNaN(parsedLot) && parsedLot >= 1 && parsedLot <= total) {
+                activeSeq = parsedLot;
+              }
+            }
+          }
+
+          if (activeSeq === null && !isAllCompleted) {
+            // Auto detection:
+            // 1. Look for explicit stage 'live'
+            const liveVeh = sorted.find((v: any) => {
+              const st = String(v.stage || '').toLowerCase();
+              return st === 'live' || st === 'running' || st === 'bidding' || st === 'active';
+            });
+            if (liveVeh) {
+              activeSeq = Number(liveVeh.sequence ?? liveVeh.seq_num ?? 1);
+            } else if (match?.status === 'UPCOMING') {
+              activeSeq = 1;
+            } else if (match?.status === 'COMPLETED') {
+              // Historical completed auction
+              isAllCompleted = true;
+              activeSeq = null;
+            } else {
+              // In LIVE auction where TVS has marked all lots closed, default to active block (e.g. Lot 123 so Lots 124-128 are upcoming)
+              // or first unclosed vehicle if any exist
+              const firstUnclosed = sorted.find((v: any) => {
+                const st = String(v.stage || '').toLowerCase();
+                return v.winner_id == null && st !== 'closed' && st !== 'completed';
+              });
+              if (firstUnclosed) {
+                activeSeq = Number(firstUnclosed.sequence ?? firstUnclosed.seq_num ?? 1);
+              } else {
+                // If all closed, default to Lot 123 (or Lot 1 if less than 6 cars) so next 5 upcoming cars include the final cars including #128!
+                activeSeq = total > 5 ? Math.max(1, total - 5) : 1;
+              }
+            }
+          }
+
+          // Enrich vehicles with standard status
+          const enrichedVehicles = sorted.map((v: any) => {
+            const seqNum = Number(v.sequence ?? v.seq_num ?? v.id ?? 0);
+            const actInfo = vehicleActivityMap.get(String(v.vehicle_id || v.id)) || {};
+            
+            let status: 'COMPLETED' | 'ONGOING' | 'UPCOMING' = 'UPCOMING';
+            if (isAllCompleted) {
+              status = 'COMPLETED';
+            } else if (activeSeq !== null) {
+              if (seqNum < activeSeq) {
+                status = 'COMPLETED';
+              } else if (seqNum === activeSeq) {
+                status = 'ONGOING';
+              } else {
+                status = 'UPCOMING';
+              }
+            }
+
+            return {
+              id: v.id,
+              vehicleId: v.vehicle_id || v.id,
+              lotNumber: seqNum,
+              sequence: seqNum,
+              title: v.title || v.make_model || 'Auction Vehicle',
+              makeModel: v.make_model || v.title || '',
+              makeName: v.make_name || '',
+              modelName: v.model_name || '',
+              registrationNumber: v.registration_number || '',
+              fuelType: v.fuel_type || '',
+              transmission: v.transmission || '',
+              yearOfMfg: v.year_of_mfg || '',
+              speedometer: v.speedometer || '',
+              startBidValue: Number(v.start_bid_value || 0),
+              currentBid: Number(v.current_bid || actInfo.bidAmount || v.start_bid_value || 0),
+              winnerBidValue: v.winner_bid_value ? Number(v.winner_bid_value) : (actInfo.winningBid ? Number(actInfo.winningBid) : null),
+              winnerId: v.winner_id || null,
+              stage: v.stage || '',
+              vehicleStatus: v.vehicle_status || '',
+              imageUrl: v.image_url || '',
+              preBidValue: v.pre_bid_value ? Number(v.pre_bid_value) : null,
+              hasPreBid: Boolean(v.pre_bid_value || actInfo.isPreBid),
+              locationName: v.location_name || '',
+              status, // COMPLETED, ONGOING, UPCOMING
+            };
+          });
+
+          const completedList = enrichedVehicles.filter(v => v.status === 'COMPLETED');
+          const ongoingCar = enrichedVehicles.find(v => v.status === 'ONGOING') || null;
+          const upcomingList = enrichedVehicles.filter(v => v.status === 'UPCOMING');
+          const nextCar = upcomingList[0] || null;
+          const upcoming5 = upcomingList.slice(0, 5);
+
+          return NextResponse.json({
+            auctionId,
+            matchStatus: match?.status || 'LIVE',
+            stats: {
+              total,
+              completed: completedList.length,
+              ongoing: ongoingCar ? 1 : 0,
+              upcoming: upcomingList.length,
+              activeLotNumber: activeSeq,
+              isAllCompleted,
+              percentComplete: total > 0 ? Math.round((completedList.length / total) * 100) : 0,
+            },
+            ongoingCar,
+            nextCar,
+            upcomingCars: upcoming5,
+            vehicles: enrichedVehicles,
+          });
+        } catch (err: any) {
+          console.error('Error fetching auction vehicles:', err);
+          return NextResponse.json({ error: err?.message || 'Failed to fetch auction vehicles' }, { status: 500 });
         }
       }
 
@@ -767,9 +977,9 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Admin API error:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal error' }, { status: 500 });
   }
 }
 
@@ -781,13 +991,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    const campaign = await prisma.campaign.findFirst({
+    let campaign = await prisma.campaign.findFirst({
       where: { type: 'SUPER_CUP', status: 'ACTIVE' },
       orderBy: { startDate: 'desc' },
     });
 
     if (!campaign) {
-      return NextResponse.json({ error: 'No active campaign' }, { status: 404 });
+      campaign = await prisma.campaign.findFirst({
+        where: { type: 'SUPER_CUP' },
+        orderBy: { startDate: 'desc' },
+      }) || await prisma.campaign.findFirst({
+        orderBy: { startDate: 'desc' },
+      });
+    }
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'No active campaign found in database' }, { status: 404 });
     }
 
     switch (action) {
@@ -984,8 +1203,8 @@ export async function POST(request: NextRequest) {
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Admin POST error:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal error' }, { status: 500 });
   }
 }

@@ -123,16 +123,20 @@ export async function recalculateRankings(campaignId: number) {
 }
 
 /**
- * Get the leaderboard for a campaign (masked names only).
+ * Get the leaderboard for a campaign.
+ * By default, dealer names are masked unless unmasked = true or MASKING_ENABLED = false.
  */
-export async function getLeaderboard(campaignId: number, limit?: number) {
+export async function getLeaderboard(campaignId: number, limit?: number, unmasked?: boolean) {
   const scores = await prisma.dealerScore.findMany({
     where: { campaignId },
     include: {
       dealer: {
         select: {
+          id: true,
+          externalDealerId: true,
           maskedName: true,
           displayName: true,
+          city: true,
         },
       },
     },
@@ -140,11 +144,23 @@ export async function getLeaderboard(campaignId: number, limit?: number) {
     take: limit,
   });
 
-  return scores.map((s) => ({
-    rank: s.rank,
-    dealer: MASKING_ENABLED ? s.dealer.maskedName : (s.dealer.displayName || s.dealer.maskedName),
-    points: s.totalPoints,
-  }));
+  return scores.map((s) => {
+    const isUnmasked = unmasked ?? !MASKING_ENABLED;
+    const realName = s.dealer.displayName || s.dealer.maskedName || `Dealer ${s.dealer.externalDealerId}`;
+    const maskedName = s.dealer.maskedName || (s.dealer.displayName ? s.dealer.displayName.trim().charAt(0).toUpperCase() + '*****' : 'D*****');
+
+    return {
+      rank: s.rank,
+      dealer: isUnmasked ? realName : maskedName,
+      dealerName: isUnmasked ? realName : maskedName,
+      maskedName: maskedName,
+      externalId: isUnmasked ? s.dealer.externalDealerId : undefined,
+      city: s.dealer.city,
+      points: s.totalPoints,
+      dealerId: s.dealer.id,
+      isUnmasked,
+    };
+  });
 }
 
 /**
