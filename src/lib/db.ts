@@ -13,6 +13,64 @@ interface ResolvedDb {
   isServerless: boolean;
 }
 
+// Static AST hints for @vercel/nft to bundle prisma/dev.db in Next.js Serverless builds
+try {
+  const _hint = path.join(process.cwd(), 'prisma/dev.db');
+  if (fs.existsSync(_hint)) {
+    // Traced by NFT
+  }
+} catch {}
+
+function findDatabaseSource(): string | null {
+  const candidates = [
+    path.join(process.cwd(), 'prisma/dev.db'),
+    path.join(process.cwd(), 'dev.db'),
+    path.resolve(__dirname, 'prisma/dev.db'),
+    path.resolve(__dirname, '../prisma/dev.db'),
+    path.resolve(__dirname, '../../prisma/dev.db'),
+    path.resolve(__dirname, '../../../prisma/dev.db'),
+    path.resolve(__dirname, '../../../../prisma/dev.db'),
+    path.resolve(__dirname, '../../../../../prisma/dev.db'),
+    '/var/task/prisma/dev.db',
+    '/var/task/dev.db',
+  ];
+
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c) && fs.statSync(c).size > 0) {
+        return c;
+      }
+    } catch {}
+  }
+
+  // Recursive search in Lambda root if not in standard locations
+  const searchRoots = ['/var/task', process.cwd()];
+  for (const root of searchRoots) {
+    try {
+      if (!fs.existsSync(root)) continue;
+      const search = (dir: string, depth = 0): string | null => {
+        if (depth > 3) return null;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (!entry.isDirectory() && entry.name === 'dev.db' && fs.statSync(full).size > 0) {
+            return full;
+          }
+          if (entry.isDirectory() && !['node_modules', '.next', '.git'].includes(entry.name)) {
+            const sub = search(full, depth + 1);
+            if (sub) return sub;
+          }
+        }
+        return null;
+      };
+      const found = search(root);
+      if (found) return found;
+    } catch {}
+  }
+
+  return null;
+}
+
 function resolveDatabase(): ResolvedDb {
   const envUrl = process.env.DATABASE_URL?.trim();
 
@@ -27,24 +85,7 @@ function resolveDatabase(): ResolvedDb {
   if (isServerless) {
     const tmpDir = os.tmpdir() || '/tmp';
     const tmpDbPath = path.join(tmpDir, 'supercup-serverless.db');
-
-    // Candidate locations for bundled dev.db inside the serverless container
-    const candidates = [
-      path.join(process.cwd(), 'prisma', 'dev.db'),
-      path.join(process.cwd(), 'dev.db'),
-      path.resolve(__dirname, '..', '..', '..', 'prisma', 'dev.db'),
-      path.resolve(__dirname, '..', '..', 'prisma', 'dev.db'),
-      path.resolve(__dirname, '..', 'prisma', 'dev.db'),
-      path.resolve(__dirname, 'dev.db'),
-    ];
-
-    const sourceFile = candidates.find(c => {
-      try {
-        return fs.existsSync(c) && fs.statSync(c).size > 0;
-      } catch {
-        return false;
-      }
-    });
+    const sourceFile = findDatabaseSource();
 
     if (sourceFile) {
       try {
@@ -52,16 +93,16 @@ function resolveDatabase(): ResolvedDb {
         const tmpExists = fs.existsSync(tmpDbPath);
         const tmpStat = tmpExists ? fs.statSync(tmpDbPath) : null;
 
-        // Copy if missing in tmp or size differs (e.g. updated bundle)
+        // Copy if missing in tmp or size differs (e.g. updated build deployment)
         if (!tmpStat || tmpStat.size !== sourceStat.size) {
           fs.copyFileSync(sourceFile, tmpDbPath);
-          console.log(`[DB] Initialized serverless SQLite db from ${sourceFile} (${sourceStat.size} bytes) to ${tmpDbPath}`);
+          console.log(`[DB] Successfully initialized serverless SQLite db from ${sourceFile} (${sourceStat.size} bytes) to ${tmpDbPath}`);
         }
       } catch (err) {
         console.error('[DB] Failed to copy SQLite db to /tmp:', err);
       }
     } else {
-      console.warn('[DB] Warning: Could not locate source dev.db in candidates:', candidates);
+      console.warn('[DB] Warning: Could not locate source dev.db in serverless container.');
     }
 
     if (fs.existsSync(tmpDbPath)) {
@@ -72,14 +113,14 @@ function resolveDatabase(): ResolvedDb {
   }
 
   // Local development / fallback
-  const localDb = path.join(process.cwd(), 'prisma', 'dev.db');
+  const localDb = path.join(process.cwd(), 'prisma/dev.db');
   if (fs.existsSync(localDb)) {
     const url = `file:${localDb.replace(/\\/g, '/')}`;
     process.env.DATABASE_URL = url;
     return { url, isSqlite: true, isServerless: false };
   }
 
-  const fallback = process.env.DATABASE_URL || 'file:./dev.db';
+  const fallback = process.env.DATABASE_URL || 'file:./prisma/dev.db';
   return { url: fallback, isSqlite: true, isServerless };
 }
 

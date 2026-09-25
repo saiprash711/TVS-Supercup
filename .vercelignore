@@ -5,13 +5,10 @@
 .env.*
 *.log
 
-# Local database
-prisma/dev.db
+# Local database wal/temp files only (keep dev.db for serverless bundle)
 prisma/dev.db-journal
 prisma/dev.db-wal
-prisma/*.db
-prisma/*.db-journal
-prisma/*.db-wal
+prisma/dev.db-shm
 
 # Development scripts
 scripts/

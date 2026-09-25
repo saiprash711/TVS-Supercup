@@ -4,7 +4,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   ...(process.env.DOCKER_BUILD ? { output: 'standalone' } : {}),
   outputFileTracingIncludes: {
-    '/**': ['./prisma/dev.db'],
+    '/api/**/*': ['./prisma/dev.db'],
+    '/api/**': ['./prisma/dev.db'],
+    '/**/*': ['./prisma/dev.db'],
   },
   experimental: {
     serverActions: {
