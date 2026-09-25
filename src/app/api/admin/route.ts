@@ -353,8 +353,7 @@ export async function GET(request: NextRequest) {
               isAllCompleted = true;
               activeSeq = null;
             } else {
-              // In LIVE auction where TVS has marked all lots closed, default to active block (e.g. Lot 123 so Lots 124-128 are upcoming)
-              // or first unclosed vehicle if any exist
+              // Check if any vehicle is still unclosed
               const firstUnclosed = sorted.find((v: any) => {
                 const st = String(v.stage || '').toLowerCase();
                 return v.winner_id == null && st !== 'closed' && st !== 'completed';
@@ -362,10 +361,19 @@ export async function GET(request: NextRequest) {
               if (firstUnclosed) {
                 activeSeq = Number(firstUnclosed.sequence ?? firstUnclosed.seq_num ?? 1);
               } else {
-                // If all closed, default to Lot 123 (or Lot 1 if less than 6 cars) so next 5 upcoming cars include the final cars including #128!
-                activeSeq = total > 5 ? Math.max(1, total - 5) : 1;
+                // All vehicles in this auction session are concluded/hammered
+                isAllCompleted = true;
+                activeSeq = null;
               }
             }
+          }
+
+          // If all lots are concluded, ensure matchDay record is marked COMPLETED
+          if (isAllCompleted && match && match.status !== 'COMPLETED') {
+            await prisma.matchDay.update({
+              where: { id: match.id },
+              data: { status: 'COMPLETED' },
+            }).catch(() => {});
           }
 
           // Enrich vehicles with standard status
@@ -422,7 +430,7 @@ export async function GET(request: NextRequest) {
 
           return NextResponse.json({
             auctionId,
-            matchStatus: match?.status || 'LIVE',
+            matchStatus: isAllCompleted ? 'COMPLETED' : (match?.status || 'LIVE'),
             stats: {
               total,
               completed: completedList.length,

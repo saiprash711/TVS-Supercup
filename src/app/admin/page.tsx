@@ -2659,6 +2659,100 @@ export default function AdminPage() {
 
                       {/* ── Mode 1: Next 5 Upcoming Hero Showcase ── */}
                       {vehicleViewTab === 'UPCOMING_5' && (
+                        vehicleQueueStats?.isAllCompleted ? (
+                          <div style={{
+                            background: 'linear-gradient(135deg, rgba(6, 214, 160, 0.08) 0%, rgba(56, 189, 248, 0.05) 100%)',
+                            border: '1px solid rgba(6, 214, 160, 0.3)',
+                            borderRadius: 'var(--radius-lg)',
+                            padding: '28px 24px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px',
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{
+                                  width: '48px',
+                                  height: '48px',
+                                  borderRadius: '12px',
+                                  background: 'rgba(6, 214, 160, 0.15)',
+                                  border: '1px solid rgba(6, 214, 160, 0.35)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'var(--accent-cyan)',
+                                }}>
+                                  <CheckCircle2 className="w-7 h-7" />
+                                </div>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                      Auction #{liveAuctionId} Concluded
+                                    </h4>
+                                    <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>
+                                      ALL {vehicleQueueStats?.total || allAuctionVehicles.length} LOTS COMPLETED
+                                    </span>
+                                  </div>
+                                  <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    All vehicles in this auction session have been hammered and processed. The bidding block is currently closed.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => setVehicleViewTab('ALL')}
+                                  style={{ gap: '6px' }}
+                                >
+                                  <Car className="w-4 h-4" />
+                                  <span>View All {allAuctionVehicles.length} Vehicles</span>
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => setExportModalOpen(true)}
+                                  style={{ gap: '6px', border: '1px solid var(--border-subtle)' }}
+                                >
+                                  <Download className="w-4 h-4 text-sky-400" />
+                                  <span>Export Auction Results</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Metric summary row for concluded auction */}
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                              gap: '12px',
+                              paddingTop: '16px',
+                              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                            }}>
+                              <div style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lots Hammered</div>
+                                <div style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+                                  {vehicleQueueStats?.completed || allAuctionVehicles.length} / {vehicleQueueStats?.total || allAuctionVehicles.length}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>100% Completion Rate</div>
+                              </div>
+
+                              <div style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Auction Status</div>
+                                <div style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>
+                                  CONCLUDED
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Session Complete</div>
+                              </div>
+
+                              <div style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Active Bidding Block</div>
+                                <div style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                                  0 Active Lots
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Session Finalized</div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                           {/* Spotlight: Ongoing Car (Live) vs Next Car (On Deck) */}
                           <div className="runorder-spotlight-grid">
@@ -3123,6 +3217,7 @@ export default function AdminPage() {
                             )}
                           </div>
                         </div>
+                        )
                       )}
 
                       {/* ── Mode 2: Full Catalog / Searchable Run Order List ── */}
