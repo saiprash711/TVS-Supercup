@@ -104,6 +104,11 @@ export interface TVSAuctionProvider {
    * Get all vehicles listed for an auction.
    */
   getAuctionVehicles(auctionId?: string, token?: string): Promise<any[]>;
+
+  /**
+   * Find a TVS customer profile by company name.
+   */
+  findCustomerByCompanyName?(name: string): TVSCustomerProfile | null;
 }
 
 // ─── Timestamp Utilities ───────────────────────────────────────────────────
@@ -152,6 +157,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
   private userMapExpiry: number = 0;
   private userMappingPromise: Promise<void> | null = null;
   private customerMap: Map<string, TVSCustomerProfile> = new Map();
+  private companyNameToCustomerMap: Map<string, TVSCustomerProfile> = new Map();
   private customerMapExpiry: number = 0;
   private customerMappingPromise: Promise<void> | null = null;
   private settledVehicleIds: Set<string | number> = new Set();
@@ -179,6 +185,9 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         this.customerMap.set(String(cId), cust);
         if (cust.code) this.customerMap.set(String(cust.code), cust);
         if (cust.phone) this.customerMap.set(String(cust.phone).trim(), cust);
+        if (cust.companyName) {
+          this.companyNameToCustomerMap.set(cust.companyName.trim().toLowerCase(), cust);
+        }
       }
       this.customerMapExpiry = Date.now() + 1000 * 60 * 60 * 2;
     } catch {
@@ -255,6 +264,9 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
             this.customerMap.set(String(c.id), prof);
             if (prof.code) this.customerMap.set(String(prof.code), prof);
             if (prof.phone) this.customerMap.set(String(prof.phone), prof);
+            if (prof.companyName) {
+              this.companyNameToCustomerMap.set(prof.companyName.trim().toLowerCase(), prof);
+            }
           }
           this.customerMapExpiry = Date.now() + 1000 * 60 * 60 * 2;
         } else {
@@ -484,6 +496,25 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
   resolveDealerKeyId(rawId: string | number): string {
     const s = String(rawId).trim();
     return this.userToKeyMap.get(s) || s;
+  }
+
+  findCustomerByCompanyName(name: string): TVSCustomerProfile | null {
+    if (!name) return null;
+    const clean = name.trim().toLowerCase();
+    if (this.companyNameToCustomerMap.has(clean)) {
+      return this.companyNameToCustomerMap.get(clean)!;
+    }
+    for (const [key, cust] of this.companyNameToCustomerMap.entries()) {
+      if (key && (clean.startsWith(key) || key.startsWith(clean))) {
+        return cust;
+      }
+    }
+    for (const cust of this.customerMap.values()) {
+      if (cust.companyName && (cust.companyName.toLowerCase().includes(clean) || clean.includes(cust.companyName.toLowerCase()))) {
+        return cust;
+      }
+    }
+    return null;
   }
 
   async getDealerActivities(dealerId: string, auctionId: string = '1991', token?: string): Promise<TVSAuctionActivity[]> {
@@ -749,15 +780,24 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       }
     }
 
-    // 1. Process Winners (BUY transactions) directly from vehicles list
+    // 1. Process Winners (BUY transactions) & Sellers (SELL transactions) directly from vehicles list
     if (Array.isArray(vehicles)) {
       for (const veh of vehicles) {
         if (veh.winner_id != null && (veh.winner_bid_value != null || veh.start_bid_value != null)) {
-          const dealerId = this.resolveDealerKeyId(veh.winner_id);
+          const buyerDealerId = this.resolveDealerKeyId(veh.winner_id);
           const winAmount = Number(veh.winner_bid_value || veh.start_bid_value || 0);
+
+          // Resolve Seller Dealership from customer_name or TVS customer mapping
+          const rawSellerName = (veh.customer_name || '').trim();
+          const sellerCustomer = rawSellerName ? this.findCustomerByCompanyName(rawSellerName) : null;
+          const sellerDealerId = sellerCustomer?.code || (sellerCustomer?.id ? String(sellerCustomer.id) : (rawSellerName ? `SELLER-${rawSellerName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : ''));
+          const sellerCity = sellerCustomer?.city || veh.location_name || 'Tamil Nadu';
+          const sellerPhone = sellerCustomer?.phone || '';
+
+          // 1A. BUY Activity for winning bidder
           activities.push({
             transactionId: `BUY-${auctionId}-${veh.id || veh.vehicle_id}`,
-            dealerId,
+            dealerId: buyerDealerId,
             auctionId,
             activityType: 'BUY',
             vehicleId: String(veh.vehicle_id || veh.id),
@@ -768,6 +808,15 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
               regNo: veh.registration_number,
               winningBid: winAmount,
               winnerId: veh.winner_id,
+              // Full Seller Information
+              sellerName: rawSellerName,
+              sellerDealerId,
+              sellerCustomerCode: sellerCustomer?.code || '',
+              sellerCustomerId: sellerCustomer?.id || null,
+              sellerCity,
+              sellerPhone,
+              customerName: rawSellerName,
+              // Full Vehicle Specs
               fuelType: veh.fuel_type,
               transmission: veh.transmission,
               yearOfMfg: veh.year_of_mfg,
@@ -778,10 +827,51 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
               sequence: veh.sequence,
               lotNo: veh.sequence || veh.seq_num,
               location: veh.location_name,
-              customerName: veh.customer_name,
             },
             timestamp: veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date(),
           });
+
+          // 1B. SELL Activity for seller / origin dealership
+          if (rawSellerName && sellerDealerId) {
+            activities.push({
+              transactionId: `SELL-${auctionId}-${veh.id || veh.vehicle_id}`,
+              dealerId: sellerDealerId,
+              auctionId,
+              activityType: 'SELL',
+              vehicleId: String(veh.vehicle_id || veh.id),
+              amount: winAmount,
+              metadata: {
+                vehicleId: veh.vehicle_id || veh.id,
+                vehicleName: veh.title || veh.make_model || 'Auction Vehicle',
+                regNo: veh.registration_number,
+                saleAmount: winAmount,
+                winningBid: winAmount,
+                // Full Buyer Information
+                buyerDealerId,
+                buyerWinnerId: veh.winner_id,
+                // Full Seller Information
+                sellerName: rawSellerName,
+                sellerDealerId,
+                sellerCustomerCode: sellerCustomer?.code || '',
+                sellerCustomerId: sellerCustomer?.id || null,
+                sellerCity,
+                sellerPhone,
+                customerName: rawSellerName,
+                // Full Vehicle Specs
+                fuelType: veh.fuel_type,
+                transmission: veh.transmission,
+                yearOfMfg: veh.year_of_mfg,
+                speedometer: veh.speedometer,
+                startBidValue: veh.start_bid_value,
+                expectedPrice: veh.expected_price,
+                imageUrl: veh.image_url,
+                sequence: veh.sequence,
+                lotNo: veh.sequence || veh.seq_num,
+                location: veh.location_name,
+              },
+              timestamp: veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date(),
+            });
+          }
         }
       }
     }
@@ -1098,6 +1188,10 @@ export class MockTVSAuctionProvider implements TVSAuctionProvider {
 
   async getAuctionVehicles(): Promise<any[]> {
     return [];
+  }
+
+  findCustomerByCompanyName(): TVSCustomerProfile | null {
+    return null;
   }
 }
 

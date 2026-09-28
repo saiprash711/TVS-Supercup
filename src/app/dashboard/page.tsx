@@ -89,7 +89,7 @@ export default function DashboardPage() {
                 particleCount: 60,
                 spread: 70,
                 origin: { y: 0.7 },
-                colors: ['#e11d48', '#38bdf8', '#06d6a0', '#f59e0b']
+                colors: ['#364ea2', '#6cc14f', '#0087e0', '#facc15']
               });
             }, 800);
           }
@@ -169,13 +169,13 @@ export default function DashboardPage() {
           <ul className="navbar-nav">
             <li>
               <Link href="/leaderboard" className="navbar-link">
-                <Award className="w-4 h-4 text-amber-400" />
+                <Award className="w-4 h-4 text-amber-500" />
                 <span>Leaderboard</span>
               </Link>
             </li>
             <li>
               <span className="navbar-link active">
-                <Layers className="w-4 h-4 text-rose-500" />
+                <Layers className="w-4 h-4 text-[#364ea2]" />
                 <span>My Dashboard</span>
               </span>
             </li>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
             <div className="score-display-bg-glow"></div>
             
             <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldCheck className="w-4 h-4 text-rose-500" />
+              <ShieldCheck className="w-4 h-4 text-[#364ea2]" />
               OFFICIAL SUPER CUP NATIONAL STANDINGS
             </div>
 
@@ -326,7 +326,7 @@ export default function DashboardPage() {
                 )}
                 <tr>
                   <td>
-                    <Sparkles className="w-4 h-4 text-rose-500 mr-2" />
+                    <Sparkles className="w-4 h-4 text-amber-500 mr-2" />
                     All 4 Matches Completion Bonus
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>Completion Perk</td>
@@ -443,7 +443,7 @@ export default function DashboardPage() {
                   ) : match.status === 'UPCOMING' ? (
                     <Clock className="w-7 h-7 text-sky-400" />
                   ) : match.status === 'LIVE' ? (
-                    <Radio className="w-7 h-7 text-rose-500 animate-pulse" />
+                    <Radio className="w-7 h-7 text-[#6cc14f] animate-pulse" />
                   ) : (
                     <span style={{ opacity: 0.4 }}>✖</span>
                   )}
@@ -521,7 +521,7 @@ export default function DashboardPage() {
                       <td style={{ fontSize: '0.85rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                           {act.metadata?.vehicleName ? (
-                            <strong style={{ color: '#ffffff' }}>{String(act.metadata.vehicleName)}</strong>
+                            <strong style={{ color: 'var(--text-primary)' }}>{String(act.metadata.vehicleName)}</strong>
                           ) : null}
                           {act.metadata?.regNo ? (
                             <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>({String(act.metadata.regNo)})</span>
@@ -540,17 +540,17 @@ export default function DashboardPage() {
                             <span style={{ color: 'var(--text-muted)' }}>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span>
                           ) : null}
                           {Boolean(act.metadata?.isLeadingBid) ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(6, 214, 160, 0.15)', color: 'var(--accent-cyan)', fontSize: '0.72rem', fontWeight: 700, border: '1px solid rgba(6, 214, 160, 0.3)' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(108, 193, 79, 0.15)', color: 'var(--accent-cyan)', fontSize: '0.72rem', fontWeight: 700, border: '1px solid rgba(108, 193, 79, 0.3)' }}>
                               🏆 Leading Bid
                             </span>
                           ) : null}
                           {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(225, 29, 72, 0.15)', color: '#fda4af', fontSize: '0.72rem', border: '1px solid rgba(225, 29, 72, 0.3)' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                               Outbid (#{String(act.metadata.bidRank)})
                             </span>
                           ) : null}
                           {Boolean(act.metadata?.isPreBid) ? (
-                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-blue)', fontSize: '0.72rem', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                            <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(0, 135, 224, 0.12)', color: 'var(--accent-blue)', fontSize: '0.72rem', border: '1px solid rgba(0, 135, 224, 0.3)' }}>
                               ⚡ Pre-Bid
                             </span>
                           ) : null}
@@ -578,13 +578,13 @@ export default function DashboardPage() {
               </table>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)' }}>
+            <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(54, 78, 162, 0.03)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)' }}>
               <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📡</div>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', marginBottom: '6px' }}>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
                 No Live Auction Events Recorded In Current Window
               </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
-                Next live session: <strong style={{ color: '#ffffff' }}>{getNextAuctionDateLabel()}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
+                Next live session: <strong style={{ color: 'var(--text-primary)' }}>{getNextAuctionDateLabel()}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
               </p>
             </div>
           )}

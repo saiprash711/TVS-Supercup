@@ -161,7 +161,7 @@ export default function ScrollVideoHero({
               <span className="ping-dot" />
               <span className="ping-ring" />
             </span>
-            <Radio className="w-3.5 h-3.5 text-rose-500" />
+            <Radio className="w-3.5 h-3.5 text-[#6cc14f]" />
             <span className="broadcast-text">TVS TELEMETRY LIVE</span>
             <span className="broadcast-divider">•</span>
             <span className="broadcast-campaign">SEP 2026 CAMPAIGN</span>
@@ -181,7 +181,7 @@ export default function ScrollVideoHero({
           }}
         >
           <div className="hero-tag-strip">
-            <Flame className="w-3.5 h-3.5 text-rose-500" />
+            <Flame className="w-3.5 h-3.5 text-[#364ea2]" />
             <span>DEALER SUPERCUP 2026</span>
           </div>
           <h1 className="scroll-hero-title">
@@ -335,7 +335,7 @@ export default function ScrollVideoHero({
           </div>
           <div className="stats-bar-divider" />
           <div className="stats-bar-item">
-            <Zap className="w-4 h-4 text-rose-500" />
+            <Zap className="w-4 h-4 text-[#6cc14f]" />
             <span className="stats-bar-number">LIVE</span>
             <span className="stats-bar-label">Telemetry Stream</span>
           </div>

@@ -16,6 +16,7 @@ import { recalculateRankings } from '@/lib/services/ranking-engine';
 import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
 import { getTVSProvider } from '@/lib/services/tvs-integration';
 import { clearPointRulesCache } from '@/lib/services/points-engine';
+import * as XLSX from 'xlsx';
 
 // Serverless function config for live auction stream processing
 export const maxDuration = 60; // 60 seconds max execution on Vercel
@@ -640,6 +641,7 @@ export async function GET(request: NextRequest) {
 
       case 'export': {
         const exportType = searchParams.get('type') || 'dealers';
+        const format = (searchParams.get('format') || 'xlsx').toLowerCase();
         const dateStr = new Date().toISOString().split('T')[0];
 
         const escapeCsv = (val: any) => {
@@ -668,7 +670,49 @@ export async function GET(request: NextRequest) {
           return { date, time, full: `${date} ${time}` };
         };
 
-        if (exportType === 'activities') {
+        // Helper to return either native Excel (.xlsx) or UTF-8 BOM CSV (.csv)
+        const sendExportResponse = (
+          headers: string[],
+          rowsData: (string | number)[][],
+          baseFilename: string,
+          sheetTitle: string
+        ) => {
+          if (format === 'csv') {
+            const csvContent = '\uFEFF' + [headers, ...rowsData].map(r => r.map(escapeCsv).join(',')).join('\n');
+            return new NextResponse(csvContent, {
+              headers: {
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${baseFilename}.csv"`,
+              },
+            });
+          }
+
+          // Generate Native Excel (.xlsx)
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...rowsData]);
+          const colWidths = headers.map((h, i) => {
+            let maxLen = h.length;
+            for (const r of rowsData) {
+              const cellVal = String(r[i] ?? '');
+              if (cellVal.length > maxLen) maxLen = Math.min(cellVal.length, 45);
+            }
+            return { wch: maxLen + 3 };
+          });
+          ws['!cols'] = colWidths;
+          XLSX.utils.book_append_sheet(wb, ws, sheetTitle.slice(0, 31));
+          const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+          return new NextResponse(buffer, {
+            headers: {
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'Content-Disposition': `attachment; filename="${baseFilename}.xlsx"`,
+            },
+          });
+        };
+
+        const provider = getTVSProvider();
+
+        if (exportType === 'activities' || exportType === 'transactions') {
           let auctionId = searchParams.get('auctionId');
           if (!auctionId) {
             const liveMatch = await prisma.matchDay.findFirst({
@@ -689,7 +733,7 @@ export async function GET(request: NextRequest) {
             ],
           };
 
-          // By default, export only the Auction Results (vehicles won / sold)
+          // By default (or for transactions), export the paired Auction Results (vehicles won / sold)
           if (!isAll) {
             whereClause.activityType = 'BUY';
           }
@@ -710,144 +754,180 @@ export async function GET(request: NextRequest) {
             return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
           });
 
-          const headers = !isAll ? [
-            'Lot #',
-            'Auction ID',
-            'Date (IST)',
-            'Time (IST)',
-            'Date & Time (IST)',
-            'Vehicle ID',
-            'Vehicle Name',
-            'Registration Number',
-            'Fuel Type',
-            'Transmission',
-            'Year of Mfg',
-            'Speedometer (KM)',
-            'Start Bid Value (INR)',
-            'Winning Bid Amount (INR)',
-            'Winner Dealer ID',
-            'Winner Company Name',
-            'Dealer Phone',
-            'Dealer City',
-            'Points Awarded',
-            'Activity Type',
-            'Transaction ID',
-            'Match Number',
-            'Campaign Name',
-          ] : [
-            'Activity ID',
-            'Auction ID',
-            'Date (IST)',
-            'Time (IST)',
-            'Date & Time (IST)',
-            'Activity Type',
-            'Transaction ID',
-            'Dealer ID',
-            'Company Name',
-            'Dealer Phone',
-            'City',
-            'Points Awarded',
-            'Amount / Bid Value (INR)',
-            'Winning Bid (INR)',
-            'Vehicle ID',
-            'Vehicle Name',
-            'Registration Number',
-            'Fuel Type',
-            'Transmission',
-            'Year of Mfg',
-            'Speedometer (KM)',
-            'Start Bid Value (INR)',
-            'Bid Rank',
-            'Is Leading Bid',
-            'Is Pre-Bid',
-            'Total Bids on Vehicle',
-            'Match Number',
-            'Campaign Name',
-          ];
+          if (!isAll) {
+            // Bilateral Auction Transactions pairing Seller and Buyer side-by-side
+            const headers = [
+              'Lot #',
+              'Auction ID',
+              'Match Number',
+              'Date (IST)',
+              'Time (IST)',
+              'Date & Time (IST)',
+              'Vehicle ID',
+              'Vehicle Name',
+              'Registration Number',
+              'Fuel Type',
+              'Transmission',
+              'Year of Mfg',
+              'Speedometer (KM)',
+              'Starting Bid (INR)',
+              'Reserve / Expected Price (INR)',
+              'Winning Bid / Sale Price (INR)',
+              'Seller / Origin Dealership',
+              'Seller Customer Code',
+              'Seller City',
+              'Seller Phone',
+              'Buyer / Winner Dealership',
+              'Buyer Dealer ID',
+              'Buyer City',
+              'Buyer Phone',
+              'Buyer Points',
+              'Seller Points',
+              'Transaction ID',
+              'Status',
+              'Campaign Name',
+            ];
 
-          const rows = [headers.map(escapeCsv).join(',')];
+            const rowsData = activities.map(a => {
+              let meta: any = {};
+              try {
+                meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+              } catch {
+                meta = {};
+              }
 
-          for (const a of activities) {
-            let meta: any = {};
-            try {
-              meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
-            } catch {
-              meta = {};
-            }
+              const ist = formatIST(a.timestamp);
+              const sellerName = meta.sellerName || meta.customerName || 'TVS Certified';
+              const sellerCustomer = provider.findCustomerByCompanyName ? provider.findCustomerByCompanyName(sellerName) : null;
+              const sellerCode = meta.sellerCustomerCode || sellerCustomer?.code || '';
+              const sellerCity = meta.sellerCity || sellerCustomer?.city || meta.location || '';
+              const sellerPhone = meta.sellerPhone || sellerCustomer?.phone || '';
 
-            const ist = formatIST(a.timestamp);
+              return [
+                meta.lotNo || meta.sequence || '',
+                auctionId,
+                a.match?.matchNumber ? `Match ${a.match.matchNumber}` : 'Match 1',
+                ist.date,
+                ist.time,
+                ist.full,
+                meta.vehicleId || '',
+                meta.vehicleName || '',
+                meta.regNo || '',
+                meta.fuelType || '',
+                meta.transmission || '',
+                meta.yearOfMfg || '',
+                meta.speedometer || '',
+                meta.startBidValue || '',
+                meta.expectedPrice || '',
+                meta.winningBid || meta.saleAmount || meta.amount || '',
+                sellerName,
+                sellerCode,
+                sellerCity,
+                sellerPhone,
+                a.dealer?.displayName || '',
+                a.dealer?.externalDealerId || meta.winnerId || '',
+                a.dealer?.city || '',
+                a.dealer?.phone || '',
+                a.points,
+                10, // Seller awarded 10 points
+                a.externalTransactionId || '',
+                'SOLD',
+                campaign.name,
+              ];
+            });
 
-            if (!isAll) {
-              rows.push([
-                escapeCsv(meta.sequence || ''),
-                escapeCsv(auctionId),
-                escapeCsv(ist.date),
-                escapeCsv(ist.time),
-                escapeCsv(ist.full),
-                escapeCsv(meta.vehicleId || ''),
-                escapeCsv(meta.vehicleName || ''),
-                escapeCsv(meta.regNo || ''),
-                escapeCsv(meta.fuelType || ''),
-                escapeCsv(meta.transmission || ''),
-                escapeCsv(meta.yearOfMfg || ''),
-                escapeCsv(meta.speedometer || ''),
-                escapeCsv(meta.startBidValue || ''),
-                escapeCsv(meta.winningBid || meta.amount || ''),
-                escapeCsv(a.dealer?.externalDealerId || meta.winnerId || ''),
-                escapeCsv(a.dealer?.displayName || ''),
-                escapeCsv(a.dealer?.phone || ''),
-                escapeCsv(a.dealer?.city || ''),
-                escapeCsv(a.points),
-                escapeCsv(a.activityType),
-                escapeCsv(a.externalTransactionId || ''),
-                escapeCsv(a.match?.matchNumber ? `Match ${a.match.matchNumber}` : 'Match 1'),
-                escapeCsv(campaign.name),
-              ].join(','));
-            } else {
-              rows.push([
-                escapeCsv(a.id),
-                escapeCsv(auctionId),
-                escapeCsv(ist.date),
-                escapeCsv(ist.time),
-                escapeCsv(ist.full),
-                escapeCsv(a.activityType),
-                escapeCsv(a.externalTransactionId || ''),
-                escapeCsv(a.dealer?.externalDealerId || ''),
-                escapeCsv(a.dealer?.displayName || ''),
-                escapeCsv(a.dealer?.phone || ''),
-                escapeCsv(a.dealer?.city || ''),
-                escapeCsv(a.points),
-                escapeCsv(meta.bidAmount || meta.winningBid || meta.price || ''),
-                escapeCsv(meta.winningBid || ''),
-                escapeCsv(meta.vehicleId || ''),
-                escapeCsv(meta.vehicleName || ''),
-                escapeCsv(meta.regNo || ''),
-                escapeCsv(meta.fuelType || ''),
-                escapeCsv(meta.transmission || ''),
-                escapeCsv(meta.yearOfMfg || ''),
-                escapeCsv(meta.speedometer || ''),
-                escapeCsv(meta.startBidValue || ''),
-                escapeCsv(meta.bidRank || ''),
-                escapeCsv(meta.isLeadingBid ? 'YES' : 'NO'),
-                escapeCsv(meta.isPreBid ? 'YES' : 'NO'),
-                escapeCsv(meta.totalBids || ''),
-                escapeCsv(a.match?.matchNumber ? `Match ${a.match.matchNumber}` : 'Match 1'),
-                escapeCsv(campaign.name),
-              ].join(','));
-            }
+            const baseFilename = `supercup-auction-${auctionId}-transactions-${dateStr}`;
+            return sendExportResponse(headers, rowsData, baseFilename, `Auction ${auctionId} Transactions`);
+          } else {
+            // Full Telemetry Stream (bids, pre-bids, participation, buys, sells)
+            const headers = [
+              'Activity ID',
+              'Auction ID',
+              'Match Number',
+              'Date (IST)',
+              'Time (IST)',
+              'Date & Time (IST)',
+              'Activity Type',
+              'Transaction ID',
+              'Dealer ID',
+              'Company Name',
+              'Dealer Phone',
+              'City',
+              'Seller / Origin Dealership',
+              'Seller City',
+              'Buyer / Winner Dealership',
+              'Buyer City',
+              'Points Awarded',
+              'Amount / Bid Value (INR)',
+              'Winning Bid (INR)',
+              'Vehicle ID',
+              'Vehicle Name',
+              'Registration Number',
+              'Fuel Type',
+              'Transmission',
+              'Year of Mfg',
+              'Speedometer (KM)',
+              'Start Bid Value (INR)',
+              'Bid Rank',
+              'Is Leading Bid',
+              'Is Pre-Bid',
+              'Total Bids on Vehicle',
+              'Campaign Name',
+            ];
+
+            const rowsData = activities.map(a => {
+              let meta: any = {};
+              try {
+                meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+              } catch {
+                meta = {};
+              }
+
+              const ist = formatIST(a.timestamp);
+              const sellerName = meta.sellerName || meta.customerName || (a.activityType === 'SELL' ? a.dealer?.displayName : '');
+              const sellerCity = meta.sellerCity || (a.activityType === 'SELL' ? a.dealer?.city : meta.location) || '';
+              const buyerName = meta.buyerDealerId ? (a.activityType === 'BUY' ? a.dealer?.displayName : '') : (a.activityType === 'BUY' ? a.dealer?.displayName : '');
+              const buyerCity = a.activityType === 'BUY' ? a.dealer?.city : '';
+
+              return [
+                a.id,
+                auctionId,
+                a.match?.matchNumber ? `Match ${a.match.matchNumber}` : 'Match 1',
+                ist.date,
+                ist.time,
+                ist.full,
+                a.activityType,
+                a.externalTransactionId || '',
+                a.dealer?.externalDealerId || '',
+                a.dealer?.displayName || '',
+                a.dealer?.phone || '',
+                a.dealer?.city || '',
+                sellerName,
+                sellerCity,
+                buyerName,
+                buyerCity,
+                a.points,
+                meta.bidAmount || meta.winningBid || meta.saleAmount || meta.price || '',
+                meta.winningBid || meta.saleAmount || '',
+                meta.vehicleId || '',
+                meta.vehicleName || '',
+                meta.regNo || '',
+                meta.fuelType || '',
+                meta.transmission || '',
+                meta.yearOfMfg || '',
+                meta.speedometer || '',
+                meta.startBidValue || '',
+                meta.bidRank || '',
+                meta.isLeadingBid ? 'YES' : 'NO',
+                meta.isPreBid ? 'YES' : 'NO',
+                meta.totalBids || '',
+                campaign.name,
+              ];
+            });
+
+            const baseFilename = `supercup-auction-${auctionId}-telemetry-${dateStr}`;
+            return sendExportResponse(headers, rowsData, baseFilename, `Auction ${auctionId} Telemetry`);
           }
-
-          const filename = isAll
-            ? `supercup-auction-all-activities-${dateStr}.csv`
-            : `supercup-auction-activities-${dateStr}.csv`;
-
-          // \uFEFF UTF-8 BOM ensures Excel on Windows renders UTF-8 correctly
-          return new NextResponse('\uFEFF' + rows.join('\n'), {
-            headers: {
-              'Content-Type': 'text/csv; charset=utf-8',
-              'Content-Disposition': `attachment; filename="${filename}"`,
-            },
-          });
         }
 
         // Default: Comprehensive Dealer Leaderboard & Performance Summary
@@ -881,7 +961,7 @@ export async function GET(request: NextRequest) {
           'Total Points',
           'Live Bids Count',
           'Live Bids Points',
-          'Vehicles Won Count',
+          'Vehicles Won / Bought Count',
           'Vehicles Won Points',
           'Total Won Amount (INR)',
           'Won Vehicles List',
@@ -901,9 +981,7 @@ export async function GET(request: NextRequest) {
           'Campaign Name',
         ];
 
-        const rows = [headers.map(escapeCsv).join(',')];
-
-        for (const s of scores) {
+        const rowsData = scores.map(s => {
           const d = s.dealer;
           const acts = d.activities || [];
           const bids = acts.filter(a => a.activityType === 'BID_PLACED');
@@ -936,50 +1014,46 @@ export async function GET(request: NextRequest) {
             } catch {
               meta = {};
             }
-            totalSoldAmount += Number(meta?.price || meta?.amount || 0);
+            totalSoldAmount += Number(meta?.saleAmount || meta?.price || meta?.winningBid || meta?.amount || 0);
           }
 
           const timestamps = acts.map(a => new Date(a.timestamp).getTime()).filter(t => !isNaN(t));
           const firstTime = timestamps.length > 0 ? formatIST(Math.min(...timestamps)).full : '';
           const lastTime = timestamps.length > 0 ? formatIST(Math.max(...timestamps)).full : '';
 
-          rows.push([
-            escapeCsv(s.rank || ''),
-            escapeCsv(d.displayName),
-            escapeCsv(d.externalDealerId),
-            escapeCsv(d.phone || ''),
-            escapeCsv(d.city || ''),
-            escapeCsv(d.status || 'ACTIVE'),
-            escapeCsv(s.totalPoints),
-            escapeCsv(bids.length),
-            escapeCsv(bids.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(buys.length),
-            escapeCsv(buys.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(totalWonAmount),
-            escapeCsv(wonVehicles.join('; ')),
-            escapeCsv(sells.length),
-            escapeCsv(sells.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(totalSoldAmount),
-            escapeCsv(attends.length),
-            escapeCsv(attends.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(inspects.length),
-            escapeCsv(inspects.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(watch.length),
-            escapeCsv(watch.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(bonus.reduce((sum, a) => sum + a.points, 0)),
-            escapeCsv(acts.length),
-            escapeCsv(firstTime),
-            escapeCsv(lastTime),
-            escapeCsv(campaign.name),
-          ].join(','));
-        }
-
-        return new NextResponse('\uFEFF' + rows.join('\n'), {
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': `attachment; filename="supercup-dealer-leaderboard-${dateStr}.csv"`,
-          },
+          return [
+            s.rank || '',
+            d.displayName,
+            d.externalDealerId,
+            d.phone || '',
+            d.city || '',
+            d.status || 'ACTIVE',
+            s.totalPoints,
+            bids.length,
+            bids.reduce((sum, a) => sum + a.points, 0),
+            buys.length,
+            buys.reduce((sum, a) => sum + a.points, 0),
+            totalWonAmount,
+            wonVehicles.join('; '),
+            sells.length,
+            sells.reduce((sum, a) => sum + a.points, 0),
+            totalSoldAmount,
+            attends.length,
+            attends.reduce((sum, a) => sum + a.points, 0),
+            inspects.length,
+            inspects.reduce((sum, a) => sum + a.points, 0),
+            watch.length,
+            watch.reduce((sum, a) => sum + a.points, 0),
+            bonus.reduce((sum, a) => sum + a.points, 0),
+            acts.length,
+            firstTime,
+            lastTime,
+            campaign.name,
+          ];
         });
+
+        const baseFilename = `supercup-dealer-leaderboard-${dateStr}`;
+        return sendExportResponse(headers, rowsData, baseFilename, 'Dealer Leaderboard');
       }
 
       default:

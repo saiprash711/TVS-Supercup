@@ -773,25 +773,28 @@ export default function AdminPage() {
     setExportModalOpen(true);
   };
 
-  const triggerCsvDownload = (type: 'dealers' | 'activities' | 'allActivities') => {
+  const triggerExportDownload = (type: 'dealers' | 'activities' | 'allActivities', format: 'xlsx' | 'csv' = 'xlsx') => {
+    const ext = format.toUpperCase();
     if (type === 'allActivities') {
-      window.open('/api/admin?action=export&type=activities&all=true', '_blank');
-      showToast('Downloading All Live Bids & Activities Feed CSV...');
+      window.open(`/api/admin?action=export&type=activities&all=true&format=${format}`, '_blank');
+      showToast(`Downloading Full Live Telemetry Log (${ext})...`);
     } else if (type === 'activities') {
-      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}`, '_blank');
-      showToast(`Downloading Auction #${liveAuctionId || '1991'} Results CSV...`);
+      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}&format=${format}`, '_blank');
+      showToast(`Downloading Auction #${liveAuctionId || '1991'} Buyers & Sellers Ledger (${ext})...`);
     } else {
-      window.open('/api/admin?action=export&type=dealers', '_blank');
-      showToast('Downloading Dealer Leaderboard Summary CSV...');
+      window.open(`/api/admin?action=export&type=dealers&format=${format}`, '_blank');
+      showToast(`Downloading Dealer Leaderboard Summary (${ext})...`);
     }
   };
 
-  const triggerDownloadBoth = () => {
-    window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}`, '_blank');
+  const triggerCsvDownload = (type: 'dealers' | 'activities' | 'allActivities') => triggerExportDownload(type, 'csv');
+
+  const triggerDownloadBoth = (format: 'xlsx' | 'csv' = 'xlsx') => {
+    window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}&format=${format}`, '_blank');
     setTimeout(() => {
-      window.open('/api/admin?action=export&type=dealers', '_blank');
+      window.open(`/api/admin?action=export&type=dealers&format=${format}`, '_blank');
     }, 600);
-    showToast(`Downloading Auction #${liveAuctionId || '1991'} Results & Dealer Summary CSVs...`);
+    showToast(`Downloading Auction Transactions & Dealer Summary (${format.toUpperCase()})...`);
   };
 
   const toggleTelecastPlay = () => {
@@ -832,13 +835,13 @@ export default function AdminPage() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: 'rgba(225, 29, 72, 0.15)',
-                border: '1px solid rgba(225, 29, 72, 0.35)',
+                background: 'rgba(54, 78, 162, 0.12)',
+                border: '1px solid rgba(54, 78, 162, 0.3)',
                 padding: '4px 12px',
                 borderRadius: '999px',
                 fontSize: '0.72rem',
                 fontWeight: 700,
-                color: 'var(--tvs-red-light)',
+                color: 'var(--tvs-blue)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.12em',
                 marginBottom: '12px'
@@ -946,7 +949,7 @@ export default function AdminPage() {
               <span className="navbar-logo">
                 <span>TVS</span> SUPERCUP
               </span>
-              <span className="navbar-badge" style={{ background: 'rgba(225, 29, 72, 0.2)', color: 'var(--tvs-red-light)', borderColor: 'rgba(225, 29, 72, 0.4)' }}>
+              <span className="navbar-badge" style={{ background: 'rgba(54, 78, 162, 0.12)', color: 'var(--tvs-blue)', borderColor: 'rgba(54, 78, 162, 0.35)' }}>
                 ADMIN MISSION CONTROL
               </span>
             </div>
@@ -1041,7 +1044,7 @@ export default function AdminPage() {
                     <span className="ping-ring"></span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--tvs-red-light)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--tvs-blue)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                       TELEMETRY FEED
                     </span>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -1175,7 +1178,7 @@ export default function AdminPage() {
             {([
               { key: 'overview', icon: <BarChart3 className="w-4 h-4" />, label: 'Overview' },
               { key: 'leaderboard', icon: <Award className="w-4 h-4 text-amber-400" />, label: 'Leaderboard (Unmasked)' },
-              { key: 'liveMonitor', icon: <Radio className="w-4 h-4 text-rose-500" />, label: 'War Room (Live Monitor)' },
+              { key: 'liveMonitor', icon: <Radio className="w-4 h-4 text-[#6cc14f]" />, label: 'War Room (Live Monitor)' },
               { key: 'dealers', icon: <Users className="w-4 h-4" />, label: 'Dealer Fleet' },
               { key: 'rules', icon: <Settings className="w-4 h-4" />, label: 'Scoring Rules Engine' },
               { key: 'matches', icon: <Calendar className="w-4 h-4" />, label: 'Match Schedule' },
@@ -1531,7 +1534,7 @@ export default function AdminPage() {
                                           </button>
                                           <button 
                                             className="btn btn-sm" 
-                                            style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(225, 29, 72, 0.15)', color: 'var(--tvs-red-light)', border: '1px solid rgba(225, 29, 72, 0.3)' }}
+                                            style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(54, 78, 162, 0.12)', color: 'var(--tvs-blue)', border: '1px solid #c8d7ea' }}
                                             onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
                                           >
                                             Adjust
@@ -1603,7 +1606,7 @@ export default function AdminPage() {
                             <div className="card-header">
                               <div>
                                 <h3 className="card-title">
-                                  <Activity className="w-5 h-5 text-rose-500" />
+                                  <Activity className="w-5 h-5 text-[#364ea2]" />
                                   Latest Telemetry Events
                                 </h3>
                                 <p className="card-subtitle">
@@ -2150,9 +2153,9 @@ export default function AdminPage() {
                                           style={{
                                             padding: '4px 8px',
                                             fontSize: '0.75rem',
-                                            background: 'rgba(225, 29, 72, 0.15)',
-                                            color: 'var(--tvs-red-light)',
-                                            border: '1px solid rgba(225, 29, 72, 0.3)'
+                                            background: 'rgba(54, 78, 162, 0.12)',
+                                            color: 'var(--tvs-blue)',
+                                            border: '1px solid #c8d7ea'
                                           }}
                                           onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
                                           title="Manual points correction"
@@ -2796,7 +2799,7 @@ export default function AdminPage() {
                                           {thumb ? (
                                             <img src={thumb} alt={ongoingCar.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                           ) : (
-                                            <Car className="w-8 h-8 opacity-40 text-rose-400" />
+                                            <Car className="w-8 h-8 opacity-40 text-[#364ea2]" />
                                           )}
                                         </div>
                                       );
@@ -3261,14 +3264,14 @@ export default function AdminPage() {
                                     onClick={() => handleOpenVehicleDetails(veh)}
                                     className="interactive-telemetry-row"
                                     style={{
-                                      background: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.08)' : undefined,
+                                      background: veh.status === 'ONGOING' ? 'rgba(108, 193, 79, 0.1)' : undefined,
                                     }}
                                   >
                                     <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
                                       <span className="lot-chip" style={{
-                                        background: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.2)' : undefined,
-                                        color: veh.status === 'ONGOING' ? '#fb7185' : undefined,
-                                        borderColor: veh.status === 'ONGOING' ? 'rgba(225, 29, 72, 0.4)' : undefined,
+                                        background: veh.status === 'ONGOING' ? 'rgba(108, 193, 79, 0.2)' : undefined,
+                                        color: veh.status === 'ONGOING' ? '#16a34a' : undefined,
+                                        borderColor: veh.status === 'ONGOING' ? 'rgba(108, 193, 79, 0.4)' : undefined,
                                       }}>
                                         #{veh.lotNumber}
                                       </span>
@@ -3500,7 +3503,7 @@ export default function AdminPage() {
                                       </span>
                                     ) : null}
                                     {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
-                                      <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(225, 29, 72, 0.15)', color: '#fda4af', fontSize: '0.72rem', border: '1px solid rgba(225, 29, 72, 0.3)' }}>
+                                      <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                                         Rank #{String(act.metadata.bidRank)}
                                       </span>
                                     ) : null}
@@ -3890,7 +3893,7 @@ export default function AdminPage() {
                             {m.status === 'COMPLETED' ? (
                               <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                             ) : m.status === 'LIVE' ? (
-                              <Radio className="w-8 h-8 text-rose-500 animate-pulse" />
+                              <Radio className="w-8 h-8 text-[#6cc14f] animate-pulse" />
                             ) : (
                               <Clock className="w-8 h-8 text-sky-400" />
                             )}
@@ -4042,63 +4045,175 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Export CSV Reports Modal */}
+      {/* Export Reports Modal */}
       {exportModalOpen && (
         <div className="modal-overlay" onClick={() => setExportModalOpen(false)}>
-          <div className="modal double-bezel" onClick={e => e.stopPropagation()}>
+          <div className="modal double-bezel" style={{ maxWidth: '640px', width: '100%' }} onClick={e => e.stopPropagation()}>
             <div className="inner-bezel-core" style={{ padding: '28px' }}>
-              <h3 className="modal-title">Export Verified Super Cup Reports</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
-                Download official CSV extracts for accounting, executive audits, and dealership announcements.
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <h3 className="modal-title" style={{ margin: 0 }}>Export Super Cup Reports</h3>
+                <span className="badge badge-success" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Excel & CSV Ready
+                </span>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '22px' }}>
+                Download official spreadsheets for audit compliance, commercial accounting, and dealership recognition with complete seller and buyer pairing.
               </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <button
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
-                  onClick={() => triggerCsvDownload('dealers')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Users className="w-4 h-4 text-sky-400" />
-                    <span>Dealer Standings & Points Summary</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* 1. Buyers & Sellers Ledger */}
+                <div style={{
+                  padding: '16px',
+                  background: 'var(--bg-base)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Zap className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
+                          Auction #{liveAuctionId || '1991'} Buyers & Sellers Ledger
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Bilateral pairings: Seller Dealership ➔ Vehicle ➔ Buyer Dealership ➔ Hammer Price
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <Download className="w-4 h-4" />
-                </button>
-
-                <button
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
-                  onClick={() => triggerCsvDownload('activities')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Zap className="w-4 h-4 text-emerald-400" />
-                    <span>Auction #{liveAuctionId || '1991'} Results (Won Vehicles)</span>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', gap: '6px', border: '1px solid var(--border-subtle)' }}
+                      onClick={() => triggerExportDownload('activities', 'csv')}
+                      title="Download as Comma-Separated Values (CSV)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>CSV (.csv)</span>
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem', gap: '6px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#10b981' }}
+                      onClick={() => triggerExportDownload('activities', 'xlsx')}
+                      title="Download as Microsoft Excel Spreadsheet (XLSX)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Excel (.xlsx)</span>
+                    </button>
                   </div>
-                  <Download className="w-4 h-4" />
-                </button>
+                </div>
 
-                <button
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'space-between', padding: '12px 18px', border: '1px solid var(--border-subtle)' }}
-                  onClick={() => triggerCsvDownload('allActivities')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Activity className="w-4 h-4 text-amber-400" />
-                    <span>Full Live Activity & Bids Telemetry Log</span>
+                {/* 2. Dealer Standings & Performance Summary */}
+                <div style={{
+                  padding: '16px',
+                  background: 'var(--bg-base)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Users className="w-4 h-4 text-sky-400" />
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
+                          Dealer Standings & Commercial Summary
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          All dealers: Rank, Total Points, Buy Count, Sell Count, Total Won INR, Total Sold INR
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <Download className="w-4 h-4" />
-                </button>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', gap: '6px', border: '1px solid var(--border-subtle)' }}
+                      onClick={() => triggerExportDownload('dealers', 'csv')}
+                      title="Download as Comma-Separated Values (CSV)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>CSV (.csv)</span>
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem', gap: '6px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', borderColor: '#0284c7' }}
+                      onClick={() => triggerExportDownload('dealers', 'xlsx')}
+                      title="Download as Microsoft Excel Spreadsheet (XLSX)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Excel (.xlsx)</span>
+                    </button>
+                  </div>
+                </div>
 
+                {/* 3. Full Live Activity & Bids Telemetry */}
+                <div style={{
+                  padding: '16px',
+                  background: 'var(--bg-base)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Activity className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
+                          Full Live Telemetry & Bid Stream Log
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Granular event log: Live bids, pre-bids, room registrations, watchlist adds, sells, buys
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', gap: '6px', border: '1px solid var(--border-subtle)' }}
+                      onClick={() => triggerExportDownload('allActivities', 'csv')}
+                      title="Download as Comma-Separated Values (CSV)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>CSV (.csv)</span>
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem', gap: '6px', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', borderColor: '#d97706' }}
+                      onClick={() => triggerExportDownload('allActivities', 'xlsx')}
+                      title="Download as Microsoft Excel Spreadsheet (XLSX)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Excel (.xlsx)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Action: Download Both in Excel */}
                 <button
                   className="btn btn-primary"
-                  style={{ marginTop: '8px' }}
-                  onClick={triggerDownloadBoth}
+                  style={{ marginTop: '6px', padding: '12px', justifyContent: 'center', gap: '8px', fontWeight: 600 }}
+                  onClick={() => triggerDownloadBoth('xlsx')}
                 >
-                  Download Both Summary & Auction Results
+                  <Download className="w-4 h-4" />
+                  <span>Download Both Results & Summary in Excel (.xlsx)</span>
                 </button>
               </div>
 
-              <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <div className="modal-actions" style={{ marginTop: '22px' }}>
                 <button className="btn btn-ghost" onClick={() => setExportModalOpen(false)}>
                   Close
                 </button>
@@ -4528,7 +4643,7 @@ export default function AdminPage() {
           bottom: '24px',
           right: '24px',
           zIndex: 200,
-          background: toast.type === 'error' ? 'rgba(225, 29, 72, 0.95)' : 'rgba(6, 214, 160, 0.95)',
+          background: toast.type === 'error' ? 'rgba(239, 68, 68, 0.95)' : 'rgba(108, 193, 79, 0.95)',
           color: '#ffffff',
           padding: '12px 20px',
           borderRadius: 'var(--radius-full)',

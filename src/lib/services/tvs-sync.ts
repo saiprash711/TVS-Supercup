@@ -162,12 +162,26 @@ export async function syncAuctionActivities(
       else searchIds.push(id.replace('USR-', ''));
     }
 
+    const sellerNames = activities
+      .filter(a => a.activityType === 'SELL')
+      .map(a => {
+        const meta = (a.metadata || {}) as Record<string, any>;
+        return meta.sellerName || meta.customerName;
+      })
+      .filter((n): n is string => Boolean(n));
+
     const dealers = await prisma.dealer.findMany({
-      where: { externalDealerId: { in: searchIds } },
+      where: {
+        OR: [
+          { externalDealerId: { in: searchIds } },
+          ...(sellerNames.length > 0 ? [{ displayName: { in: sellerNames } }] : []),
+        ],
+      },
     });
     const dealerMap = new Map<string, number>();
     for (const d of dealers) {
       dealerMap.set(d.externalDealerId, d.id);
+      dealerMap.set(d.displayName, d.id);
       if (d.externalDealerId.startsWith('USR-')) {
         dealerMap.set(d.externalDealerId.replace('USR-', ''), d.id);
       } else {
@@ -203,14 +217,15 @@ export async function syncAuctionActivities(
     );
 
     for (const act of activities) {
-      let dealerId = dealerMap.get(act.dealerId);
+      const meta = (act.metadata || {}) as Record<string, any>;
+      const sName = meta.sellerName || meta.customerName;
+      let dealerId = dealerMap.get(act.dealerId) || (sName ? dealerMap.get(sName) : undefined);
 
       // If dealer is not in local DB (e.g. newly registered on TVS today), auto-provision them
       if (!dealerId) {
         try {
           const profile = await provider.getDealerProfile(act.dealerId, token);
-          const meta = (act.metadata || {}) as Record<string, any>;
-          const metaName = meta.customerName || meta.companyName || meta.dealerName;
+          const metaName = meta.sellerName || meta.customerName || meta.companyName || meta.dealerName;
           const displayName: string = (profile?.dealerName && !profile.dealerName.startsWith('Dealer '))
             ? profile.dealerName
             : (metaName ? String(metaName) : (profile?.dealerName || `Dealer ${act.dealerId}`));
@@ -220,22 +235,32 @@ export async function syncAuctionActivities(
               externalDealerId: act.dealerId,
               displayName,
               maskedName,
-              city: profile?.city || (meta.location ? String(meta.location) : 'Tamil Nadu'),
+              city: profile?.city || (meta.sellerCity ? String(meta.sellerCity) : (meta.location ? String(meta.location) : 'Tamil Nadu')),
+              phone: profile?.phone || meta.sellerPhone || null,
               status: 'ACTIVE',
             },
           });
           dealerId = newDealer.id;
           dealerMap.set(act.dealerId, dealerId);
+          dealerMap.set(displayName, dealerId);
           await prisma.dealerScore.upsert({
             where: { dealerId_campaignId: { dealerId, campaignId } },
             update: {},
             create: { dealerId, campaignId, totalPoints: 0, rank: 9999 },
           });
         } catch {
-          const existing = await prisma.dealer.findUnique({ where: { externalDealerId: act.dealerId } });
+          const existing = await prisma.dealer.findFirst({
+            where: {
+              OR: [
+                { externalDealerId: act.dealerId },
+                ...(sName ? [{ displayName: sName }] : []),
+              ],
+            },
+          });
           if (existing) {
             dealerId = existing.id;
             dealerMap.set(act.dealerId, dealerId);
+            dealerMap.set(existing.displayName, dealerId);
           }
         }
       }
