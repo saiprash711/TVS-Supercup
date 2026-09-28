@@ -8,16 +8,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getLeaderboard } from '@/lib/services/ranking-engine';
-import { prisma } from '@/lib/db';
 import { isAdmin } from '@/lib/auth';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export async function GET(request: NextRequest) {
   try {
     // Get the active Super Cup campaign
-    const campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
+    const campaign = await getCurrentSuperCupCampaign();
 
     if (!campaign) {
       return NextResponse.json(
@@ -36,6 +33,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       campaign: {
         name: campaign.name,
+        slug: campaign.slug,
+        isTestMode: campaign.slug === 'supercup-prelaunch-test-2026',
         startDate: campaign.startDate,
         endDate: campaign.endDate,
       },

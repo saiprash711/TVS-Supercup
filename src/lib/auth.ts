@@ -10,12 +10,49 @@
  */
 
 import { cookies } from 'next/headers';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '@/lib/db';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 import { getTVSProvider } from './services/tvs-integration';
 import { maskDealerName } from './services/masking';
 
 const SESSION_COOKIE = 'supercup_session';
 const ADMIN_COOKIE = 'supercup_admin';
+const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
+
+function safeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function getAdminSecret(): string | null {
+  const password = process.env.ADMIN_PASSWORD?.replace(/^["']|["']$/g, '').trim();
+  if (!password) return null;
+  return process.env.SESSION_SECRET?.trim() || password;
+}
+
+function signAdminSession(issuedAt: number, secret: string): string {
+  const payload = String(issuedAt);
+  const signature = createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyAdminSession(value: string, secret: string): boolean {
+  const [issuedAtRaw, suppliedSignature, ...extra] = value.split('.');
+  if (!issuedAtRaw || !suppliedSignature || extra.length > 0) return false;
+
+  const issuedAt = Number(issuedAtRaw);
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isInteger(issuedAt) || issuedAt > now || now - issuedAt > ADMIN_SESSION_MAX_AGE_SECONDS) {
+    return false;
+  }
+
+  const expectedSignature = createHmac('sha256', secret)
+    .update(issuedAtRaw)
+    .digest('base64url');
+  return safeEqual(suppliedSignature, expectedSignature);
+}
 
 export interface SessionUser {
   dealerId: number;           // Internal DB ID
@@ -74,14 +111,12 @@ export async function loginDealer(
           },
         });
 
-        const activeCamp = await prisma.campaign.findFirst({
-          where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-        });
+        const activeCamp = await getCurrentSuperCupCampaign();
         if (activeCamp) {
           await prisma.dealerScore.upsert({
             where: { dealerId_campaignId: { dealerId: dealer.id, campaignId: activeCamp.id } },
             update: {},
-            create: { dealerId: dealer.id, campaignId: activeCamp.id, totalPoints: 0, rank: 9999 },
+            create: { dealerId: dealer.id, campaignId: activeCamp.id, totalPoints: 0, rank: 0 },
           }).catch(() => {});
         }
       }
@@ -137,6 +172,8 @@ export async function loginDealer(
   // Store session in cookie (safely handles both Next.js HTTP requests and test execution)
   try {
     const cookieStore = await cookies();
+    // A browser session can hold exactly one role. Dealer login revokes admin access.
+    cookieStore.delete(ADMIN_COOKIE);
     cookieStore.set(SESSION_COOKIE, JSON.stringify(session), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -177,27 +214,24 @@ export async function logoutDealer(): Promise<void> {
  * Admin authentication (simple password-based).
  */
 export async function loginAdmin(password: string): Promise<boolean> {
-  const envPassword = process.env.ADMIN_PASSWORD
-    ? process.env.ADMIN_PASSWORD.replace(/^["']|["']$/g, '').trim()
-    : 'supercup2026';
+  const envPassword = process.env.ADMIN_PASSWORD?.replace(/^["']|["']$/g, '').trim();
   const input = (password || '').trim();
+  const secret = getAdminSecret();
 
-  // Accept configured env password, 'admin', 'supercup2026', or 'tvs123'
-  const isMatch =
-    input === envPassword ||
-    input.toLowerCase() === envPassword.toLowerCase() ||
-    input.toLowerCase() === 'admin' ||
-    input === 'supercup2026' ||
-    input.toLowerCase() === 'supercup2026' ||
-    input.toLowerCase() === 'tvs123';
+  // Fail closed when no administrator credential is configured.
+  if (!envPassword || !secret || !input) return false;
 
-  if (isMatch) {
+  if (safeEqual(input, envPassword)) {
     const cookieStore = await cookies();
-    cookieStore.set(ADMIN_COOKIE, 'true', {
+    // Clear any dealer session cookie when entering an administrator session.
+    cookieStore.delete(SESSION_COOKIE);
+
+    const issuedAt = Math.floor(Date.now() / 1000);
+    cookieStore.set(ADMIN_COOKIE, signAdminSession(issuedAt, secret), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 8, // 8 hours
+      sameSite: 'strict',
+      maxAge: ADMIN_SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
     return true;
@@ -211,8 +245,11 @@ export async function loginAdmin(password: string): Promise<boolean> {
 export async function isAdmin(): Promise<boolean> {
   try {
     const cookieStore = await cookies();
+
     const adminCookie = cookieStore.get(ADMIN_COOKIE);
-    return adminCookie?.value === 'true';
+    const secret = getAdminSecret();
+    if (!adminCookie?.value || !secret) return false;
+    return verifyAdminSession(adminCookie.value, secret);
   } catch {
     return false;
   }

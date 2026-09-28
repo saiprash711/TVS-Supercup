@@ -15,6 +15,7 @@ import { getPositionContext } from '@/lib/services/ranking-engine';
 import { getActivityBreakdown } from '@/lib/services/points-engine';
 import { syncDealerActivities } from '@/lib/services/tvs-sync';
 import { prisma } from '@/lib/db';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export async function GET() {
   try {
@@ -24,10 +25,7 @@ export async function GET() {
     }
 
     // Get active campaign
-    const campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
+    const campaign = await getCurrentSuperCupCampaign();
 
     if (!campaign) {
       return NextResponse.json({ error: 'No active campaign' }, { status: 404 });
@@ -48,17 +46,32 @@ export async function GET() {
       orderBy: { matchNumber: 'asc' },
     });
 
-    // Get which matches dealer participated in
+    // A verified live bid or completed transaction proves room participation
+    // even when the upstream attendance endpoint omitted the dealer.
     const participations = await prisma.dealerActivity.findMany({
       where: {
         dealerId: dealer.dealerId,
         campaignId: campaign.id,
-        activityType: 'MATCH_PARTICIPATION',
+        timestamp: { gte: campaign.startDate, lte: campaign.endDate },
+        activityType: { in: ['MATCH_PARTICIPATION', 'BID_PLACED', 'BUY', 'SELL'] },
       },
-      select: { matchId: true },
+      select: { matchId: true, activityType: true, metadata: true },
     });
 
-    const participatedMatchIds = new Set(participations.map(p => p.matchId));
+    const participatedMatchIds = new Set(
+      participations
+        .filter((activity) => {
+          if (activity.activityType !== 'BID_PLACED') return true;
+          try {
+            const metadata = activity.metadata ? JSON.parse(activity.metadata) : {};
+            return metadata.isPreBid !== true;
+          } catch {
+            return false;
+          }
+        })
+        .map(activity => activity.matchId)
+        .filter((matchId): matchId is number => matchId !== null)
+    );
 
     const matchTracker = matchDays.map(m => ({
       matchNumber: m.matchNumber,
@@ -104,6 +117,8 @@ export async function GET() {
       matchTracker,
       campaign: {
         name: campaign.name,
+        slug: campaign.slug,
+        isTestMode: campaign.slug === 'supercup-prelaunch-test-2026',
         startDate: campaign.startDate,
         endDate: campaign.endDate,
       },

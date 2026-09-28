@@ -5,10 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loginAdmin, isAdmin, logoutAdmin } from '@/lib/auth';
+import { getCurrentDealer, loginAdmin, isAdmin, logoutAdmin } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
+
     const body = await request.json();
     const { password } = body;
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Admin auth error:', error);
     return NextResponse.json({ error: 'Auth failed' }, { status: 500 });
   }

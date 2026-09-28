@@ -18,8 +18,9 @@ export const MASKING_ENABLED = true;
  */
 export function maskDealerName(fullName: string): string {
   if (!MASKING_ENABLED) return fullName || 'Unknown Dealer';
-  if (!fullName || fullName.length === 0) return '*****';
-  const firstChar = fullName.charAt(0).toUpperCase();
+  const normalizedName = fullName?.trim();
+  if (!normalizedName) return '*****';
+  const firstChar = normalizedName.charAt(0).toUpperCase();
   return `${firstChar}*****`;
 }
 

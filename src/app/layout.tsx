@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "./components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "TVS Dealer Super Cup | September 2026",
+  title: "TVS Dealer Super Cup | 2026–27",
   description: "TVS Certified Dealer Super Cup — Compete, earn points, and climb the leaderboard in the ultimate dealer engagement challenge.",
 };
 

@@ -80,6 +80,23 @@ export async function recordActivity(params: {
   const matchId = params.matchId ?? null;
   const externalTransactionId = params.externalTransactionId ?? null;
 
+  // Participation is awarded at most once per dealer and match, regardless of
+  // whether it came from the attendance feed or verified live-auction activity.
+  if (params.activityType === 'MATCH_PARTICIPATION' && matchId !== null) {
+    const existingParticipation = await prisma.dealerActivity.findFirst({
+      where: {
+        dealerId: params.dealerId,
+        campaignId: params.campaignId,
+        matchId,
+        activityType: 'MATCH_PARTICIPATION',
+      },
+      select: { id: true },
+    });
+    if (existingParticipation) {
+      return { success: false, duplicate: true, points: 0 };
+    }
+  }
+
   if (!params.skipDedupeCheck) {
     // Check if this activity is already recorded (prevents unnecessary unique constraint errors and Prisma error logs)
     const existing = await prisma.dealerActivity.findFirst({
@@ -154,7 +171,8 @@ export async function checkAllMatchesBonus(
     },
   });
 
-  return participations.length >= completedMatches.length;
+  const participatedMatchIds = new Set(participations.map(activity => activity.matchId));
+  return completedMatches.every(match => participatedMatchIds.has(match.id));
 }
 
 /**
@@ -162,9 +180,17 @@ export async function checkAllMatchesBonus(
  */
 export async function getActivityBreakdown(dealerId: number, campaignId: number) {
   const rules = await getPointRules(campaignId);
+  const campaign = await prisma.campaign.findUniqueOrThrow({
+    where: { id: campaignId },
+    select: { startDate: true, endDate: true },
+  });
   
   const activities = await prisma.dealerActivity.findMany({
-    where: { dealerId, campaignId },
+    where: {
+      dealerId,
+      campaignId,
+      timestamp: { gte: campaign.startDate, lte: campaign.endDate },
+    },
     include: { match: true },
     orderBy: { timestamp: 'desc' },
   });

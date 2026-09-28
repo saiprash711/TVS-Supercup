@@ -17,6 +17,7 @@ import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
 import { getTVSProvider } from '@/lib/services/tvs-integration';
 import { clearPointRulesCache } from '@/lib/services/points-engine';
 import * as XLSX from 'xlsx';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 // Serverless function config for live auction stream processing
 export const maxDuration = 60; // 60 seconds max execution on Vercel
@@ -39,10 +40,7 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get('action') || 'stats';
 
   try {
-    let campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
+    let campaign = await getCurrentSuperCupCampaign();
 
     if (!campaign) {
       campaign = await prisma.campaign.findFirst({
@@ -1073,10 +1071,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    let campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
+    let campaign = await getCurrentSuperCupCampaign();
 
     if (!campaign) {
       campaign = await prisma.campaign.findFirst({
@@ -1259,9 +1254,29 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'matchId required' }, { status: 400 });
         }
 
-        const updateData: any = {};
+        const validStatuses = ['UPCOMING', 'LIVE', 'COMPLETED'];
+        if (status && !validStatuses.includes(status)) {
+          return NextResponse.json({ error: 'Invalid match status' }, { status: 400 });
+        }
+
+        const currentMatch = await prisma.matchDay.findUnique({ where: { id: parseInt(matchId) } });
+        if (!currentMatch || currentMatch.campaignId !== campaign.id) {
+          return NextResponse.json({ error: 'Match does not belong to the current campaign' }, { status: 404 });
+        }
+
+        const resolvedAuctionId = auctionId !== undefined
+          ? String(auctionId).trim()
+          : currentMatch.auctionId || '';
+        if (!resolvedAuctionId) {
+          return NextResponse.json({ error: 'A TVS auction ID is required' }, { status: 400 });
+        }
+        if (status === 'LIVE' && /^TVSC-\d{4}-\d{2}-\d{2}$/.test(resolvedAuctionId)) {
+          return NextResponse.json({ error: 'Replace the placeholder with the real TVS auction ID before going live' }, { status: 400 });
+        }
+
+        const updateData: { status?: string; auctionId?: string } = {};
         if (status) updateData.status = status;
-        if (auctionId !== undefined) updateData.auctionId = String(auctionId).trim();
+        if (auctionId !== undefined) updateData.auctionId = resolvedAuctionId;
 
         await prisma.matchDay.update({
           where: { id: parseInt(matchId) },

@@ -17,6 +17,7 @@ import { recordActivity, type ActivityType } from '@/lib/services/points-engine'
 import { recalculateRankings } from '@/lib/services/ranking-engine';
 import { prisma } from '@/lib/db';
 import { syncLiveAuction } from '@/lib/services/tvs-sync';
+import { getCurrentSuperCupCampaign, getCurrentSuperCupCampaignWithMatches } from '@/lib/services/campaign';
 
 // Serverless function config for longer execution time
 export const maxDuration = 60; // 60 seconds max execution
@@ -33,18 +34,17 @@ export async function GET(request: NextRequest) {
     const cronSecret = process.env.CRON_SECRET;
     
     // Allow requests from Vercel Cron or with valid API key
-    if (authHeader !== `Bearer ${cronSecret}` && 
-        authHeader !== process.env.INTERNAL_API_KEY) {
+    const internalApiKey = process.env.INTERNAL_API_KEY;
+    const hasValidCronSecret = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`;
+    const hasValidInternalKey = Boolean(internalApiKey) && authHeader === internalApiKey;
+    if (!hasValidCronSecret && !hasValidInternalKey) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const startTime = Date.now();
     
     // Find active campaign
-    const campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      include: { matchDays: true }
-    });
+    const campaign = await getCurrentSuperCupCampaignWithMatches();
 
     if (!campaign) {
       return NextResponse.json({ 
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
   try {
     // Simple API key check for internal endpoints
     const apiKey = request.headers.get('x-api-key');
-    if (apiKey !== (process.env.INTERNAL_API_KEY || 'supercup-internal-key')) {
+    if (!process.env.INTERNAL_API_KEY || apiKey !== process.env.INTERNAL_API_KEY) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -153,11 +153,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get campaign
-    const campaign = await prisma.campaign.findFirst({
-      where: campaignSlug
-        ? { slug: campaignSlug }
-        : { type: 'SUPER_CUP', status: 'ACTIVE' },
-    });
+    const campaign = campaignSlug
+      ? await prisma.campaign.findUnique({ where: { slug: campaignSlug } })
+      : await getCurrentSuperCupCampaign();
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }

@@ -3,6 +3,29 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import SwitchMode from '../components/watermelon/switch-mode';
+import TickerMarquee from '../components/TickerMarquee';
+import {
+  Trophy,
+  ShieldCheck,
+  Radio,
+  Calendar,
+  Users,
+  Award,
+  Sparkles,
+  Crown,
+  Medal,
+  Search,
+  RefreshCw,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Eye,
+  Lock,
+  ArrowLeft,
+  X,
+} from 'lucide-react';
 
 interface LeaderboardEntry {
   rank: number;
@@ -16,6 +39,8 @@ interface LeaderboardEntry {
 
 interface CampaignInfo {
   name: string;
+  slug: string;
+  isTestMode: boolean;
   startDate: string;
   endDate: string;
 }
@@ -105,11 +130,6 @@ export default function LeaderboardPage() {
     });
   }, [leaderboard, searchQuery, getDisplayName]);
 
-  // Reset to page 1 whenever search query or page size changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, pageSize]);
-
   // Pagination calculations
   const effectivePageSize = pageSize === 0 ? filteredLeaderboard.length : pageSize;
   const totalPages = Math.max(1, Math.ceil(filteredLeaderboard.length / (effectivePageSize || 1)));
@@ -148,24 +168,6 @@ export default function LeaderboardPage() {
     }
   };
 
-  const getMedalEmoji = (rank: number) => {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return null;
-    }
-  };
-
-  const getRankStyle = (rank: number) => {
-    switch (rank) {
-      case 1: return { color: '#FFD700' };
-      case 2: return { color: '#C0C0C0' };
-      case 3: return { color: '#CD7F32' };
-      default: return { color: 'var(--text-muted)' };
-    }
-  };
-
   if (loading) {
     return (
       <div className="page-container">
@@ -184,7 +186,7 @@ export default function LeaderboardPage() {
         <div className="navbar-inner">
           <div className="navbar-brand">
             <span className="navbar-logo">TVS Super Cup</span>
-            <span className="navbar-badge">LIVE</span>
+            <span className="navbar-badge">{campaign?.isTestMode ? 'TEST MODE' : 'LIVE'}</span>
             {isAdminUser && (
               <Link href="/admin" className="navbar-badge" style={{ background: 'rgba(6, 214, 160, 0.2)', color: 'var(--accent-cyan)', borderColor: 'rgba(6, 214, 160, 0.4)', textDecoration: 'none' }}>
                 ADMIN MISSION CONTROL
@@ -218,6 +220,7 @@ export default function LeaderboardPage() {
           </div>
         </div>
       </nav>
+      <TickerMarquee />
 
       <div className="content-wrapper">
         {/* Admin Unmasked Leaderboard Notification Strip */}
@@ -237,17 +240,16 @@ export default function LeaderboardPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
-                width: '32px',
-                height: '32px',
+                width: '34px',
+                height: '34px',
                 borderRadius: '8px',
                 background: 'rgba(6, 214, 160, 0.2)',
                 border: '1px solid rgba(6, 214, 160, 0.5)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1rem',
               }}>
-                🛡️
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
                 <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-cyan)', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -274,129 +276,221 @@ export default function LeaderboardPage() {
                   fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
                 onClick={() => setShowMaskedNames(!showMaskedNames)}
                 title={showMaskedNames ? 'Display unmasked names' : 'Display masked names preview'}
               >
-                {showMaskedNames ? '👁️ Unmask Dealer Names' : '🔒 Preview Public Masked View'}
+                {showMaskedNames ? (
+                  <>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Unmask Dealer Names</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Preview Public Masked View</span>
+                  </>
+                )}
               </button>
-              <Link href="/admin" className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
-                ← Admin Console
+              <Link href="/admin" className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Admin Console</span>
               </Link>
             </div>
           </div>
         )}
 
-        {/* Hero */}
-        <div className="hero">
-          <div className="hero-trophy">🏆</div>
-          <div className="hero-badge">
-            <span>🏏</span> TVS CERTIFIED
-          </div>
-          <h1 className="hero-title">
-            DEALER <span className="hero-title-accent">SUPER CUP</span>
-          </h1>
-          <p className="hero-subtitle">
-            {campaign ? `${new Date(campaign.startDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}` : 'SEPTEMBER 2026'}
-            {' '}• {leaderboard.length} Dealers Competing
-          </p>
-        </div>
+        {/* Championship Executive Hero Bezel */}
+        <section className="leaderboard-hero-wrapper" aria-label="Dealer Super Cup Championship Header">
+          <div className="leaderboard-hero-ambient" aria-hidden="true" />
+          <div className="leaderboard-hero-card">
+            <div className="leaderboard-hero-grid-pattern" aria-hidden="true" />
+            
+            <div className="leaderboard-hero-content">
+              {/* Gold Trophy Crest with radiant aura */}
+              <div className="leaderboard-trophy-crest" title="TVS Dealer Super Cup">
+                <Trophy className="w-8 h-8 text-amber-500" />
+              </div>
 
-        {/* Top 3 Podium (Always displays Overall Top 3) */}
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', maxWidth: '720px', margin: '0 auto var(--space-2xl)' }}>
-          {leaderboard.slice(0, 3).map((entry, idx) => (
-            <div key={idx} className={`stat-card animate-in ${idx === 0 ? 'gold' : idx === 1 ? '' : ''}`} style={{
-              textAlign: 'center',
-              borderColor: idx === 0 ? 'rgba(255, 215, 0, 0.4)' : idx === 1 ? 'rgba(192, 192, 192, 0.25)' : 'rgba(205, 127, 50, 0.25)',
-              order: idx === 0 ? 2 : idx === 1 ? 1 : 3,
-              transform: idx === 0 ? 'scale(1.05)' : 'none',
-              boxShadow: idx === 0 ? '0 8px 24px rgba(255, 215, 0, 0.15)' : 'none',
-            }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-xs)' }}>
-                {getMedalEmoji(entry.rank)}
+              {/* Status and Network Eyebrow Badges */}
+              <div className="leaderboard-badge-group">
+                <span className="leaderboard-badge verified">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>TVS Certified Network</span>
+                </span>
+                <span className="leaderboard-badge season">
+                  <span className="pulsing-live-dot" />
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>Championship Live Standings</span>
+                </span>
               </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.3rem', marginBottom: 'var(--space-xs)', ...getRankStyle(entry.rank) }}>
-                #{entry.rank}
+
+              {/* Clean Executive Title */}
+              <h1 className="leaderboard-hero-title">
+                DEALER <span className="hero-title-accent">SUPER CUP</span>
+              </h1>
+
+              {/* Informative Subtitle */}
+              <p className="leaderboard-hero-subtitle">
+                Official national leaderboard for verified TVS dealerships across India. Compete in weekly high-velocity auctions, earn points on verified bids and inspections, and secure your place on the season podium.
+              </p>
+
+              {/* High-Fidelity Telemetry Chips Bar */}
+              <div className="leaderboard-telemetry-strip">
+                <div className="telemetry-chip">
+                  <span className="telemetry-chip-icon text-sky-500">
+                    <Calendar className="w-4 h-4" />
+                  </span>
+                  <span className="telemetry-chip-label">Season:</span>
+                  <span className="telemetry-chip-val">
+                    {campaign
+                      ? `${new Date(campaign.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} – ${new Date(campaign.endDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
+                      : 'Season 2026–27'}
+                  </span>
+                </div>
+
+                <div className="telemetry-chip">
+                  <span className="telemetry-chip-icon text-emerald-500">
+                    <Users className="w-4 h-4" />
+                  </span>
+                  <span className="telemetry-chip-label">Dealers:</span>
+                  <span className="telemetry-chip-val">
+                    {leaderboard.length > 0 ? `${leaderboard.length.toLocaleString('en-IN')} Competing` : 'Standings Synchronizing'}
+                  </span>
+                </div>
+
+                <div className="telemetry-chip">
+                  <span className="telemetry-chip-icon text-amber-500">
+                    <Award className="w-4 h-4" />
+                  </span>
+                  <span className="telemetry-chip-label">Podium:</span>
+                  <span className="telemetry-chip-val">₹50,000 Cash Pool</span>
+                </div>
+
+                <div className="telemetry-chip">
+                  <span className="telemetry-chip-icon text-indigo-500">
+                    <Sparkles className="w-4 h-4" />
+                  </span>
+                  <span className="telemetry-chip-label">Scoring:</span>
+                  <span className="telemetry-chip-val">Automated Telemetry</span>
+                </div>
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 'var(--space-sm)', minHeight: '2.4em', display: 'flex', alignItems: 'center', justifyContent: 'center', wordBreak: 'break-word', padding: '0 4px', color: 'var(--text-primary)' }}>
-                {getDisplayName(entry)}
-              </div>
-              <div className="stat-value lime" style={{ fontSize: '1.5rem' }}>
-                {entry.points}
-              </div>
-              <div className="stat-label">POINTS</div>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
 
-        {/* Full Leaderboard Card with Search & Pagination */}
-        <div className="card">
+        {/* Top 3 Championship Podium */}
+        {leaderboard.length > 0 && (
+          <section className="podium-container" aria-label="Championship Podium">
+            <div className="podium-section-header">
+              <div className="podium-section-eyebrow">
+                <Crown className="w-3.5 h-3.5" />
+                <span>Season Leaders Podium</span>
+              </div>
+            </div>
+
+            <div className="podium-grid">
+              {leaderboard.slice(0, 3).map((entry) => {
+                const isChampion = entry.rank === 1;
+                const isRunnerUp = entry.rank === 2;
+
+                return (
+                  <div
+                    key={`podium-${entry.rank}-${entry.dealer}`}
+                    className={`podium-card rank-${entry.rank}`}
+                  >
+                    {/* Medal Medallion */}
+                    <div className="podium-medal-badge">
+                      {isChampion ? (
+                        <Crown className="w-6 h-6" />
+                      ) : isRunnerUp ? (
+                        <Medal className="w-6 h-6" />
+                      ) : (
+                        <Award className="w-6 h-6" />
+                      )}
+                    </div>
+
+                    <span className="podium-standing-tag">
+                      {isChampion ? 'Season Leader • #1' : isRunnerUp ? 'Podium 2nd • #2' : 'Podium 3rd • #3'}
+                    </span>
+
+                    <h3 className="podium-dealer-name">
+                      {getDisplayName(entry)}
+                    </h3>
+
+                    <div className="podium-score-wrap">
+                      <span className="podium-points-value">
+                        {entry.points.toLocaleString('en-IN')}
+                      </span>
+                      <span className="podium-points-label">Total Points</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Full Leaderboard Standings Card */}
+        <section className="card" aria-label="Official Dealer Rankings">
           <div className="card-header" style={{ flexWrap: 'wrap', gap: 'var(--space-md)', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📊</span> Full Rankings
+              <h2 className="card-title">
+                <TrendingUp className="w-5 h-5 text-[#364ea2] dark:text-[#38bdf8]" />
+                <span>Official National Rankings</span>
               </h2>
               <p className="card-subtitle">
-                {lastUpdated && `Updated ${lastUpdated.toLocaleTimeString()}`}
-                {' '}• Auto-refreshes every 30s
+                {lastUpdated ? `Live synced at ${lastUpdated.toLocaleTimeString('en-IN')}` : 'Live syncing active'}
+                {' '}• Automated 30-second refresh
               </p>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={fetchLeaderboard}>
-              🔄 Refresh
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={fetchLeaderboard}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh Standings</span>
             </button>
           </div>
 
-          {/* Search Bar & Page Controls Row */}
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '12px',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px 16px',
-            marginBottom: 'var(--space-lg)',
-          }}>
+          {/* Search & Filter Toolbar */}
+          <div className="leaderboard-toolbar">
             {/* Search Input Box */}
-            <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '240px' }}>
-              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.6, fontSize: '0.9rem' }}>
-                🔍
-              </span>
+            <div className="search-input-wrapper">
+              <Search className="search-icon-left w-4 h-4" />
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search dealer name or rank # (e.g. Bhavani, #5)..."
+                placeholder="Search dealership name, city or rank # (e.g. Bhavani, #5)..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 style={{
-                  paddingLeft: '36px',
-                  paddingRight: searchQuery ? '32px' : '12px',
-                  height: '40px',
+                  paddingLeft: '38px',
+                  paddingRight: searchQuery ? '36px' : '14px',
+                  height: '42px',
                   fontSize: '0.875rem',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-full)',
+                  width: '100%',
                 }}
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '1rem',
-                    padding: '2px 6px',
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
                   }}
-                  title="Clear search"
+                  className="clear-search-btn"
+                  title="Clear search query"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -404,123 +498,144 @@ export default function LeaderboardPage() {
             {/* Rows Per Page Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label htmlFor="pageSize" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                Rows:
+                Rows per page:
               </label>
               <select
                 id="pageSize"
                 className="form-select"
                 value={pageSize}
-                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  setPageSize(parseInt(e.target.value, 10));
+                  setCurrentPage(1);
+                }}
                 style={{
                   height: '40px',
-                  padding: '0 12px',
+                  padding: '0 14px',
                   width: 'auto',
                   fontSize: '0.85rem',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--surface-secondary)',
+                  borderRadius: 'var(--radius-full)',
+                  background: 'var(--bg-card)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)',
                 }}
               >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={250}>250</option>
-                <option value={0}>All (1,531)</option>
+                <option value={10}>10 rows</option>
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={0}>All Dealerships</option>
               </select>
             </div>
 
-            {/* Results Counter Summary */}
+            {/* Counter Summary */}
             <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               {searchQuery ? (
                 <span>
-                  Found <strong>{filteredLeaderboard.length}</strong> matching dealers
+                  Found <strong>{filteredLeaderboard.length}</strong> matching dealerships
                 </span>
               ) : (
                 <span>
-                  Showing <strong>{startRecord}–{endRecord}</strong> of <strong>{leaderboard.length}</strong>
+                  Showing <strong>{startRecord}–{endRecord}</strong> of <strong>{leaderboard.length.toLocaleString('en-IN')}</strong> dealerships
                 </span>
               )}
             </div>
           </div>
 
-          {/* Leaderboard Table */}
+          {/* Table Container */}
           {paginatedEntries.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="leaderboard-table" style={{ width: '100%' }}>
+            <div className="leaderboard-table-container">
+              <table className="leaderboard-table">
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'center', width: '90px' }}>Rank</th>
-                    <th>{isAdminUser && !showMaskedNames ? 'Dealership Name (Unmasked)' : 'Dealer Name'}</th>
-                    {isAdminUser && !showMaskedNames && <th>External ID / City</th>}
-                    <th style={{ textAlign: 'right', width: '120px' }}>Points</th>
+                    <th style={{ textAlign: 'center', width: '84px' }}>Rank</th>
+                    <th>{isAdminUser && !showMaskedNames ? 'Dealership Legal Entity (Unmasked)' : 'Dealership Name'}</th>
+                    {isAdminUser && !showMaskedNames && <th>External ID / Location</th>}
+                    <th style={{ textAlign: 'right', width: '130px' }}>Total Points</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedEntries.map((entry, idx) => (
-                    <tr key={`${entry.rank}-${entry.dealer}-${idx}`} className="leaderboard-row">
-                      <td className="rank-cell" style={getRankStyle(entry.rank)}>
-                        {getMedalEmoji(entry.rank) ? (
-                          <span className="rank-medal" title={`Rank #${entry.rank}`}>
-                            {getMedalEmoji(entry.rank)}
+                  {paginatedEntries.map((entry, idx) => {
+                    const isTop1 = entry.rank === 1;
+                    const isTop2 = entry.rank === 2;
+                    const isTop3 = entry.rank === 3;
+
+                    return (
+                      <tr key={`${entry.rank}-${entry.dealer}-${idx}`} className="leaderboard-row">
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`rank-cell-content ${isTop1 ? 'rank-1' : isTop2 ? 'rank-2' : isTop3 ? 'rank-3' : ''}`}>
+                            {entry.rank}
                           </span>
-                        ) : (
-                          <span style={{ fontSize: '0.95rem' }}>#{entry.rank}</span>
-                        )}
-                      </td>
-                      <td className="dealer-cell">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{getDisplayName(entry)}</span>
-                          {entry.rank <= 3 && (
-                            <span style={{
-                              fontSize: '0.68rem',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: entry.rank === 1 ? 'rgba(255, 215, 0, 0.2)' : entry.rank === 2 ? 'rgba(192, 192, 192, 0.2)' : 'rgba(205, 127, 50, 0.2)',
-                              color: entry.rank === 1 ? '#FFD700' : entry.rank === 2 ? '#C0C0C0' : '#CD7F32',
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                            }}>
-                              TOP {entry.rank}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      {isAdminUser && !showMaskedNames && (
-                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)', fontWeight: 600 }}>{entry.externalId || '-'}</span>
-                          {entry.city ? <span style={{ marginLeft: '4px' }}>• {entry.city}</span> : ''}
                         </td>
-                      )}
-                      <td className="points-cell">{entry.points}</td>
-                    </tr>
-                  ))}
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {getDisplayName(entry)}
+                            </span>
+                            {entry.rank <= 3 && (
+                              <span className={`podium-standing-tag ${isTop1 ? 'rank-1' : isTop2 ? 'rank-2' : 'rank-3'}`} style={{ margin: 0, padding: '1px 7px', fontSize: '0.62rem' }}>
+                                {isTop1 ? 'CHAMPION' : isTop2 ? '2ND PODIUM' : '3RD PODIUM'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {isAdminUser && !showMaskedNames && (
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)', fontWeight: 600 }}>{entry.externalId || '-'}</span>
+                            {entry.city ? <span style={{ marginLeft: '4px' }}>• {entry.city}</span> : ''}
+                          </td>
+                        )}
+                        <td style={{ textAlign: 'right' }}>
+                          <span className="points-pill">
+                            {entry.points.toLocaleString('en-IN')}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           ) : (
             <div style={{
               textAlign: 'center',
-              padding: 'var(--space-2xl) var(--space-md)',
-              background: 'rgba(255, 255, 255, 0.01)',
-              borderRadius: 'var(--radius-md)',
+              padding: '48px 24px',
+              background: 'var(--bg-subtle)',
+              borderRadius: 'var(--radius-lg)',
               border: '1px dashed var(--border-subtle)',
             }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🔍</div>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
-                No dealers found
+              <div style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: 'rgba(54, 78, 162, 0.1)',
+                border: '1px solid rgba(54, 78, 162, 0.2)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
+                color: 'var(--tvs-blue)',
+              }}>
+                <Search className="w-6 h-6" />
+              </div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                {searchQuery ? 'No matching dealerships found' : 'Standings Initializing'}
               </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 'var(--space-md)' }}>
-                No results matched &quot;<strong>{searchQuery}</strong>&quot;. Check for typos or try searching by another name or rank.
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '440px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+                {searchQuery
+                  ? `No dealerships matched "${searchQuery}". Please check your search term or dealer rank number.`
+                  : 'Leaderboard points calculate automatically following verified auction transactions and dealer actions.'}
               </p>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSearchQuery('')}
-              >
-                Clear Search
-              </button>
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSearchQuery('')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear Search Filter</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -539,7 +654,7 @@ export default function LeaderboardPage() {
               {/* Pagination Info */}
               <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                 Showing <strong>{startRecord}</strong> to <strong>{endRecord}</strong> of{' '}
-                <strong>{filteredLeaderboard.length}</strong> dealers • Page{' '}
+                <strong>{filteredLeaderboard.length.toLocaleString('en-IN')}</strong> dealerships • Page{' '}
                 <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
               </div>
 
@@ -554,7 +669,7 @@ export default function LeaderboardPage() {
                   style={{ minWidth: '34px', padding: '4px 8px', opacity: currentPage === 1 ? 0.4 : 1 }}
                   title="First Page"
                 >
-                  «
+                  <ChevronsLeft className="w-3.5 h-3.5" />
                 </button>
 
                 {/* Previous Page */}
@@ -566,7 +681,7 @@ export default function LeaderboardPage() {
                   style={{ minWidth: '34px', padding: '4px 8px', opacity: currentPage === 1 ? 0.4 : 1 }}
                   title="Previous Page"
                 >
-                  ‹
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
 
                 {/* Number Pills */}
@@ -611,7 +726,7 @@ export default function LeaderboardPage() {
                   style={{ minWidth: '34px', padding: '4px 8px', opacity: currentPage === totalPages ? 0.4 : 1 }}
                   title="Next Page"
                 >
-                  ›
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
 
                 {/* Last Page */}
@@ -623,7 +738,7 @@ export default function LeaderboardPage() {
                   style={{ minWidth: '34px', padding: '4px 8px', opacity: currentPage === totalPages ? 0.4 : 1 }}
                   title="Last Page"
                 >
-                  »
+                  <ChevronsRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
@@ -642,7 +757,7 @@ export default function LeaderboardPage() {
                     height: '32px',
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-subtle)',
-                    background: 'var(--surface-secondary)',
+                    background: 'var(--bg-card)',
                     color: 'var(--text-primary)',
                     textAlign: 'center',
                     fontSize: '0.82rem',
@@ -658,15 +773,21 @@ export default function LeaderboardPage() {
               </form>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', padding: 'var(--space-2xl) 0 var(--space-xl)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          <p>TVS Certified Dealer Super Cup © 2026</p>
-          <p style={{ marginTop: 'var(--space-xs)' }}>
-            Auctions every Thursday at 2:00 PM • Points updated in real-time
+        {/* Corporate Footer */}
+        <footer style={{ textAlign: 'center', padding: '48px 0 24px', color: 'var(--text-muted)', fontSize: '0.8rem', borderTop: '1px solid var(--border-hairline)', marginTop: '48px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', marginBottom: '8px' }}>
+            <span>TVS Certified Network</span>
+            <span>•</span>
+            <span>Dealer Super Cup 2026–27</span>
+            <span>•</span>
+            <span>Live Standings</span>
+          </div>
+          <p style={{ marginTop: 'var(--space-xs)', color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+            High-velocity dealer auctions every Thursday at 2:00 PM • Verified points synced in real-time
           </p>
-        </div>
+        </footer>
       </div>
     </div>
   );

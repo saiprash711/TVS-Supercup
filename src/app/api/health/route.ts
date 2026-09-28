@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +17,7 @@ export async function GET() {
   const cwdSize = cwdExists ? fs.statSync(cwdDb).size : 0;
 
   try {
-    const campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-    });
+    const campaign = await getCurrentSuperCupCampaign();
     const dealerCount = await prisma.dealer.count();
 
     return NextResponse.json({

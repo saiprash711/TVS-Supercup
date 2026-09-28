@@ -7,13 +7,18 @@
  */
 
 import { prisma } from '@/lib/db';
-import { MASKING_ENABLED } from './masking';
+import { MASKING_ENABLED, maskDealerName } from './masking';
 
 /**
  * Recalculate all dealer scores and rankings for a campaign.
  * This aggregates all dealer_activities and updates dealer_scores.
  */
 export async function recalculateRankings(campaignId: number) {
+  const campaign = await prisma.campaign.findUniqueOrThrow({
+    where: { id: campaignId },
+    select: { startDate: true, endDate: true },
+  });
+
   const isPostgres = Boolean(
     process.env.DATABASE_URL?.startsWith('postgres') ||
     process.env.POSTGRES_URL?.startsWith('postgres')
@@ -27,10 +32,16 @@ export async function recalculateRankings(campaignId: number) {
           SELECT 
             d.id AS dealer_id,
             COALESCE(SUM(da.points), 0)::int AS total_points,
-            ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(da.points), 0) DESC, d.id ASC)::int AS rank
+            CASE
+              WHEN COALESCE(SUM(da.points), 0) <= 0 THEN 0
+              ELSE ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(da.points), 0) DESC, d.id ASC)::int
+            END AS rank
           FROM dealers d
           LEFT JOIN dealer_activities da 
-            ON da.dealer_id = d.id AND da.campaign_id = $1
+            ON da.dealer_id = d.id
+            AND da.campaign_id = $1
+            AND da.timestamp >= $2
+            AND da.timestamp <= $3
           WHERE d.status = 'ACTIVE'
           GROUP BY d.id
         )
@@ -47,7 +58,7 @@ export async function recalculateRankings(campaignId: number) {
           total_points = EXCLUDED.total_points,
           rank = EXCLUDED.rank,
           updated_at = NOW();
-      `, campaignId);
+      `, campaignId, campaign.startDate, campaign.endDate);
 
       const top = await prisma.dealerScore.findFirst({
         where: { campaignId },
@@ -68,7 +79,10 @@ export async function recalculateRankings(campaignId: number) {
   // Fallback for SQLite / dev
   const dealerTotals = await prisma.dealerActivity.groupBy({
     by: ['dealerId'],
-    where: { campaignId },
+    where: {
+      campaignId,
+      timestamp: { gte: campaign.startDate, lte: campaign.endDate },
+    },
     _sum: { points: true },
     orderBy: { _sum: { points: 'desc' } },
   });
@@ -102,13 +116,13 @@ export async function recalculateRankings(campaignId: number) {
           },
           update: {
             totalPoints,
-            rank: i + idx + 1,
+            rank: totalPoints > 0 ? i + idx + 1 : 0,
           },
           create: {
             dealerId,
             campaignId,
             totalPoints,
-            rank: i + idx + 1,
+            rank: totalPoints > 0 ? i + idx + 1 : 0,
           },
         })
       )
@@ -128,7 +142,7 @@ export async function recalculateRankings(campaignId: number) {
  */
 export async function getLeaderboard(campaignId: number, limit?: number, unmasked?: boolean) {
   const scores = await prisma.dealerScore.findMany({
-    where: { campaignId },
+    where: { campaignId, totalPoints: { gt: 0 } },
     include: {
       dealer: {
         select: {
@@ -147,7 +161,8 @@ export async function getLeaderboard(campaignId: number, limit?: number, unmaske
   return scores.map((s) => {
     const isUnmasked = unmasked ?? !MASKING_ENABLED;
     const realName = s.dealer.displayName || s.dealer.maskedName || `Dealer ${s.dealer.externalDealerId}`;
-    const maskedName = s.dealer.maskedName || (s.dealer.displayName ? s.dealer.displayName.trim().charAt(0).toUpperCase() + '*****' : 'D*****');
+    // Recompute masks at the response boundary so stale or unsafe DB values are never exposed.
+    const maskedName = maskDealerName(realName);
 
     return {
       rank: s.rank,
@@ -179,6 +194,14 @@ export async function getPositionContext(dealerId: number, campaignId: number) {
   if (!dealerScore) return null;
 
   const rank = dealerScore.rank;
+  if (rank <= 0) {
+    return {
+      rank: 0,
+      points: dealerScore.totalPoints,
+      above: null,
+      below: null,
+    };
+  }
 
   // Get dealer above (rank - 1)
   const above = rank > 1
@@ -200,7 +223,9 @@ export async function getPositionContext(dealerId: number, campaignId: number) {
     above: above
       ? {
           rank: above.rank,
-          dealer: MASKING_ENABLED ? above.dealer.maskedName : (above.dealer.displayName || above.dealer.maskedName),
+          dealer: MASKING_ENABLED
+            ? maskDealerName(above.dealer.displayName || above.dealer.maskedName)
+            : (above.dealer.displayName || above.dealer.maskedName),
           points: above.totalPoints,
           gap: above.totalPoints - dealerScore.totalPoints,
         }
@@ -208,7 +233,9 @@ export async function getPositionContext(dealerId: number, campaignId: number) {
     below: below
       ? {
           rank: below.rank,
-          dealer: MASKING_ENABLED ? below.dealer.maskedName : (below.dealer.displayName || below.dealer.maskedName),
+          dealer: MASKING_ENABLED
+            ? maskDealerName(below.dealer.displayName || below.dealer.maskedName)
+            : (below.dealer.displayName || below.dealer.maskedName),
           points: below.totalPoints,
           gap: dealerScore.totalPoints - below.totalPoints,
         }

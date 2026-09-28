@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { getCurrentSuperCupCampaign } from '../src/lib/services/campaign';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,8 @@ function maskName(name: string): string {
 
 async function seedTVSDealers() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  const token = 'a72b042f8f3a5dd5ad4e2bfaf1a87603d354392e75c3c31845a6c40beb782fb285a21ce357fc6677293768283f3ea6d9adce154ad6977e7186fab27beb27be3a3f76326d0212571cc72e3c768748eda31b8e7836ce8ab2bbe1509b73846d9a02562ccc58702d7a5a71283bc53a05cc86069ad24d7d5401871151b27bdf65ba1712d4081bd5eff14684101eb7285e2e428fbe6d15a514235f0e2e3d4d9ecc5942c37352119455c97b740142c69990aa47';
+  const token = process.env.TVS_API_TOKEN;
+  if (!token) throw new Error('TVS_API_TOKEN is required to sync dealer accounts');
 
   console.log('Fetching all registered dealers from TVS Certified live platform...');
   const res = await fetch('https://tvscertified.in:8036/users', {
@@ -52,17 +54,15 @@ async function seedTVSDealers() {
   console.log(`Processing ${dealers.length} verified dealer accounts...`);
 
   // Ensure active campaign exists
-  let campaign = await prisma.campaign.findFirst({
-    where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-  });
+  let campaign = await getCurrentSuperCupCampaign();
 
   if (!campaign) {
     campaign = await prisma.campaign.create({
       data: {
-        name: 'Dealer Super Cup — September 2026',
-        slug: 'september-2026',
-        startDate: new Date('2026-09-01'),
-        endDate: new Date('2026-09-30'),
+        name: 'TVS Certified Super Cup 2026–27',
+        slug: 'supercup-2026-27',
+        startDate: new Date('2026-10-14T18:30:00.000Z'),
+        endDate: new Date('2027-01-14T18:29:59.999Z'),
         type: 'SUPER_CUP',
         status: 'ACTIVE',
       },

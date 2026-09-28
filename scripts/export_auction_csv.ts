@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getCurrentSuperCupCampaign } from '../src/lib/services/campaign';
 
 const prisma = new PrismaClient();
 
@@ -26,9 +27,7 @@ async function main() {
   const auctionId = '1978';
   console.log(`Generating updated CSV for Auction #${auctionId}...`);
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-  });
+  const campaign = await getCurrentSuperCupCampaign();
 
   const match = await prisma.matchDay.findFirst({
     where: { auctionId },

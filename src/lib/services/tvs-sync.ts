@@ -10,6 +10,45 @@ import { prisma } from '@/lib/db';
 import { getTVSProvider } from './tvs-integration';
 import { recordActivity, checkAllMatchesBonus } from './points-engine';
 import { recalculateRankings } from './ranking-engine';
+import { getCurrentSuperCupCampaignWithMatches } from './campaign';
+
+type CampaignWindow = { startDate: Date; endDate: Date };
+
+function isWithinCampaign(timestamp: Date | string | undefined, campaign: CampaignWindow): boolean {
+  if (!timestamp) return false;
+  const activityTime = new Date(timestamp).getTime();
+  return Number.isFinite(activityTime)
+    && activityTime >= campaign.startDate.getTime()
+    && activityTime <= campaign.endDate.getTime();
+}
+
+function provesLiveParticipation(activityType: string, metadata?: Record<string, unknown>): boolean {
+  if (activityType === 'MATCH_PARTICIPATION') return true;
+  if (activityType === 'BUY' || activityType === 'SELL') return true;
+  return activityType === 'BID_PLACED' && metadata?.isPreBid !== true;
+}
+
+async function ensureMatchParticipation(params: {
+  dealerId: number;
+  campaignId: number;
+  matchId: number;
+  timestamp: Date;
+  sourceTransactionId: string;
+}) {
+  return recordActivity({
+    dealerId: params.dealerId,
+    campaignId: params.campaignId,
+    matchId: params.matchId,
+    activityType: 'MATCH_PARTICIPATION',
+    externalTransactionId: `INFERRED-ATTEND-${params.campaignId}-${params.matchId}-${params.dealerId}`,
+    metadata: {
+      inferred: true,
+      source: 'VERIFIED_LIVE_AUCTION_ACTIVITY',
+      sourceTransactionId: params.sourceTransactionId,
+    },
+    timestamp: params.timestamp,
+  });
+}
 
 export interface SyncResult {
   dealerId: number;
@@ -42,6 +81,21 @@ export async function syncDealerActivities(
       return { dealerId, externalDealerId, newActivitiesCount: 0, newPointsAwarded: 0, totalPoints: 0, rank: 0 };
     }
 
+    // Do not poll or award anything before the campaign opens or after it closes.
+    if (!isWithinCampaign(new Date(), campaign)) {
+      const score = await prisma.dealerScore.findUnique({
+        where: { dealerId_campaignId: { dealerId, campaignId } },
+      });
+      return {
+        dealerId,
+        externalDealerId,
+        newActivitiesCount: 0,
+        newPointsAwarded: 0,
+        totalPoints: score?.totalPoints || 0,
+        rank: score?.rank || 0,
+      };
+    }
+
     // Get match days for this campaign to map auctionId to matchId
     const matchDays = await prisma.matchDay.findMany({
       where: { campaignId },
@@ -58,20 +112,29 @@ export async function syncDealerActivities(
     const liveMatch = matchDays.find(m => m.status === 'LIVE') || matchDays.find(m => m.status === 'UPCOMING') || matchDays[0];
     const targetAuctionId = liveMatch?.auctionId || '2003';
 
+    // Date-based IDs are safe placeholders. An admin must replace them with
+    // the real TVS auction ID before a test or live sync can contact TVS.
+    if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(targetAuctionId)) {
+      const score = await prisma.dealerScore.findUnique({
+        where: { dealerId_campaignId: { dealerId, campaignId } },
+      });
+      return {
+        dealerId,
+        externalDealerId,
+        newActivitiesCount: 0,
+        newPointsAwarded: 0,
+        totalPoints: score?.totalPoints || 0,
+        rank: score?.rank || 0,
+      };
+    }
+
     // 1. Fetch live activities from TVS APIs strictly for this auction
     const liveActivities = await provider.getDealerActivities(externalDealerId, targetAuctionId, token);
 
     // 2. Record each transaction in the points engine
     for (const act of liveActivities) {
       // Validate activity date against campaign window
-      if (act.timestamp) {
-        const actTime = new Date(act.timestamp).getTime();
-        const start = new Date(campaign.startDate).getTime();
-        const end = new Date(campaign.endDate).getTime();
-        if (actTime < start || actTime > end) {
-          continue; // Outside active campaign window (e.g. historical past auction from 2025)
-        }
-      }
+      if (!isWithinCampaign(act.timestamp, campaign)) continue;
 
       // Ensure activity belongs to a scheduled match auction in the campaign
       const matchId = act.auctionId ? auctionToMatchMap.get(act.auctionId) : liveMatch?.id;
@@ -92,6 +155,20 @@ export async function syncDealerActivities(
       if (recordResult.success && !recordResult.duplicate) {
         newActivitiesCount++;
         newPointsAwarded += recordResult.points;
+      }
+
+      if (act.activityType !== 'MATCH_PARTICIPATION' && provesLiveParticipation(act.activityType, act.metadata)) {
+        const participation = await ensureMatchParticipation({
+          dealerId,
+          campaignId,
+          matchId,
+          timestamp: act.timestamp,
+          sourceTransactionId: act.transactionId,
+        });
+        if (participation.success && !participation.duplicate) {
+          newActivitiesCount++;
+          newPointsAwarded += participation.points;
+        }
       }
     }
 
@@ -151,7 +228,24 @@ export async function syncAuctionActivities(
   let pointsAwarded = 0;
 
   try {
-    const activities = await provider.getAuctionActivities(auctionId, token);
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { startDate: true, endDate: true },
+    });
+    const match = await prisma.matchDay.findFirst({
+      where: { campaignId, auctionId },
+    });
+    if (!campaign || !match) {
+      return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
+    }
+    // Date-based references are placeholders until an administrator maps the
+    // real TVS auction ID. Never send them to the live provider.
+    if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(auctionId)) {
+      return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
+    }
+
+    const fetchedActivities = await provider.getAuctionActivities(auctionId, token);
+    const activities = fetchedActivities.filter(act => isWithinCampaign(act.timestamp, campaign));
 
     // Map dealers by externalDealerId (supporting both raw ID and USR- prefixed ID)
     const externalIds = [...new Set(activities.map(a => a.dealerId))];
@@ -165,8 +259,9 @@ export async function syncAuctionActivities(
     const sellerNames = activities
       .filter(a => a.activityType === 'SELL')
       .map(a => {
-        const meta = (a.metadata || {}) as Record<string, any>;
-        return meta.sellerName || meta.customerName;
+        const meta = (a.metadata || {}) as Record<string, unknown>;
+        const name = meta.sellerName || meta.customerName;
+        return typeof name === 'string' ? name : undefined;
       })
       .filter((n): n is string => Boolean(n));
 
@@ -188,10 +283,6 @@ export async function syncAuctionActivities(
         dealerMap.set(`USR-${d.externalDealerId}`, d.id);
       }
     }
-
-    const match = await prisma.matchDay.findFirst({
-      where: { campaignId, auctionId },
-    });
 
     // Pre-fetch all recorded transaction IDs for this campaign to avoid repetitive roundtrips
     const transactionIds = activities
@@ -217,8 +308,9 @@ export async function syncAuctionActivities(
     );
 
     for (const act of activities) {
-      const meta = (act.metadata || {}) as Record<string, any>;
-      const sName = meta.sellerName || meta.customerName;
+      const meta = (act.metadata || {}) as Record<string, unknown>;
+      const rawSellerName = meta.sellerName || meta.customerName;
+      const sName = typeof rawSellerName === 'string' ? rawSellerName : undefined;
       let dealerId = dealerMap.get(act.dealerId) || (sName ? dealerMap.get(sName) : undefined);
 
       // If dealer is not in local DB (e.g. newly registered on TVS today), auto-provision them
@@ -236,7 +328,7 @@ export async function syncAuctionActivities(
               displayName,
               maskedName,
               city: profile?.city || (meta.sellerCity ? String(meta.sellerCity) : (meta.location ? String(meta.location) : 'Tamil Nadu')),
-              phone: profile?.phone || meta.sellerPhone || null,
+              phone: profile?.phone || (meta.sellerPhone ? String(meta.sellerPhone) : null),
               status: 'ACTIVE',
             },
           });
@@ -286,13 +378,27 @@ export async function syncAuctionActivities(
         pointsAwarded += res.points;
         existingSet.add(dedupeKey);
       }
+
+      if (act.activityType !== 'MATCH_PARTICIPATION' && provesLiveParticipation(act.activityType, act.metadata)) {
+        const participation = await ensureMatchParticipation({
+          dealerId,
+          campaignId,
+          matchId: match.id,
+          timestamp: act.timestamp,
+          sourceTransactionId: act.transactionId,
+        });
+        if (participation.success && !participation.duplicate) {
+          processed++;
+          pointsAwarded += participation.points;
+        }
+      }
     }
 
     if (pointsAwarded > 0) {
       await recalculateRankings(campaignId);
     }
 
-    return { processed, pointsAwarded, totalActivitiesFound: activities.length };
+    return { processed, pointsAwarded, totalActivitiesFound: fetchedActivities.length };
   } catch (error) {
     console.error(`Error syncing auction ${auctionId}:`, error);
     return { processed, pointsAwarded, totalActivitiesFound: 0 };
@@ -306,11 +412,7 @@ export async function syncLiveAuction(
   auctionId?: string,
   token?: string
 ): Promise<{ success: boolean; processed: number; pointsAwarded: number; totalActivitiesFound?: number; auctionId: string }> {
-  const campaign = await prisma.campaign.findFirst({
-    where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-    include: { matchDays: true },
-    orderBy: { startDate: 'desc' },
-  });
+  const campaign = await getCurrentSuperCupCampaignWithMatches();
 
   if (!campaign) {
     return { success: false, processed: 0, pointsAwarded: 0, totalActivitiesFound: 0, auctionId: auctionId || '2003' };

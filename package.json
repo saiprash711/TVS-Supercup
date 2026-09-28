@@ -12,7 +12,8 @@
     "db:setup": "npx prisma db push && npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "db:studio": "npx prisma studio",
     "sync:live": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/live-sync-daemon.ts",
-    "verify": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/verify_live_readiness.ts"
+    "verify": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/verify_live_readiness.ts",
+    "setup:test-campaign": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/setup_prelaunch_test_campaign.ts"
   },
   "prisma": {
     "seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

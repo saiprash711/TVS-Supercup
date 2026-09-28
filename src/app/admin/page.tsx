@@ -756,16 +756,18 @@ export default function AdminPage() {
     }
   };
 
-  const handleUpdateMatch = async (matchId: number, status: string) => {
+  const handleUpdateMatch = async (matchId: number, status: string, auctionId?: string) => {
     const res = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'updateMatch', matchId, status }),
+      body: JSON.stringify({ action: 'updateMatch', matchId, status, auctionId }),
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Match day status updated!');
+      showToast(auctionId !== undefined ? 'Auction ID saved!' : 'Match day status updated!');
       loadData();
+    } else {
+      showToast(data.error || 'Failed to update match', 'error');
     }
   };
 
@@ -998,7 +1000,7 @@ export default function AdminPage() {
               <div>
                 <h1 className="admin-page-title">Super Cup Executive Command Center</h1>
                 <p className="admin-page-subtitle">
-                  September 2026 Campaign • Real-Time Auction Telemetry & Fleet Management
+                  2026–27 Campaign • Real-Time Auction Telemetry & Fleet Management
                 </p>
               </div>
             </div>
@@ -1736,7 +1738,7 @@ export default function AdminPage() {
                               Official Super Cup Standings
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                              September 2026 Dealership Championship • Enterprise legal names and points unmasked for administration
+                              2026–27 Dealership Championship • Enterprise legal names and points unmasked for administration
                             </p>
                           </div>
 
@@ -3901,9 +3903,21 @@ export default function AdminPage() {
                           <div className="match-date">
                             {new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-blue)', marginTop: '2px' }}>
-                            Auction ID: {m.auctionId}
-                          </div>
+                          <label style={{ width: '100%', marginTop: '8px', fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'left' }}>
+                            TVS AUCTION ID
+                            <input
+                              className="form-input"
+                              style={{ marginTop: '5px', padding: '7px 9px', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}
+                              defaultValue={m.auctionId || ''}
+                              placeholder="Enter real TVS auction ID"
+                              onBlur={(event) => {
+                                const nextAuctionId = event.target.value.trim();
+                                if (nextAuctionId && nextAuctionId !== m.auctionId) {
+                                  handleUpdateMatch(m.id, m.status, nextAuctionId);
+                                }
+                              }}
+                            />
+                          </label>
 
                           <div style={{ marginTop: '12px', width: '100%' }}>
                             <select

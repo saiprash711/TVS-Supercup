@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-interface TickerItem {
+export interface TickerItem {
   label: string;
   value: string;
   badge?: string;
@@ -10,19 +10,18 @@ interface TickerItem {
 }
 
 const DEFAULT_ITEMS: TickerItem[] = [
-  { label: 'AUCTION PULSE', value: 'LIVE 2:00 PM THURSDAYS', badge: 'BROADCAST', type: 'live' },
-  { label: 'TVS CERTIFIED', value: 'TRANSPARENT DIGITAL AUCTIONS', badge: 'OFFICIAL', type: 'accent' },
-  { label: 'MARUTI SWIFT ZXI', value: '₹4,85,000 • 2m 14s', badge: 'HOT BID', type: 'positive' },
-  { label: 'SUPER CUP BONUS', value: 'ALL 4 MATCHES = +20 PTS', badge: 'REWARD', type: 'accent' },
-  { label: 'MAHINDRA XUV700', value: '₹13,75,000 • 3m 21s', badge: 'WINNING', type: 'positive' },
-  { label: 'COMMUNITY', value: 'DRIVING A BRIGHTER TOMORROW', badge: 'VISION', type: 'neutral' },
-  { label: 'HYUNDAI i20 SPORTZ', value: '₹6,70,000 • 6m 31s', badge: 'BIDDING', type: 'positive' },
-  { label: 'NEXT AUCTION', value: 'MATCH #2 THURSDAY', badge: 'COUNTDOWN', type: 'live' },
-  { label: 'TATA NEXON EV', value: '₹8,25,000 • 1m 08s', badge: 'HOT BID', type: 'positive' },
+  { label: 'AUCTION FLOOR', value: 'OPENS THURSDAYS AT 2:00 PM IST', badge: 'BROADCAST', type: 'live' },
+  { label: 'SEASON GRAND PRIZE POOL', value: '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)', badge: 'REWARD', type: 'accent' },
+  { label: 'SCORING RULES', value: 'BUY/SELL = +10 PTS • MATCH ATTENDANCE = +15 PTS', badge: 'VERIFIED', type: 'positive' },
+  { label: 'TVS CERTIFIED', value: 'OFFICIAL DEALER SUPERCUP 2026–27', badge: 'CHAMPIONSHIP', type: 'accent' },
+  { label: 'LIVE BIDDING', value: 'VERIFIED IN-ROOM BIDS = +2 PTS', badge: 'MULTIPLIER', type: 'positive' },
+  { label: 'SERIES BONUS', value: 'ATTEND ALL MATCHES FOR +20 PTS BONUS', badge: 'BONUS', type: 'accent' },
+  { label: 'INSPECTIONS & WATCHLIST', value: 'INSPECTION = +1 PT • WATCHLIST BOOKMARK = +1 PT', badge: 'RULES', type: 'neutral' },
+  { label: 'DEALER COMMUNITY', value: 'A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW', badge: 'VISION', type: 'neutral' },
 ];
 
 export default function TickerMarquee({ customItems }: { customItems?: TickerItem[] }) {
-  const items = customItems || DEFAULT_ITEMS;
+  const items = customItems && customItems.length > 0 ? customItems : DEFAULT_ITEMS;
 
   return (
     <div className="ticker-wrapper" aria-hidden="true">

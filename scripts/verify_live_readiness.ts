@@ -9,6 +9,7 @@ import { prisma } from '../src/lib/db';
 import { syncLiveAuction } from '../src/lib/services/tvs-sync';
 import { recalculateRankings, getLeaderboard, getPositionContext } from '../src/lib/services/ranking-engine';
 import { loginDealer } from '../src/lib/auth';
+import { getCurrentSuperCupCampaign } from '../src/lib/services/campaign';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -104,7 +105,7 @@ async function runSuite() {
 
   // 5. Concurrent Read/Write Stress Test (Simulating dealers reloading during live sync)
   try {
-    const campaign = await prisma.campaign.findFirst({ where: { type: 'SUPER_CUP', status: 'ACTIVE' } });
+    const campaign = await getCurrentSuperCupCampaign();
     if (!campaign) throw new Error('No active campaign');
 
     // Run simultaneous reads and writes
@@ -150,7 +151,7 @@ async function runSuite() {
 
   // 7. Server-Side Privacy Masking Compliance
   try {
-    const campaign = await prisma.campaign.findFirst({ where: { type: 'SUPER_CUP', status: 'ACTIVE' } });
+    const campaign = await getCurrentSuperCupCampaign();
     const topLeaderboard = await getLeaderboard(campaign!.id, 10);
     const allMasked = topLeaderboard.every(d => /\*{3,}/.test(d.dealer));
 
@@ -165,7 +166,7 @@ async function runSuite() {
 
   // 8. Dealer Personal Dashboard Context
   try {
-    const campaign = await prisma.campaign.findFirst({ where: { type: 'SUPER_CUP', status: 'ACTIVE' } });
+    const campaign = await getCurrentSuperCupCampaign();
     const testDealer = await prisma.dealer.findFirst({ where: { externalDealerId: '2402' } });
     if (testDealer) {
       const context = await getPositionContext(testDealer.id, campaign!.id);

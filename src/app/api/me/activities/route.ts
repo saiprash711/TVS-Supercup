@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentDealer } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export async function GET() {
   try {
@@ -15,10 +16,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const campaign = await prisma.campaign.findFirst({
-      where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
+    const campaign = await getCurrentSuperCupCampaign();
 
     if (!campaign) {
       return NextResponse.json({ error: 'No active campaign' }, { status: 404 });

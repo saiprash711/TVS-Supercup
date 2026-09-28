@@ -9,6 +9,7 @@
 import { prisma } from '../src/lib/db';
 import { syncLiveAuction } from '../src/lib/services/tvs-sync';
 import { getLeaderboard } from '../src/lib/services/ranking-engine';
+import { getCurrentSuperCupCampaignWithMatches } from '../src/lib/services/campaign';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -93,10 +94,7 @@ async function runCycle(campaignId: number) {
 
 async function main() {
   // Find active campaign
-  const campaign = await prisma.campaign.findFirst({
-    where: { type: 'SUPER_CUP', status: 'ACTIVE' },
-    include: { matchDays: true },
-  });
+  const campaign = await getCurrentSuperCupCampaignWithMatches();
 
   if (!campaign) {
     console.error('❌ Error: No active SUPER_CUP campaign found in database!');

@@ -28,6 +28,7 @@ import {
 import ScrollVideoHero from '../components/ScrollVideoHero';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
+import PrizeShowcase from '../components/PrizeShowcase';
 
 interface DashboardData {
   dealer: { displayName?: string; maskedName: string; city: string };
@@ -62,7 +63,7 @@ interface DashboardData {
     status: string;
     participated: boolean;
   }>;
-  campaign: { name: string; startDate: string; endDate: string };
+  campaign: { name: string; slug: string; isTestMode: boolean; startDate: string; endDate: string };
 }
 
 export default function DashboardPage() {
@@ -99,9 +100,27 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  // Helper: compute the next auction date label (auctions are every Thursday at 2 PM IST)
-  const getNextAuctionDateLabel = () => {
+  // Use the configured campaign schedule rather than assuming every Thursday.
+  const getNextAuctionDateLabel = (matches?: DashboardData['matchTracker']) => {
     const now = new Date();
+    const nextMatch = matches
+      ?.filter(match => match.status === 'LIVE' || new Date(match.date).getTime() >= now.getTime())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+
+    if (nextMatch) {
+      if (nextMatch.status === 'LIVE') return 'Live now';
+      return new Date(nextMatch.date).toLocaleString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+        timeZoneName: 'short',
+      });
+    }
+
+    // Fallback for an empty schedule.
     const auctionDate = new Date(now);
     const dayOfWeek = auctionDate.getDay();
     const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
@@ -145,6 +164,8 @@ export default function DashboardPage() {
 
   const { dealer, position, breakdown, matchTracker } = data;
   const dealerName = dealer.displayName || dealer.maskedName;
+  const isTestMode = data.campaign.isTestMode;
+  const matchCount = matchTracker.length;
 
   return (
     <div className="page-container">
@@ -162,7 +183,7 @@ export default function DashboardPage() {
               <span className="navbar-logo">
                 <span>TVS</span> SUPERCUP
               </span>
-              <span className="navbar-badge">SEP 2026</span>
+              <span className="navbar-badge">{isTestMode ? 'TEST MODE' : '2026–27'}</span>
             </div>
           </Link>
 
@@ -202,21 +223,95 @@ export default function DashboardPage() {
       </nav>
 
       {/* Real-Time Live Ticker Marquee */}
-      <TickerMarquee />
+      <TickerMarquee
+        customItems={[
+          {
+            label: isTestMode ? 'PRE-LAUNCH TEST WINDOW' : 'CHAMPIONSHIP STATUS',
+            value: isTestMode ? 'TEST AUCTIONS 1 OCT & 8 OCT • LIVE CUP STARTS 15 OCT' : 'SUPER CUP 2026–27 ACTIVE',
+            badge: isTestMode ? 'TEST MODE' : 'LIVE CUP',
+            type: 'live',
+          },
+          {
+            label: 'NEXT AUCTION WINDOW',
+            value: getNextAuctionDateLabel(matchTracker),
+            badge: 'COUNTDOWN',
+            type: 'live',
+          },
+          {
+            label: 'SEASON GRAND PRIZE POOL',
+            value: '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)',
+            badge: 'PODIUM',
+            type: 'accent',
+          },
+          {
+            label: 'SCORING MULTIPLIERS',
+            value: 'BUY: +10 PTS • SELL: +10 PTS • MATCH ATTENDANCE: +15 PTS',
+            badge: 'OFFICIAL',
+            type: 'positive',
+          },
+          {
+            label: 'LIVE BIDDING ACCRUAL',
+            value: 'VERIFIED ROOM BIDS = +2 PTS PER BID',
+            badge: 'MULTIPLIER',
+            type: 'positive',
+          },
+          {
+            label: 'SERIES BONUS',
+            value: `ATTEND ALL ${matchCount} ${isTestMode ? 'TEST AUCTIONS' : 'MATCHES'} = +20 PTS BONUS`,
+            badge: 'BONUS',
+            type: 'accent',
+          },
+          {
+            label: 'TVS CERTIFIED NETWORK',
+            value: 'TRANSPARENT DIGITAL AUCTIONS • AUDITED COMPLIANCE',
+            badge: 'VERIFIED',
+            type: 'neutral',
+          },
+        ]}
+      />
 
       <main className="content-wrapper">
+        {isTestMode && (
+          <section
+            role="status"
+            style={{
+              marginBottom: '20px', padding: '18px 22px', borderRadius: '18px',
+              border: '1px solid rgba(245, 158, 11, 0.42)',
+              background: 'linear-gradient(110deg, rgba(245,158,11,0.16), rgba(54,78,162,0.1), rgba(108,193,79,0.1))',
+              boxShadow: '0 16px 42px rgba(54, 78, 162, 0.12)', display: 'flex',
+              alignItems: 'center', justifyContent: 'space-between', gap: '18px', flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: '#f59e0b', color: '#111827', display: 'grid', placeItems: 'center', boxShadow: '0 0 24px rgba(245,158,11,.35)' }}>
+                <Radio className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <strong style={{ display: 'block', letterSpacing: '.08em', fontSize: '.84rem', color: '#b45309' }}>PRE-LAUNCH TEST MODE</strong>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '.88rem' }}>
+                  Testing auctions: 1 Oct and 8 Oct. Test scores are isolated and will not carry into the live Super Cup.
+                </span>
+              </div>
+            </div>
+            <span className="badge badge-warning">LIVE CAMPAIGN STARTS 15 OCT</span>
+          </section>
+        )}
         {/* Executive Scroll-Driven Analyst Video Hero */}
         <ScrollVideoHero
           dealerName={dealerName}
           rank={position?.rank || '-'}
           points={position?.points?.toLocaleString('en-IN') || '0'}
           city={dealer.city || 'TVS Certified Hub'}
-          nextAuctionLabel={getNextAuctionDateLabel()}
+          nextAuctionLabel={getNextAuctionDateLabel(matchTracker)}
           tagline="A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW"
         />
 
+        <div id="prize-showcase">
+          <PrizeShowcase />
+        </div>
+
         {/* Primary Score & Standings Matrix (Double-Bezel Architecture) */}
-        <div className="card double-bezel" style={{ marginBottom: '24px' }}>
+        <div id="national-standings" className="card double-bezel" style={{ marginBottom: '24px' }}>
           <div className="inner-bezel-core score-display">
             <div className="score-display-bg-glow"></div>
             
@@ -327,7 +422,7 @@ export default function DashboardPage() {
                 <tr>
                   <td>
                     <Sparkles className="w-4 h-4 text-amber-500 mr-2" />
-                    All 4 Matches Completion Bonus
+                    All {matchCount} Matches Completion Bonus
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>Completion Perk</td>
                   <td>+{breakdown.allMatchesBonus.points}</td>
@@ -417,16 +512,16 @@ export default function DashboardPage() {
         </div>
 
         {/* Match Day Tracker Roadmap */}
-        <div className="card" style={{ marginTop: '24px' }}>
+        <div id="match-schedule" className="card" style={{ marginTop: '24px' }}>
           <div className="card-header">
             <div>
               <h2 className="card-title">
                 <Calendar className="w-5 h-5 text-sky-400" />
                 Match Day Schedule & Attendance Tracker
               </h2>
-              <p className="card-subtitle">Every Thursday at 2:00 PM IST • Participate in all 4 matches for a +20 PTS bonus</p>
+              <p className="card-subtitle">Every Thursday at 2:00 PM IST • Participate in all {matchCount} {isTestMode ? 'test auctions' : 'matches'} for a +20 PTS bonus</p>
             </div>
-            <span className="badge badge-primary">Super Cup 4-Series</span>
+            <span className="badge badge-primary">{isTestMode ? '2-Auction Test Series' : 'Super Cup 4-Series'}</span>
           </div>
 
           <div className="match-tracker">
@@ -466,7 +561,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Live Auction Activity Stream Table */}
-        <div className="card" style={{ marginTop: '24px' }}>
+        <div id="auction-telemetry" className="card" style={{ marginTop: '24px' }}>
           <div className="card-header">
             <div>
               <h2 className="card-title">
@@ -474,7 +569,7 @@ export default function DashboardPage() {
                 My Live Auction Telemetry Feed
               </h2>
               <p className="card-subtitle">
-                Real-time activity captured from {getNextAuctionDateLabel()}
+                Real-time activity captured from {getNextAuctionDateLabel(matchTracker)}
               </p>
             </div>
             <span className="badge badge-success" style={{ boxShadow: '0 0 12px rgba(6, 214, 160, 0.25)' }}>
@@ -584,7 +679,7 @@ export default function DashboardPage() {
                 No Live Auction Events Recorded In Current Window
               </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
-                Next live session: <strong style={{ color: 'var(--text-primary)' }}>{getNextAuctionDateLabel()}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
+                Next live session: <strong style={{ color: 'var(--text-primary)' }}>{getNextAuctionDateLabel(matchTracker)}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
               </p>
             </div>
           )}
@@ -636,7 +731,7 @@ export default function DashboardPage() {
             <div className="stat-card">
               <div className="stat-icon">🌟</div>
               <div className="stat-value gold">+20</div>
-              <div className="stat-label">All 4 Matches Bonus</div>
+              <div className="stat-label">All {matchCount} Matches Bonus</div>
             </div>
           </div>
         </div>
