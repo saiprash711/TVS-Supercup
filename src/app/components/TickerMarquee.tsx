@@ -12,11 +12,9 @@ export interface TickerItem {
 const DEFAULT_ITEMS: TickerItem[] = [
   { label: 'AUCTION FLOOR', value: 'OPENS THURSDAYS AT 2:00 PM IST', badge: 'BROADCAST', type: 'live' },
   { label: 'SEASON GRAND PRIZE POOL', value: '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)', badge: 'REWARD', type: 'accent' },
-  { label: 'SCORING RULES', value: 'BUY/SELL = +10 PTS • MATCH ATTENDANCE = +15 PTS', badge: 'VERIFIED', type: 'positive' },
+  { label: 'SELLING ALLOCATIONS', value: 'LISTING = +5 PTS • CONVERSION = +10 PTS • COMMISSION = +5 PTS', badge: 'SELLING', type: 'positive' },
   { label: 'TVS CERTIFIED', value: 'OFFICIAL DEALER SUPERCUP 2026–27', badge: 'CHAMPIONSHIP', type: 'accent' },
-  { label: 'LIVE BIDDING', value: 'VERIFIED IN-ROOM BIDS = +2 PTS', badge: 'MULTIPLIER', type: 'positive' },
-  { label: 'SERIES BONUS', value: 'ATTEND ALL MATCHES FOR +20 PTS BONUS', badge: 'BONUS', type: 'accent' },
-  { label: 'INSPECTIONS & WATCHLIST', value: 'INSPECTION = +1 PT • WATCHLIST BOOKMARK = +1 PT', badge: 'RULES', type: 'neutral' },
+  { label: 'BUYING ALLOCATIONS', value: 'PARTICIPATION = +1 PT • BIDS = +1 PT • CONVERSION = +10 PTS', badge: 'BUYING', type: 'positive' },
   { label: 'DEALER COMMUNITY', value: 'A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW', badge: 'VISION', type: 'neutral' },
 ];
 

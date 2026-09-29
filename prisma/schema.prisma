@@ -18,6 +18,7 @@ model Dealer {
   displayName      String           @map("display_name")
   maskedName       String           @map("masked_name")
   city             String           @default("")
+  category         String           @default("Used Car Dealer") // "OEM Dealer", "Used Car Dealer", "Corporate / Other"
   phone            String?
   password         String?          @default("tvs123")
   status           String           @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED

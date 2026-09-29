@@ -62,6 +62,8 @@ export interface TVSAuctionActivity {
   activityType:
     | 'BUY'
     | 'SELL'
+    | 'SELL_LISTING'
+    | 'SELL_COMMISSION'
     | 'MATCH_PARTICIPATION'
     | 'BID_PLACED'
     | 'VEHICLE_INSPECTED'
@@ -70,6 +72,14 @@ export interface TVSAuctionActivity {
   amount?: number;
   metadata?: Record<string, unknown>;
   timestamp: Date;
+}
+
+export interface TVSDiscoveredAuction {
+  id: string;
+  code?: string;
+  title: string;
+  stage: string;
+  scheduledTime?: string;
 }
 
 // ─── Abstract Interface ─────────────────────────────────────────────────────
@@ -109,6 +119,11 @@ export interface TVSAuctionProvider {
    * Find a TVS customer profile by company name.
    */
   findCustomerByCompanyName?(name: string): TVSCustomerProfile | null;
+
+  /**
+   * Automatically discover a live or scheduled weekly auction on TVS Certified.
+   */
+  discoverAuction?(targetDate?: Date, token?: string): Promise<TVSDiscoveredAuction | null>;
 }
 
 // ─── Timestamp Utilities ───────────────────────────────────────────────────
@@ -667,32 +682,43 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         }
       }
 
-      // 5. Check Watchlist / Interests
-      const interestRes = await fetch(`${this.baseUrl}/getInterests?auction_id=${encodeURIComponent(auctionId)}`, {
-        headers,
-        signal: AbortSignal.timeout(6000),
-      });
-      if (interestRes.ok) {
-        const json = await interestRes.json();
-        const rows = json?.data || [];
-        if (Array.isArray(rows)) {
-          for (const row of rows) {
-            const iId = String(row.customer_id || row.key_id || row.buyer_id || '');
-            if (iId === resolvedKeyId || iId === dealerId || this.resolveDealerKeyId(iId) === resolvedKeyId) {
-              activities.push({
-                transactionId: `WATCH-${auctionId}-${row.id || row.vehicle_id || Math.random()}`,
-                dealerId: resolvedKeyId,
-                auctionId,
-                activityType: 'WATCHLIST_ADD',
-                vehicleId: String(row.vehicle_id || ''),
-                metadata: {
-                  auctionId,
-                  regNo: row.reg_num || row.registration_number,
-                },
-                timestamp: row.created_at ? new Date(row.created_at) : new Date(),
-              });
+      // 5. Check Vehicle Listings for this seller dealership (SELL_LISTING)
+      if (auctionId) {
+        try {
+          const vehListRes = await fetch(`${this.baseUrl}/getAuctionvehicleList?auction_id=${encodeURIComponent(auctionId)}`, {
+            headers,
+            signal: AbortSignal.timeout(6000),
+          });
+          if (vehListRes.ok) {
+            const vJson = await vehListRes.json();
+            const vehRows = vJson?.data || [];
+            if (Array.isArray(vehRows)) {
+              for (const v of vehRows) {
+                const rawName = (v.customer_name || '').trim();
+                const sellerCust = rawName ? this.findCustomerByCompanyName(rawName) : null;
+                const sDealerId = sellerCust?.code || (sellerCust?.id ? String(sellerCust.id) : (rawName ? `SELLER-${rawName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : ''));
+                if (sDealerId === resolvedKeyId || sDealerId === dealerId || String(sellerCust?.id) === resolvedKeyId) {
+                  activities.push({
+                    transactionId: `LISTING-${auctionId}-${v.id || v.vehicle_id}`,
+                    dealerId: resolvedKeyId,
+                    auctionId,
+                    activityType: 'SELL_LISTING',
+                    vehicleId: String(v.vehicle_id || v.id),
+                    amount: Number(v.start_bid_value || 0),
+                    metadata: {
+                      vehicleName: v.title || v.make_model || 'Auction Vehicle',
+                      regNo: v.registration_number,
+                      startBidValue: v.start_bid_value,
+                      expectedPrice: v.expected_price,
+                    },
+                    timestamp: v.created ? parseTVSVehicleTimestamp(v.created) : (v.modified ? parseTVSVehicleTimestamp(v.modified) : new Date()),
+                  });
+                }
+              }
             }
           }
+        } catch {
+          // Non-critical listing lookup
         }
       }
     } catch (err) {
@@ -780,21 +806,57 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       }
     }
 
-    // 1. Process Winners (BUY transactions) & Sellers (SELL transactions) directly from vehicles list
+    // 1. Process Listings (SELL_LISTING), Winners (BUY - Conversion), and Sellers (SELL - Conversion)
     if (Array.isArray(vehicles)) {
       for (const veh of vehicles) {
+        // Resolve Seller Dealership from customer_name or TVS customer mapping
+        const rawSellerName = (veh.customer_name || '').trim();
+        const sellerCustomer = rawSellerName ? this.findCustomerByCompanyName(rawSellerName) : null;
+        const sellerDealerId = sellerCustomer?.code || (sellerCustomer?.id ? String(sellerCustomer.id) : (rawSellerName ? `SELLER-${rawSellerName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : ''));
+        const sellerCity = sellerCustomer?.city || veh.location_name || 'Tamil Nadu';
+        const sellerPhone = sellerCustomer?.phone || '';
+
+        // 1A. SELLING: LISTING (5 points) for every vehicle listed in the auction
+        if (rawSellerName && sellerDealerId) {
+          activities.push({
+            transactionId: `LISTING-${auctionId}-${veh.id || veh.vehicle_id}`,
+            dealerId: sellerDealerId,
+            auctionId,
+            activityType: 'SELL_LISTING',
+            vehicleId: String(veh.vehicle_id || veh.id),
+            amount: Number(veh.start_bid_value || 0),
+            metadata: {
+              vehicleId: veh.vehicle_id || veh.id,
+              vehicleName: veh.title || veh.make_model || 'Auction Vehicle',
+              regNo: veh.registration_number,
+              startBidValue: veh.start_bid_value,
+              expectedPrice: veh.expected_price,
+              sellerName: rawSellerName,
+              sellerDealerId,
+              sellerCustomerCode: sellerCustomer?.code || '',
+              sellerCustomerId: sellerCustomer?.id || null,
+              sellerCity,
+              sellerPhone,
+              customerName: rawSellerName,
+              fuelType: veh.fuel_type,
+              transmission: veh.transmission,
+              yearOfMfg: veh.year_of_mfg,
+              speedometer: veh.speedometer,
+              imageUrl: veh.image_url,
+              sequence: veh.sequence,
+              lotNo: veh.sequence || veh.seq_num,
+              location: veh.location_name,
+            },
+            timestamp: veh.created ? parseTVSVehicleTimestamp(veh.created) : (veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date()),
+          });
+        }
+
+        // 1B. CONVERSIONS: Won Vehicles (BUY for buyer: 10 pts, SELL for seller: 10 pts)
         if (veh.winner_id != null && (veh.winner_bid_value != null || veh.start_bid_value != null)) {
           const buyerDealerId = this.resolveDealerKeyId(veh.winner_id);
           const winAmount = Number(veh.winner_bid_value || veh.start_bid_value || 0);
 
-          // Resolve Seller Dealership from customer_name or TVS customer mapping
-          const rawSellerName = (veh.customer_name || '').trim();
-          const sellerCustomer = rawSellerName ? this.findCustomerByCompanyName(rawSellerName) : null;
-          const sellerDealerId = sellerCustomer?.code || (sellerCustomer?.id ? String(sellerCustomer.id) : (rawSellerName ? `SELLER-${rawSellerName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : ''));
-          const sellerCity = sellerCustomer?.city || veh.location_name || 'Tamil Nadu';
-          const sellerPhone = sellerCustomer?.phone || '';
-
-          // 1A. BUY Activity for winning bidder
+          // BUY Activity for winning bidder (BUYING: CONVERSION = 10 pts)
           activities.push({
             transactionId: `BUY-${auctionId}-${veh.id || veh.vehicle_id}`,
             dealerId: buyerDealerId,
@@ -831,7 +893,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
             timestamp: veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date(),
           });
 
-          // 1B. SELL Activity for seller / origin dealership
+          // SELL Activity for seller / origin dealership (SELLING: CONVERSION = 10 pts)
           if (rawSellerName && sellerDealerId) {
             activities.push({
               transactionId: `SELL-${auctionId}-${veh.id || veh.vehicle_id}`,
@@ -950,38 +1012,8 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       }
     }
 
-    // 3. Watchlist / Interested Dealers in this auction (WATCHLIST_ADD)
-    if (Array.isArray(interests)) {
-      for (const row of interests) {
-        const rawId = row.customer_id || row.key_id || row.buyer_id || row.created_by;
-        if (!rawId) continue;
-        const dealerId = this.resolveDealerKeyId(rawId);
-        const vId = row.vehicle_id != null ? String(row.vehicle_id) : '';
-        const matchedVeh = vId ? vehicleMap.get(vId) : null;
-        activities.push({
-          transactionId: `WATCH-${auctionId}-${row.id || row.vehicle_id || dealerId}`,
-          dealerId,
-          auctionId,
-          activityType: 'WATCHLIST_ADD',
-          vehicleId: String(row.vehicle_id || ''),
-          metadata: {
-            auctionId,
-            vehicleId: row.vehicle_id,
-            vehicleName: matchedVeh?.title || matchedVeh?.make_model,
-            regNo: matchedVeh?.registration_number || row.reg_num || row.registration_number,
-            fuelType: matchedVeh?.fuel_type,
-            transmission: matchedVeh?.transmission,
-            yearOfMfg: matchedVeh?.year_of_mfg,
-            speedometer: matchedVeh?.speedometer,
-            imageUrl: matchedVeh?.image_url,
-            sequence: matchedVeh?.sequence,
-            lotNo: matchedVeh?.sequence || matchedVeh?.seq_num,
-            location: matchedVeh?.location_name,
-          },
-          timestamp: row.created_at ? new Date(row.created_at) : new Date(),
-        });
-      }
-    }
+    // 3. Watchlist / Interested Dealers in this auction (Deactivated per point allocation rules)
+    // Only Selling (Listing, Conversion, Commission) and Buying (Participation, Bids, Conversion) are active.
 
     // 4. Live Bids on Auction Vehicles (BID_PLACED)
     // Intelligent filtering:
@@ -1103,6 +1135,88 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     }
     return [];
   }
+
+  /**
+   * Automatically discover a live or scheduled auction on TVS Certified.
+   * Priority:
+   * 1. Currently LIVE auction on TVS Certified
+   * 2. Scheduled/Upcoming auction matching the target match date
+   */
+  async discoverAuction(targetDate: Date = new Date(), token?: string): Promise<TVSDiscoveredAuction | null> {
+    try {
+      const authToken = await this.getValidToken(token);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = authToken;
+
+      // 1. Check for any auction currently in 'live' stage
+      try {
+        const liveRes = await fetch(`${this.baseUrl}/auctions?stage=live&auction_type=auction`, {
+          headers,
+          signal: AbortSignal.timeout(6000),
+        });
+        if (liveRes.ok) {
+          const liveJson = await liveRes.json();
+          const rows = liveJson?.data || [];
+          if (Array.isArray(rows) && rows.length > 0) {
+            const liveMatch = rows.find((a: any) => /weekly|super\s*cup/i.test(a.title || '')) || rows[0];
+            if (liveMatch?.id) {
+              return {
+                id: String(liveMatch.id),
+                code: liveMatch.code,
+                title: liveMatch.title || `TVS Auction #${liveMatch.id}`,
+                stage: liveMatch.stage || 'live',
+                scheduledTime: liveMatch.scheduled_time,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Live auction auto-discovery check error:', err);
+      }
+
+      // 2. Search upcoming/scheduled auctions matching target match date
+      try {
+        const allRes = await fetch(`${this.baseUrl}/auctions?auction_type=auction`, {
+          headers,
+          signal: AbortSignal.timeout(8000),
+        });
+        if (allRes.ok) {
+          const allJson = await allRes.json();
+          const rows = allJson?.data || [];
+          if (Array.isArray(rows) && rows.length > 0) {
+            const d = new Date(targetDate);
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const yearShort = String(d.getUTCFullYear()).slice(-2);
+            const dateCodePattern = `${day}${month}${yearShort}`; // e.g. "011026"
+            const isoDatePrefix = d.toISOString().slice(0, 10);   // e.g. "2026-10-01"
+
+            // Look for matching scheduled time, code, or title
+            const matched = rows.find((a: any) => {
+              if (a.scheduled_time && a.scheduled_time.startsWith(isoDatePrefix)) return true;
+              if (a.code && a.code.includes(dateCodePattern)) return true;
+              return false;
+            });
+
+            if (matched?.id) {
+              return {
+                id: String(matched.id),
+                code: matched.code,
+                title: matched.title || `TVS Auction #${matched.id}`,
+                stage: matched.stage || 'scheduled',
+                scheduledTime: matched.scheduled_time,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('All auctions auto-discovery check error:', err);
+      }
+    } catch (err) {
+      console.warn('Auction auto-discovery failed:', err);
+    }
+    return null;
+  }
 }
 
 // ─── Mock Implementation ────────────────────────────────────────────────────
@@ -1192,6 +1306,14 @@ export class MockTVSAuctionProvider implements TVSAuctionProvider {
 
   findCustomerByCompanyName(): TVSCustomerProfile | null {
     return null;
+  }
+
+  async discoverAuction(): Promise<TVSDiscoveredAuction | null> {
+    return {
+      id: '2003',
+      title: 'Mock TVS Weekly Auction',
+      stage: 'live',
+    };
   }
 }
 

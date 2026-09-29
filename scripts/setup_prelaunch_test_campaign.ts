@@ -12,13 +12,14 @@ const campaignData = {
 };
 
 const rules = [
-  ['BUY', 10, 'Points per buy transaction'],
-  ['SELL', 10, 'Points per sell transaction'],
-  ['MATCH_PARTICIPATION', 15, 'Points for participating in a test match'],
-  ['BID_PLACED', 2, 'Points per verified live auction bid'],
-  ['WATCHLIST_ADD', 1, 'Points per vehicle added to watchlist'],
-  ['VEHICLE_INSPECTED', 1, 'Points per vehicle inspection viewed'],
-  ['ALL_MATCHES_BONUS', 20, 'Test bonus for participating in both test matches'],
+  // SELLING
+  ['SELL_LISTING', 5, 'Selling: Points per vehicle listing'],
+  ['SELL', 10, 'Selling: Points per vehicle conversion/sold'],
+  ['SELL_COMMISSION', 5, 'Selling: Commission points allocation'],
+  // BUYING
+  ['MATCH_PARTICIPATION', 1, 'Buying: Test match participation points'],
+  ['BID_PLACED', 1, 'Buying: Points per verified live auction bid'],
+  ['BUY', 10, 'Buying: Points per vehicle conversion/purchased'],
 ] as const;
 
 const matches = [

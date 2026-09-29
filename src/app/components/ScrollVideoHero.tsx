@@ -132,7 +132,7 @@ export default function ScrollVideoHero({
               <div className="cockpit-card-sub">Live 2 PM Bidding Floor</div>
               <div className="cockpit-card-badge blue">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Attendance +15 PTS</span>
+                <span>Attendance +1 PT</span>
               </div>
             </div>
 

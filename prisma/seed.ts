@@ -11,7 +11,70 @@ function maskName(name: string): string {
 async function main() {
   console.log('🏏 Initializing TVS Dealer Super Cup 2026–27...\n');
 
-  // Keep prior campaigns as history; only the corrected Oct–Jan campaign is active.
+  // 1. Pre-Launch Test Campaign (01 Oct & 08 Oct 2026)
+  console.log('🧪 Initializing Pre-Launch Test Campaign (01-10-2026 and 08-10-2026)...');
+  const testCampaign = await prisma.campaign.upsert({
+    where: { slug: 'supercup-prelaunch-test-2026' },
+    update: {
+      name: 'TVS Super Cup — Pre-Launch Test',
+      startDate: new Date('2026-09-27T18:30:00.000Z'),
+      endDate: new Date('2026-10-14T18:29:59.999Z'),
+      type: 'SUPER_CUP',
+      status: 'ACTIVE',
+    },
+    create: {
+      name: 'TVS Super Cup — Pre-Launch Test',
+      slug: 'supercup-prelaunch-test-2026',
+      startDate: new Date('2026-09-27T18:30:00.000Z'),
+      endDate: new Date('2026-10-14T18:29:59.999Z'),
+      type: 'SUPER_CUP',
+      status: 'ACTIVE',
+    },
+  });
+
+  const testRules = [
+    { activityType: 'BUY', points: 10, description: 'Points per buy transaction' },
+    { activityType: 'SELL', points: 10, description: 'Points per sell transaction' },
+    { activityType: 'MATCH_PARTICIPATION', points: 15, description: 'Points for participating in a test match' },
+    { activityType: 'BID_PLACED', points: 2, description: 'Points per verified live auction bid' },
+    { activityType: 'WATCHLIST_ADD', points: 1, description: 'Points per vehicle added to watchlist' },
+    { activityType: 'VEHICLE_INSPECTED', points: 1, description: 'Points per vehicle inspection viewed' },
+    { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Test bonus for participating in both test matches' },
+  ];
+
+  for (const rule of testRules) {
+    await prisma.pointRule.upsert({
+      where: {
+        campaignId_activityType: {
+          campaignId: testCampaign.id,
+          activityType: rule.activityType,
+        },
+      },
+      update: { points: rule.points, description: rule.description, active: true },
+      create: {
+        campaignId: testCampaign.id,
+        activityType: rule.activityType,
+        points: rule.points,
+        description: rule.description,
+        active: true,
+      },
+    });
+  }
+
+  const testMatches = [
+    { matchNumber: 1, auctionId: 'TVSC-2026-10-01', date: new Date('2026-10-01T08:30:00.000Z') },
+    { matchNumber: 2, auctionId: 'TVSC-2026-10-08', date: new Date('2026-10-08T08:30:00.000Z') },
+  ];
+  for (const match of testMatches) {
+    await prisma.matchDay.upsert({
+      where: { campaignId_matchNumber: { campaignId: testCampaign.id, matchNumber: match.matchNumber } },
+      update: { date: match.date, auctionId: match.auctionId },
+      create: { campaignId: testCampaign.id, ...match, status: 'UPCOMING' },
+    });
+  }
+
+  // 2. Full Live Season Campaign (Oct 2026–Jan 2027)
+  console.log('🏆 Initializing TVS Certified Super Cup 2026–27...');
   const campaign = await prisma.campaign.upsert({
     where: { slug: 'supercup-2026-27' },
     update: {
@@ -32,15 +95,15 @@ async function main() {
   });
 
   // 2. Point Rules
-  console.log('📊 Configuring point rules...');
   const rules = [
-    { activityType: 'BUY', points: 10, description: 'Points per buy transaction' },
-    { activityType: 'SELL', points: 10, description: 'Points per sell transaction' },
-    { activityType: 'MATCH_PARTICIPATION', points: 15, description: 'Points for participating in a match day' },
-    { activityType: 'BID_PLACED', points: 2, description: 'Points per live/pre auction bid placed' },
-    { activityType: 'WATCHLIST_ADD', points: 1, description: 'Points per vehicle added to watchlist / interested' },
-    { activityType: 'VEHICLE_INSPECTED', points: 1, description: 'Points per vehicle inspection viewed' },
-    { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Bonus for participating in all 4 matches' },
+    // SELLING
+    { activityType: 'SELL_LISTING', points: 5, description: 'Selling: Points per vehicle listing' },
+    { activityType: 'SELL', points: 10, description: 'Selling: Points per vehicle conversion/sold' },
+    { activityType: 'SELL_COMMISSION', points: 5, description: 'Selling: Commission points allocation' },
+    // BUYING
+    { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Buying: Match day participation points' },
+    { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per live/pre auction bid placed' },
+    { activityType: 'BUY', points: 10, description: 'Buying: Points per vehicle conversion/purchased' },
   ];
 
   for (const rule of rules) {
@@ -140,7 +203,15 @@ async function main() {
         },
       });
 
-      // Initialize clean 0-point score
+      // Initialize clean 0-point score for test campaign and live campaign
+      await prisma.dealerScore.upsert({
+        where: {
+          dealerId_campaignId: { dealerId: dealer.id, campaignId: testCampaign.id },
+        },
+        update: {},
+        create: { dealerId: dealer.id, campaignId: testCampaign.id, totalPoints: 0, rank: 0 },
+      });
+
       await prisma.dealerScore.upsert({
         where: {
           dealerId_campaignId: { dealerId: dealer.id, campaignId: campaign.id },

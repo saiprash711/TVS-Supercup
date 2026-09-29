@@ -29,7 +29,6 @@ let isProcessing = false;
 let cycleNumber = 0;
 let cumulativeNewActivities = 0;
 let cumulativePointsAwarded = 0;
-let previousStage: string = 'listed';
 
 function formatTime(d = new Date()) {
   return d.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -49,6 +48,12 @@ async function runCycle(campaignId: number) {
   try {
     const result = await syncLiveAuction(AUCTION_ID);
     const durationMs = Date.now() - startTime;
+
+    // Detect if auction ID was auto-discovered from TVS Certified
+    if (result.auctionId && result.auctionId !== AUCTION_ID && !/^TVSC-/.test(result.auctionId)) {
+      console.log(`\n🎯 [${timeStr}] [Cycle #${cycleNumber}] AUTO-DISCOVERY: Bound to TVS Auction #${result.auctionId} (replacing placeholder ${AUCTION_ID})!`);
+      AUCTION_ID = result.auctionId;
+    }
 
     cumulativeNewActivities += result.processed;
     cumulativePointsAwarded += result.pointsAwarded;
@@ -82,6 +87,8 @@ async function runCycle(campaignId: number) {
           console.log(`      ${i + 1}. ${d.dealer} — ${d.points} pts`);
         });
       }
+    } else if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(AUCTION_ID)) {
+      process.stdout.write(`\r📡 [${timeStr}] [Cycle #${cycleNumber}] Auto-listening for TVS to publish auction for ${AUCTION_ID}... (${durationMs}ms)`);
     } else {
       process.stdout.write(`\r📡 [${timeStr}] [Cycle #${cycleNumber}] Listening to Auction #${AUCTION_ID}... ${totalBids} bids, ${totalWins} won, ${totalAttendees} attended (${durationMs}ms)`);
     }

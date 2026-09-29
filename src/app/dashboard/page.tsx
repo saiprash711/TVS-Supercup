@@ -39,13 +39,22 @@ interface DashboardData {
     below: { rank: number; dealer: string; points: number; gap: number } | null;
   };
   breakdown: {
+    // SELLING
+    sellingListing?: { count: number; points: number; perUnit: number };
+    sellingConversion?: { count: number; points: number; perUnit: number };
+    sellingCommission?: { count: number; points: number; perUnit: number };
+    // BUYING
+    buyingParticipation?: { count: number; points: number; perUnit: number };
+    buyingBids?: { count: number; points: number; perUnit: number };
+    buyingConversion?: { count: number; points: number; perUnit: number };
+    // Backwards Compatibility Aliases
     buyTransactions: { count: number; points: number; perUnit: number };
     sellTransactions: { count: number; points: number; perUnit: number };
     matchParticipation: { count: number; points: number; perUnit: number };
     bidsPlaced?: { count: number; points: number; perUnit: number };
     vehicleInspected?: { count: number; points: number; perUnit: number };
     watchlistAdd?: { count: number; points: number; perUnit: number };
-    allMatchesBonus: { points: number };
+    allMatchesBonus?: { points: number };
     totalPoints: number;
   };
   recentActivities?: Array<{
@@ -244,22 +253,16 @@ export default function DashboardPage() {
             type: 'accent',
           },
           {
-            label: 'SCORING MULTIPLIERS',
-            value: 'BUY: +10 PTS • SELL: +10 PTS • MATCH ATTENDANCE: +15 PTS',
-            badge: 'OFFICIAL',
+            label: 'SELLING POINTS',
+            value: 'LISTING = +5 PTS • CONVERSION = +10 PTS • COMMISSION = +5 PTS',
+            badge: 'SELLING',
             type: 'positive',
           },
           {
-            label: 'LIVE BIDDING ACCRUAL',
-            value: 'VERIFIED ROOM BIDS = +2 PTS PER BID',
-            badge: 'MULTIPLIER',
+            label: 'BUYING POINTS',
+            value: 'PARTICIPATION = +1 PT • BIDS = +1 PT • CONVERSION = +10 PTS',
+            badge: 'BUYING',
             type: 'positive',
-          },
-          {
-            label: 'SERIES BONUS',
-            value: `ATTEND ALL ${matchCount} ${isTestMode ? 'TEST AUCTIONS' : 'MATCHES'} = +20 PTS BONUS`,
-            badge: 'BONUS',
-            type: 'accent',
           },
           {
             label: 'TVS CERTIFIED NETWORK',
@@ -365,68 +368,68 @@ export default function DashboardPage() {
 
             <table className="breakdown-table">
               <tbody>
+                {/* ── SELLING ALLOCATIONS ── */}
+                <tr className="breakdown-section-header">
+                  <td colSpan={3} style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-cyan)', padding: '10px 14px 6px', background: 'rgba(56, 189, 248, 0.06)' }}>
+                    Selling Allocations
+                  </td>
+                </tr>
                 <tr>
                   <td>
-                    <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
-                    Buy Transactions (Won Vehicles)
+                    <Layers className="w-4 h-4 text-sky-400 mr-2" />
+                    Listing (5 pts)
                   </td>
-                  <td>{breakdown.buyTransactions.count} × {breakdown.buyTransactions.perUnit} pts</td>
-                  <td>+{breakdown.buyTransactions.points}</td>
+                  <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 5} pts</td>
+                  <td>+{breakdown.sellingListing?.points ?? 0}</td>
                 </tr>
                 <tr>
                   <td>
                     <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
-                    Sell Transactions (Sold Vehicles)
+                    Conversion (10 pts)
                   </td>
-                  <td>{breakdown.sellTransactions.count} × {breakdown.sellTransactions.perUnit} pts</td>
-                  <td>+{breakdown.sellTransactions.points}</td>
+                  <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit ?? breakdown.sellTransactions.perUnit} pts</td>
+                  <td>+{breakdown.sellingConversion?.points ?? breakdown.sellTransactions.points}</td>
+                </tr>
+                <tr>
+                  <td>
+                    <CheckCircle2 className="w-4 h-4 text-amber-400 mr-2" />
+                    Commission (5 pts)
+                  </td>
+                  <td>{breakdown.sellingCommission?.count ?? 0} × {breakdown.sellingCommission?.perUnit ?? 5} pts</td>
+                  <td>+{breakdown.sellingCommission?.points ?? 0}</td>
+                </tr>
+
+                {/* ── BUYING ALLOCATIONS ── */}
+                <tr className="breakdown-section-header">
+                  <td colSpan={3} style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-blue)', padding: '12px 14px 6px', background: 'rgba(59, 130, 246, 0.06)' }}>
+                    Buying Allocations
+                  </td>
                 </tr>
                 <tr>
                   <td>
                     <Radio className="w-4 h-4 text-amber-400 mr-2" />
-                    2 PM Match Room Attendance
+                    Participation (1 pt)
                   </td>
-                  <td>{breakdown.matchParticipation.count} × {breakdown.matchParticipation.perUnit} pts</td>
-                  <td>+{breakdown.matchParticipation.points}</td>
+                  <td>{breakdown.buyingParticipation?.count ?? breakdown.matchParticipation.count} × {breakdown.buyingParticipation?.perUnit ?? breakdown.matchParticipation.perUnit} pts</td>
+                  <td>+{breakdown.buyingParticipation?.points ?? breakdown.matchParticipation.points}</td>
                 </tr>
-                {breakdown.bidsPlaced && (
-                  <tr>
-                    <td>
-                      <Gavel className="w-4 h-4 text-blue-400 mr-2" />
-                      Live Bids Placed in Room
-                    </td>
-                    <td>{breakdown.bidsPlaced.count} × {breakdown.bidsPlaced.perUnit} pts</td>
-                    <td>+{breakdown.bidsPlaced.points}</td>
-                  </tr>
-                )}
-                {breakdown.vehicleInspected && (
-                  <tr>
-                    <td>
-                      <Search className="w-4 h-4 text-yellow-400 mr-2" />
-                      Vehicle Technical Inspections
-                    </td>
-                    <td>{breakdown.vehicleInspected.count} × {breakdown.vehicleInspected.perUnit} pts</td>
-                    <td>+{breakdown.vehicleInspected.points}</td>
-                  </tr>
-                )}
-                {breakdown.watchlistAdd && (
-                  <tr>
-                    <td>
-                      <Star className="w-4 h-4 text-purple-400 mr-2" />
-                      Watchlist Bookmarks Added
-                    </td>
-                    <td>{breakdown.watchlistAdd.count} × {breakdown.watchlistAdd.perUnit} pts</td>
-                    <td>+{breakdown.watchlistAdd.points}</td>
-                  </tr>
-                )}
                 <tr>
                   <td>
-                    <Sparkles className="w-4 h-4 text-amber-500 mr-2" />
-                    All {matchCount} Matches Completion Bonus
+                    <Gavel className="w-4 h-4 text-blue-400 mr-2" />
+                    Bids (1 pt)
                   </td>
-                  <td style={{ color: 'var(--text-muted)' }}>Completion Perk</td>
-                  <td>+{breakdown.allMatchesBonus.points}</td>
+                  <td>{breakdown.buyingBids?.count ?? (breakdown.bidsPlaced?.count ?? 0)} × {breakdown.buyingBids?.perUnit ?? (breakdown.bidsPlaced?.perUnit ?? 1)} pts</td>
+                  <td>+{breakdown.buyingBids?.points ?? (breakdown.bidsPlaced?.points ?? 0)}</td>
                 </tr>
+                <tr>
+                  <td>
+                    <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
+                    Conversion (10 pts)
+                  </td>
+                  <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit ?? breakdown.buyTransactions.perUnit} pts</td>
+                  <td>+{breakdown.buyingConversion?.points ?? breakdown.buyTransactions.points}</td>
+                </tr>
+
                 <tr className="breakdown-total">
                   <td>TOTAL SUPERCUP SCORE</td>
                   <td></td>
@@ -551,7 +554,7 @@ export default function DashboardPage() {
                   })}
                 </div>
                 <div className={`match-status ${match.status.toLowerCase()}`}>
-                  {match.status === 'COMPLETED' && match.participated ? 'PLAYED (+15)' :
+                  {match.status === 'COMPLETED' && match.participated ? 'PLAYED (+1)' :
                    match.status === 'COMPLETED' && !match.participated ? 'MISSED' :
                    match.status}
                 </div>
@@ -600,12 +603,16 @@ export default function DashboardPage() {
                         <span className={`badge ${
                           act.activityType === 'BUY' ? 'badge-success' :
                           act.activityType === 'SELL' ? 'badge-info' :
+                          act.activityType === 'SELL_LISTING' ? 'badge-primary' :
+                          act.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
                           act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
                           act.activityType === 'BID_PLACED' ? 'badge-primary' :
                           'badge-warning'
                         }`}>
-                          {act.activityType === 'BUY' ? '🏆 WON LOT' :
-                           act.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
+                          {act.activityType === 'BUY' ? '🏆 WON LOT (CONVERSION)' :
+                           act.activityType === 'SELL' ? '💰 SOLD (CONVERSION)' :
+                           act.activityType === 'SELL_LISTING' ? '📋 VEHICLE LISTED' :
+                           act.activityType === 'SELL_COMMISSION' ? '💵 COMMISSION SETTLED' :
                            act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
                            act.activityType === 'MATCH_PARTICIPATION' ? '🏏 2PM ROOM' :
                            act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :

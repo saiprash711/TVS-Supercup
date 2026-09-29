@@ -12,10 +12,15 @@
 import { prisma } from '@/lib/db';
 
 export type ActivityType =
-  | 'BUY'
-  | 'SELL'
-  | 'MATCH_PARTICIPATION'
-  | 'BID_PLACED'
+  // SELLING
+  | 'SELL_LISTING'        // Listing: 5 points
+  | 'SELL'                // Conversion: 10 points
+  | 'SELL_COMMISSION'     // Commission: 5 points
+  // BUYING
+  | 'MATCH_PARTICIPATION' // Participation: 1 point
+  | 'BID_PLACED'          // Bids: 1 point
+  | 'BUY'                 // Conversion: 10 points
+  // Legacy / Deactivated
   | 'VEHICLE_INSPECTED'
   | 'WATCHLIST_ADD'
   | 'ALL_MATCHES_BONUS';
@@ -196,6 +201,21 @@ export async function getActivityBreakdown(dealerId: number, campaignId: number)
   });
 
   const breakdown = {
+    // SELLING
+    sellListingCount: 0,
+    sellListingPoints: 0,
+    sellConversionCount: 0,
+    sellConversionPoints: 0,
+    sellCommissionCount: 0,
+    sellCommissionPoints: 0,
+    // BUYING
+    buyParticipationCount: 0,
+    buyParticipationPoints: 0,
+    buyBidCount: 0,
+    buyBidPoints: 0,
+    buyConversionCount: 0,
+    buyConversionPoints: 0,
+    // Backwards Compatibility Aliases
     buyCount: 0,
     buyPoints: 0,
     sellCount: 0,
@@ -216,21 +236,37 @@ export async function getActivityBreakdown(dealerId: number, campaignId: number)
 
   for (const activity of activities) {
     switch (activity.activityType) {
-      case 'BUY':
-        breakdown.buyCount++;
-        breakdown.buyPoints += activity.points;
+      case 'SELL_LISTING':
+        breakdown.sellListingCount++;
+        breakdown.sellListingPoints += activity.points;
         break;
       case 'SELL':
+        breakdown.sellConversionCount++;
+        breakdown.sellConversionPoints += activity.points;
         breakdown.sellCount++;
         breakdown.sellPoints += activity.points;
         break;
+      case 'SELL_COMMISSION':
+        breakdown.sellCommissionCount++;
+        breakdown.sellCommissionPoints += activity.points;
+        break;
       case 'MATCH_PARTICIPATION':
+        breakdown.buyParticipationCount++;
+        breakdown.buyParticipationPoints += activity.points;
         breakdown.matchParticipationCount++;
         breakdown.matchParticipationPoints += activity.points;
         break;
       case 'BID_PLACED':
+        breakdown.buyBidCount++;
+        breakdown.buyBidPoints += activity.points;
         breakdown.bidCount++;
         breakdown.bidPoints += activity.points;
+        break;
+      case 'BUY':
+        breakdown.buyConversionCount++;
+        breakdown.buyConversionPoints += activity.points;
+        breakdown.buyCount++;
+        breakdown.buyPoints += activity.points;
         break;
       case 'VEHICLE_INSPECTED':
         breakdown.inspectedCount++;

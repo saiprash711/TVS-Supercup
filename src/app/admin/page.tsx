@@ -63,6 +63,8 @@ interface AdminStats {
   matchParticipation: number;
   buyTransactions: number;
   sellTransactions: number;
+  totalListings?: number;
+  totalCommissions?: number;
   totalBids?: number;
   totalInspections?: number;
   totalWatchlist?: number;
@@ -85,11 +87,24 @@ interface RecentActivityItem {
 interface LeaderboardDealer {
   rank: number;
   dealerName: string;
-  maskedName: string;
+  maskedName?: string;
   externalId: string;
   city: string;
+  category?: string;
   points: number;
   dealerId: number;
+}
+
+interface FleetDealer {
+  id: number;
+  externalId: string;
+  displayName: string;
+  maskedName?: string;
+  city: string;
+  category?: string;
+  status: string;
+  points: number;
+  rank: number;
 }
 
 interface MatchDay {
@@ -123,8 +138,9 @@ interface DealerDetail {
   id: number;
   externalDealerId: string;
   displayName: string;
-  maskedName: string;
+  maskedName?: string;
   city: string;
+  category?: string;
   status: string;
   scores: Array<{ totalPoints: number; rank: number }>;
   activities: Array<{
@@ -156,6 +172,8 @@ interface LiveAuctionStats {
   totalBids: number;
   totalBuys: number;
   totalSells: number;
+  totalListings?: number;
+  totalCommissions?: number;
   totalParticipation: number;
   totalInspections: number;
   totalWatchlist: number;
@@ -214,9 +232,24 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDealer[]>([]);
-  const [showMaskedPreview, setShowMaskedPreview] = useState(false);
   const [overviewLeaderboardLimit, setOverviewLeaderboardLimit] = useState(30);
+  const [leaderboardCategoryFilter, setLeaderboardCategoryFilter] = useState<string>('ALL');
+
+  // Dealer Fleet Directory & Categorization State
+  const [fleetDealers, setFleetDealers] = useState<FleetDealer[]>([]);
+  const [fleetLoading, setFleetLoading] = useState(false);
+  const [fleetCategoryFilter, setFleetCategoryFilter] = useState<string>('ALL');
+  const [fleetSearchQuery, setFleetSearchQuery] = useState('');
+  const [fleetPage, setFleetPage] = useState(1);
+  const [fleetPageSize, setFleetPageSize] = useState(50);
+  const [fleetCategoryCounts, setFleetCategoryCounts] = useState<{ total: number; oem: number; usedCar: number; corporate: number }>({
+    total: 0,
+    oem: 0,
+    usedCar: 0,
+    corporate: 0,
+  });
   const [matchDays, setMatchDays] = useState<MatchDay[]>([]);
+  const [historicalMatchesData, setHistoricalMatchesData] = useState<MatchDay[]>([]);
   const [rules, setRules] = useState<PointRuleItem[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<DealerDetail | null>(null);
@@ -226,6 +259,11 @@ export default function AdminPage() {
   const [recentActivities, setRecentActivities] = useState<RecentActivityItem[]>([]);
   const [statsError, setStatsError] = useState<string | null>(null);
 
+  // Campaign Management State
+  const [campaigns, setCampaigns] = useState<{ id: number; slug: string; name: string; startDate: string; endDate: string; status: string }[]>([]);
+  const [currentCampaign, setCurrentCampaign] = useState<{ id: number; slug?: string; name: string; startDate: string; endDate: string; status: string } | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+
   // Live Monitor State
   const [liveActivities, setLiveActivities] = useState<LiveActivityItem[]>([]);
   const [liveStats, setLiveStats] = useState<LiveAuctionStats | null>(null);
@@ -233,7 +271,7 @@ export default function AdminPage() {
   const [liveFilter, setLiveFilter] = useState<string>('ALL');
   const [liveSearchQuery, setLiveSearchQuery] = useState<string>('');
   const [liveLoading, setLiveLoading] = useState(false);
-  const [liveAuctionId, setLiveAuctionId] = useState('2003');
+  const [liveAuctionId, setLiveAuctionId] = useState('TVSC-2026-10-01');
   const [customAuctionInput, setCustomAuctionInput] = useState('');
 
   // Auction Vehicle Run Order & Upcoming Cars State
@@ -314,22 +352,77 @@ export default function AdminPage() {
 
   // Historical / completed auctions for browsing past match data
   const historicalMatches = useMemo(() => {
-    return matchDays.filter(m => m.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [matchDays]);
+    const fromCurrent = matchDays.filter(m => m.status === 'COMPLETED');
+    const combined = [...fromCurrent, ...historicalMatchesData];
+    const seen = new Set<string>();
+    return combined.filter(m => {
+      const aId = String(m.auctionId || m.id);
+      if (seen.has(aId)) return false;
+      seen.add(aId);
+      return true;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [matchDays, historicalMatchesData]);
 
   const currentMatch = useMemo(() => {
     return matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ||
-           activeMatches.find(m => String(m.auctionId) === String(liveAuctionId));
-  }, [matchDays, activeMatches, liveAuctionId]);
+           activeMatches.find(m => String(m.auctionId) === String(liveAuctionId)) ||
+           historicalMatches.find(m => String(m.auctionId) === String(liveAuctionId));
+  }, [matchDays, activeMatches, historicalMatches, liveAuctionId]);
 
   const liveMatch = useMemo(() => {
     return matchDays.find(m => m.status === 'LIVE') ||
            activeMatches.find(m => m.status === 'LIVE');
   }, [matchDays, activeMatches]);
 
-  // Helper: compute schedule label
+  // Helper: format strictly as DD-MM-YYYY in Indian Standard Time (Asia/Kolkata)
+  const formatDateDDMMYYYY = (dateInput: Date | string | number | null | undefined): string => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }).formatToParts(d);
+    const day = parts.find(p => p.type === 'day')?.value || '';
+    const month = parts.find(p => p.type === 'month')?.value || '';
+    const year = parts.find(p => p.type === 'year')?.value || '';
+    return `${day}-${month}-${year}`;
+  };
+
+  const formatDateTimeDDMMYYYY = (dateInput: Date | string | number | null | undefined, includeSeconds = true): string => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    const dateStr = formatDateDDMMYYYY(d);
+    const timeStr = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: includeSeconds ? '2-digit' : undefined,
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+    return `${dateStr}, ${timeStr}`;
+  };
+
+  const formatTimeIST = (dateInput: Date | string | number | null | undefined): string => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+  };
+
+  // Helper: compute schedule label strictly in DD-MM-YYYY format
   const getAuctionScheduleLabel = (targetAuctionId: string = liveAuctionId) => {
-    const match = matchDays.find(m => String(m.auctionId) === String(targetAuctionId.trim()));
+    const match = matchDays.find(m => String(m.auctionId) === String(targetAuctionId.trim())) ||
+                  historicalMatches.find(m => String(m.auctionId) === String(targetAuctionId.trim()));
     if (match?.date) {
       const matchDate = new Date(match.date);
       const now = new Date();
@@ -337,13 +430,14 @@ export default function AdminPage() {
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       const isTomorrow = tomorrow.toDateString() === matchDate.toDateString();
       const istTime = '2:00 PM IST';
+      const formattedDate = formatDateDDMMYYYY(matchDate);
       
       if (match.status === 'COMPLETED' || matchDate.getTime() < now.getTime() - 24 * 3600 * 1000) {
-        return `${matchDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })} (Completed)`;
+        return `${formattedDate} (Completed)`;
       }
-      if (isToday) return `Today at ${istTime} (LIVE)`;
-      if (isTomorrow) return `Tomorrow at ${istTime}`;
-      return `${matchDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} at ${istTime}`;
+      if (isToday) return `Today (${formattedDate}) at ${istTime} (LIVE)`;
+      if (isTomorrow) return `Tomorrow (${formattedDate}) at ${istTime}`;
+      return `${formattedDate} at ${istTime}`;
     }
 
     const now = new Date();
@@ -358,12 +452,13 @@ export default function AdminPage() {
     } else {
       auctionDate.setDate(auctionDate.getDate() + daysUntilThursday);
     }
+    const formattedFallback = formatDateDDMMYYYY(auctionDate);
     const isToday = now.toDateString() === auctionDate.toDateString();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
-    if (isToday) return 'Today at 2:00 PM IST';
-    if (isTomorrow) return 'Tomorrow at 2:00 PM IST';
-    return `${auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at 2:00 PM IST`;
+    if (isToday) return `Today (${formattedFallback}) at 2:00 PM IST`;
+    if (isTomorrow) return `Tomorrow (${formattedFallback}) at 2:00 PM IST`;
+    return `${formattedFallback} at 2:00 PM IST`;
   };
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -414,11 +509,13 @@ export default function AdminPage() {
     }
   };
 
-  const loadData = useCallback(async (keepAuctionId = false, showFullLoader = false) => {
+  const loadData = useCallback(async (keepAuctionId = false, showFullLoader = false, targetCampaignId?: number) => {
     if (showFullLoader) setLoading(true);
     setStatsError(null);
     try {
-      const res = await fetch('/api/admin?action=stats', {
+      const activeCampaignId = targetCampaignId !== undefined ? targetCampaignId : selectedCampaignId;
+      const campaignParam = activeCampaignId ? `&campaignId=${activeCampaignId}` : '';
+      const res = await fetch(`/api/admin?action=stats${campaignParam}`, {
         credentials: 'same-origin',
         cache: 'no-store',
       });
@@ -432,6 +529,15 @@ export default function AdminPage() {
       if (!res.ok) {
         throw new Error(data?.error || `Server returned HTTP ${res.status}`);
       }
+      if (data.campaigns) {
+        setCampaigns(data.campaigns);
+      }
+      if (data.campaign) {
+        setCurrentCampaign(data.campaign);
+        if (selectedCampaignId === null) {
+          setSelectedCampaignId(data.campaign.id);
+        }
+      }
       if (data.stats) {
         setStats(data.stats);
         setLeaderboard(data.leaderboard || []);
@@ -440,15 +546,17 @@ export default function AdminPage() {
         }
         const matches: MatchDay[] = data.matchDays || [];
         setMatchDays(matches);
+        if (data.historicalMatches) {
+          setHistoricalMatchesData(data.historicalMatches);
+        }
         if (!keepAuctionId) {
-          // Default to LIVE auction first, then UPCOMING auction — never an old completed auction
+          // Default to LIVE auction first, then UPCOMING auction on initial load
           const liveOrUpcomingMatch = matches.find(m => m.status === 'LIVE') ||
                                       matches.find(m => m.status === 'UPCOMING') ||
                                       matches[0];
           if (liveOrUpcomingMatch?.auctionId) {
             setLiveAuctionId(prev => {
-              const prevMatch = matches.find(m => String(m.auctionId) === String(prev));
-              if (!prev || prev === '1978' || prev === '1991' || prevMatch?.status === 'COMPLETED') {
+              if (!prev) {
                 return liveOrUpcomingMatch.auctionId!;
               }
               return prev;
@@ -466,7 +574,13 @@ export default function AdminPage() {
     } finally {
       if (showFullLoader) setLoading(false);
     }
-  }, []);
+  }, [selectedCampaignId]);
+
+  const handleSwitchCampaign = async (campaignId: number) => {
+    setSelectedCampaignId(campaignId);
+    await loadData(false, true, campaignId);
+    showToast(`Switched active view to selected campaign`);
+  };
 
   const loadRules = useCallback(async () => {
     const res = await fetch('/api/admin?action=rules');
@@ -479,6 +593,26 @@ export default function AdminPage() {
     const data = await res.json();
     if (data.logs) setAuditLog(data.logs);
   }, []);
+
+  const loadFleetDealers = useCallback(async () => {
+    try {
+      setFleetLoading(true);
+      const campParam = selectedCampaignId ? `&campaignId=${selectedCampaignId}` : '';
+      const res = await fetch(`/api/admin?action=dealers${campParam}`);
+      if (!res.ok) throw new Error('Failed to fetch fleet dealers');
+      const data = await res.json();
+      if (data.dealers) {
+        setFleetDealers(data.dealers);
+      }
+      if (data.counts) {
+        setFleetCategoryCounts(data.counts);
+      }
+    } catch (err) {
+      console.error('Failed to load fleet dealers:', err);
+    } finally {
+      setFleetLoading(false);
+    }
+  }, [selectedCampaignId]);
 
   const loadLiveActivities = useCallback(async (
     autoSync = false,
@@ -603,6 +737,9 @@ export default function AdminPage() {
     setLiveFilter('ALL'); // Reset filter to ALL so all records are visible
     setLiveSearchQuery('');
     setManualLotOverride('auto');
+    if (historicalMatches.some(m => String(m.auctionId) === cleaned)) {
+      setShowHistorical(true);
+    }
     loadLiveActivities(false, 'ALL', '', cleaned);
     loadAuctionVehicles(cleaned, 'auto');
     showToast(`Loaded Match Auction #${cleaned} Telemetry Feed`);
@@ -641,11 +778,15 @@ export default function AdminPage() {
     if (authenticated && activeTab === 'overview' && !stats && !loading) {
       loadData(false, true);
     }
+    if (authenticated && activeTab === 'dealers' && fleetDealers.length === 0 && !fleetLoading) {
+      loadFleetDealers();
+    }
     if (authenticated && activeTab === 'rules') loadRules();
     if (authenticated && activeTab === 'audit') loadAudit();
     if (authenticated && activeTab === 'liveMonitor') {
-      const currentMatch = matchDays.find(m => String(m.auctionId) === String(liveAuctionId));
-      const isCompleted = currentMatch?.status === 'COMPLETED';
+      const currentMatchObj = matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ||
+                             historicalMatches.find(m => String(m.auctionId) === String(liveAuctionId));
+      const isCompleted = currentMatchObj?.status === 'COMPLETED';
 
       loadLiveActivities(liveAutoRefresh && !isCompleted, liveFilter, liveSearchQuery, liveAuctionId);
       loadAuctionVehicles(liveAuctionId);
@@ -658,7 +799,7 @@ export default function AdminPage() {
         return () => clearInterval(interval);
       }
     }
-  }, [authenticated, activeTab, stats, loading, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadLiveActivities, loadAuctionVehicles, loadData]);
+  }, [authenticated, activeTab, stats, loading, fleetDealers.length, fleetLoading, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadFleetDealers, loadLiveActivities, loadAuctionVehicles, loadData]);
 
   const handleSyncLiveAuction = async () => {
     setSyncing(true);
@@ -771,6 +912,26 @@ export default function AdminPage() {
     }
   };
 
+  const handleAutoDiscoverAuction = async (matchId: number) => {
+    showToast('Searching TVS Certified for auction...');
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'autoDiscoverAuction', matchId }),
+      });
+      const data = await res.json();
+      if (data.found) {
+        showToast(data.message, 'success');
+        loadData();
+      } else {
+        showToast(data.message || 'Auction not published yet on TVS Certified.');
+      }
+    } catch {
+      showToast('Failed to check TVS Certified', 'error');
+    }
+  };
+
   const handleExport = () => {
     setExportModalOpen(true);
   };
@@ -815,6 +976,63 @@ export default function AdminPage() {
     videoRef.current.muted = !videoRef.current.muted;
     setTelecastMuted(videoRef.current.muted);
   };
+
+  // ─── Memoized Computations (Called unconditionally before early returns) ─────
+  const filteredLeaderboard = useMemo(() => {
+    return leaderboard.filter(d => {
+      if (leaderboardCategoryFilter === 'OEM' && d.category !== 'OEM Dealer') return false;
+      if (leaderboardCategoryFilter === 'USED' && d.category !== 'Used Car Dealer') return false;
+      if (leaderboardCategoryFilter === 'CORPORATE' && d.category !== 'Corporate / Other') return false;
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        d.dealerName.toLowerCase().includes(q) ||
+        d.externalId.toLowerCase().includes(q) ||
+        d.city.toLowerCase().includes(q) ||
+        (d.category && d.category.toLowerCase().includes(q))
+      );
+    });
+  }, [leaderboard, leaderboardCategoryFilter, searchQuery]);
+
+  const filteredFleetDealers = useMemo(() => {
+    const sourceList: FleetDealer[] = fleetDealers.length > 0 ? fleetDealers : leaderboard.map(d => ({
+      id: d.dealerId,
+      externalId: d.externalId,
+      displayName: d.dealerName,
+      city: d.city,
+      category: d.category || 'Used Car Dealer',
+      status: 'ACTIVE',
+      points: d.points,
+      rank: d.rank,
+    }));
+
+    return sourceList.filter(d => {
+      if (fleetCategoryFilter === 'OEM' && d.category !== 'OEM Dealer') return false;
+      if (fleetCategoryFilter === 'USED' && d.category !== 'Used Car Dealer') return false;
+      if (fleetCategoryFilter === 'CORPORATE' && d.category !== 'Corporate / Other') return false;
+
+      if (!fleetSearchQuery) return true;
+      const q = fleetSearchQuery.toLowerCase();
+      return (
+        d.displayName.toLowerCase().includes(q) ||
+        d.externalId.toLowerCase().includes(q) ||
+        d.city.toLowerCase().includes(q) ||
+        (d.category && d.category.toLowerCase().includes(q))
+      );
+    });
+  }, [fleetDealers, leaderboard, fleetCategoryFilter, fleetSearchQuery]);
+
+  const filteredLiveActivities = liveActivities.filter(a => {
+    if (liveFilter !== 'ALL' && a.activityType !== liveFilter) return false;
+    if (liveSearchQuery) {
+      const q = liveSearchQuery.toLowerCase();
+      return a.dealerName.toLowerCase().includes(q) ||
+             a.externalDealerId.toLowerCase().includes(q) ||
+             a.city.toLowerCase().includes(q) ||
+             JSON.stringify(a.metadata).toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!authenticated) {
@@ -915,26 +1133,6 @@ export default function AdminPage() {
     );
   }
 
-  // ─── Main Admin Command Center ─────────────────────────────────────────────
-  const filteredLeaderboard = leaderboard.filter(d =>
-    d.dealerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.externalId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.city.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredLiveActivities = liveActivities.filter(a => {
-    if (liveFilter !== 'ALL' && a.activityType !== liveFilter) return false;
-    if (liveSearchQuery) {
-      const q = liveSearchQuery.toLowerCase();
-      return a.dealerName.toLowerCase().includes(q) ||
-             a.externalDealerId.toLowerCase().includes(q) ||
-             a.city.toLowerCase().includes(q) ||
-             JSON.stringify(a.metadata).toLowerCase().includes(q);
-    }
-    return true;
-  });
-
-
   return (
     <div className="page-container">
       {/* Background Ambient Orbs & Grid */}
@@ -1000,8 +1198,36 @@ export default function AdminPage() {
               <div>
                 <h1 className="admin-page-title">Super Cup Executive Command Center</h1>
                 <p className="admin-page-subtitle">
-                  2026–27 Campaign • Real-Time Auction Telemetry & Fleet Management
+                  {currentCampaign?.name || 'TVS Super Cup'} • {currentCampaign ? `${formatDateDDMMYYYY(currentCampaign.startDate)} to ${formatDateDDMMYYYY(currentCampaign.endDate)}` : '2026–27 Campaign'} • Real-Time Auction Telemetry & Fleet Management
                 </p>
+                {campaigns.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Active Campaign:
+                    </span>
+                    <select
+                      className="form-input"
+                      style={{
+                        padding: '3px 8px',
+                        fontSize: '0.75rem',
+                        borderRadius: '6px',
+                        background: 'var(--surface-color)',
+                        color: 'var(--text-primary)',
+                        borderColor: 'var(--border-color)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                      value={currentCampaign?.id || selectedCampaignId || ''}
+                      onChange={(e) => handleSwitchCampaign(Number(e.target.value))}
+                    >
+                      {campaigns.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({formatDateDDMMYYYY(c.startDate)} to {formatDateDDMMYYYY(c.endDate)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1195,6 +1421,9 @@ export default function AdminPage() {
                   if ((item.key === 'overview' || item.key === 'leaderboard') && !stats) {
                     loadData(false, true);
                   }
+                  if (item.key === 'dealers' && fleetDealers.length === 0) {
+                    loadFleetDealers();
+                  }
                 }}
               >
                 {item.icon}
@@ -1277,7 +1506,7 @@ export default function AdminPage() {
                             <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
                               {(stats.totalBids ?? 0).toLocaleString()}
                             </div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>+2 pts per bid</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>+1 pt per bid</span>
                           </div>
 
                           <div className="admin-stat-card">
@@ -1293,7 +1522,7 @@ export default function AdminPage() {
                             <div className="admin-stat-val" style={{ color: 'var(--accent-indigo)' }}>
                               {stats.matchParticipation ?? 0}
                             </div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>+15 pts per match</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>+1 pt per match</span>
                           </div>
 
                           <div className="admin-stat-card">
@@ -1306,10 +1535,12 @@ export default function AdminPage() {
 
                           <div className="admin-stat-card" style={{ borderLeft: '3px solid var(--tvs-red)' }}>
                             <span className="admin-stat-label">Active Campaign</span>
-                            <div className="admin-stat-val" style={{ fontSize: '1.15rem', color: 'var(--tvs-red-light)', lineHeight: '1.4' }}>
-                              Super Cup &apos;26
+                            <div className="admin-stat-val" style={{ fontSize: '1.0rem', color: 'var(--tvs-red-light)', lineHeight: '1.3' }}>
+                              {currentCampaign?.name || "Super Cup '26"}
                             </div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{activeMatches.length} Live &amp; Upcoming Matches</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {currentCampaign ? `${formatDateDDMMYYYY(currentCampaign.startDate)} to ${formatDateDDMMYYYY(currentCampaign.endDate)}` : `${activeMatches.length} Live & Upcoming Matches`}
+                            </span>
                           </div>
                         </div>
 
@@ -1360,7 +1591,7 @@ export default function AdminPage() {
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                                        Auction #{m.auctionId} • {new Date(m.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}
+                                        Auction #{m.auctionId} • {formatDateDDMMYYYY(m.date)}
                                       </div>
                                     </div>
                                     <button
@@ -1402,7 +1633,7 @@ export default function AdminPage() {
                                       </span>
                                     </div>
                                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                                      Auction #{m.auctionId} • {new Date(m.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}
+                                      Auction #{m.auctionId} • {formatDateDDMMYYYY(m.date)}
                                     </div>
                                   </div>
                                   <button
@@ -1441,35 +1672,20 @@ export default function AdminPage() {
                                     fontFamily: 'var(--font-mono)',
                                     padding: '2px 8px',
                                     borderRadius: '9999px',
-                                    background: 'rgba(6, 214, 160, 0.15)',
-                                    color: 'var(--accent-cyan)',
-                                    border: '1px solid rgba(6, 214, 160, 0.4)'
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    color: '#34d399',
+                                    border: '1px solid rgba(16, 185, 129, 0.4)'
                                   }}>
-                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-cyan)' }} />
-                                    {showMaskedPreview ? 'MASKED PREVIEW' : 'UNMASKED'}
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#34d399' }} />
+                                    UNMASKED • LIVE STANDINGS
                                   </span>
                                 </div>
                                 <p className="card-subtitle">
-                                  Showing verified rankings for {leaderboard.length} TVS dealerships • {showMaskedPreview ? 'Public masked view preview' : 'Real dealership enterprise names active'}
+                                  Showing verified rankings for {leaderboard.length} TVS dealerships • Enterprise legal entity names active
                                 </p>
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <button
-                                  className="btn btn-ghost btn-xs"
-                                  style={{
-                                    fontSize: '0.74rem',
-                                    padding: '4px 8px',
-                                    border: '1px solid var(--border-subtle)',
-                                    background: showMaskedPreview ? 'rgba(255, 255, 255, 0.08)' : 'rgba(6, 214, 160, 0.12)',
-                                    color: showMaskedPreview ? 'var(--text-secondary)' : 'var(--accent-cyan)',
-                                  }}
-                                  onClick={() => setShowMaskedPreview(!showMaskedPreview)}
-                                  title={showMaskedPreview ? 'Switch to unmasked real names' : 'Preview masked public names with asterisks'}
-                                >
-                                  {showMaskedPreview ? '👁️ Unmask Names' : '🔒 Preview Masked'}
-                                </button>
-
                                 <button
                                   className="btn btn-ghost btn-xs"
                                   style={{ fontSize: '0.74rem', padding: '4px 8px', color: 'var(--accent-cyan)' }}
@@ -1481,7 +1697,7 @@ export default function AdminPage() {
                               </div>
                             </div>
 
-                            <div className="search-bar-wrap" style={{ padding: '0 16px 12px' }}>
+                            <div className="search-bar-wrap" style={{ padding: '0 16px 8px' }}>
                               <div className="search-input-box">
                                 <Search className="w-4 h-4 search-icon-left" />
                                 <input
@@ -1494,12 +1710,40 @@ export default function AdminPage() {
                               </div>
                             </div>
 
+                            {/* Category Filter Pills */}
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', padding: '0 16px 12px' }}>
+                              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
+                              {[
+                                { key: 'ALL', label: 'All Dealerships' },
+                                { key: 'OEM', label: 'OEM Dealers (Sellers)', color: '#34d399' },
+                                { key: 'USED', label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
+                              ].map(pill => (
+                                <button
+                                  key={pill.key}
+                                  className="btn btn-xs"
+                                  style={{
+                                    padding: '3px 9px',
+                                    fontSize: '0.72rem',
+                                    borderRadius: '999px',
+                                    background: leaderboardCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                    border: `1px solid ${leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                    color: leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                    fontWeight: leaderboardCategoryFilter === pill.key ? 700 : 500,
+                                  }}
+                                  onClick={() => setLeaderboardCategoryFilter(pill.key)}
+                                >
+                                  {pill.label}
+                                </button>
+                              ))}
+                            </div>
+
                             <div style={{ overflowX: 'auto', maxHeight: '520px' }}>
                               <table className="admin-table">
                                 <thead>
                                   <tr>
                                     <th>Rank</th>
-                                    <th>Dealership Name {showMaskedPreview ? '(Masked Preview)' : '(Unmasked)'}</th>
+                                    <th>Dealership Name</th>
+                                    <th>Category & Role</th>
                                     <th>External ID</th>
                                     <th>City / Hub</th>
                                     <th>Points</th>
@@ -1516,7 +1760,58 @@ export default function AdminPage() {
                                          `#${d.rank}`}
                                       </td>
                                       <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                                        {showMaskedPreview ? d.maskedName : d.dealerName}
+                                        {d.dealerName}
+                                      </td>
+                                      <td>
+                                        {d.category === 'OEM Dealer' ? (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            background: 'rgba(16, 185, 129, 0.15)',
+                                            color: '#34d399',
+                                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            🏢 OEM • Seller
+                                          </span>
+                                        ) : d.category === 'Used Car Dealer' ? (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            background: 'rgba(56, 189, 248, 0.15)',
+                                            color: '#38bdf8',
+                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            🚗 Used Car • Buyer
+                                          </span>
+                                        ) : (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            background: 'rgba(148, 163, 184, 0.15)',
+                                            color: '#94a3b8',
+                                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            {d.category || 'Other'}
+                                          </span>
+                                        )}
                                       </td>
                                       <td style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                                         {d.externalId}
@@ -1681,8 +1976,8 @@ export default function AdminPage() {
                                         <span>
                                           {a.metadata?.vehicleName ? `${a.metadata.vehicleName} (${a.metadata.regNo || ''})` : `Auction #${a.auctionId || 'Live'}`}
                                         </span>
-                                        <span>
-                                          {new Date(a.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                                        <span title={formatDateTimeDDMMYYYY(a.timestamp)} style={{ fontFamily: 'var(--font-mono)' }}>
+                                          {formatDateDDMMYYYY(a.timestamp)} • {formatTimeIST(a.timestamp)}
                                         </span>
                                       </div>
                                     </div>
@@ -1713,13 +2008,13 @@ export default function AdminPage() {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                background: showMaskedPreview ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.18)',
-                                border: `1px solid ${showMaskedPreview ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.5)'}`,
+                                background: 'rgba(16, 185, 129, 0.18)',
+                                border: '1px solid rgba(16, 185, 129, 0.5)',
                                 padding: '3px 10px',
                                 borderRadius: '999px',
                                 fontSize: '0.72rem',
                                 fontWeight: 800,
-                                color: showMaskedPreview ? '#fbbf24' : '#34d399',
+                                color: '#34d399',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.08em',
                                 fontFamily: 'var(--font-mono)'
@@ -1728,10 +2023,10 @@ export default function AdminPage() {
                                   width: '6px',
                                   height: '6px',
                                   borderRadius: '50%',
-                                  background: showMaskedPreview ? '#fbbf24' : '#34d399',
-                                  boxShadow: `0 0 6px ${showMaskedPreview ? '#fbbf24' : '#34d399'}`
+                                  background: '#34d399',
+                                  boxShadow: '0 0 6px #34d399'
                                 }}></span>
-                                {showMaskedPreview ? 'MASKED PREVIEW (PUBLIC SIMULATION)' : 'UNMASKED (ADMIN MISSION CONTROL)'}
+                                UNMASKED • ADMIN MISSION CONTROL
                               </span>
                             </div>
                             <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
@@ -1744,37 +2039,6 @@ export default function AdminPage() {
 
                           {/* Quick Controls */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                            <button
-                              className="btn btn-sm"
-                              style={{
-                                background: showMaskedPreview ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
-                                borderColor: showMaskedPreview ? '#10b981' : 'var(--border-subtle)',
-                                color: showMaskedPreview ? '#34d399' : 'var(--text-primary)',
-                                fontWeight: 700,
-                                fontSize: '0.8rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                              }}
-                              onClick={() => {
-                                setShowMaskedPreview(!showMaskedPreview);
-                                showToast(showMaskedPreview ? 'Switched to Unmasked (Admin View)' : 'Switched to Masked (Public Preview)');
-                              }}
-                              title="Toggle between full unmasked dealership names and public masked preview"
-                            >
-                              {showMaskedPreview ? (
-                                <>
-                                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>Unmask Names (Admin)</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Shield className="w-3.5 h-3.5 text-amber-400" />
-                                  <span>Preview Masked (Public)</span>
-                                </>
-                              )}
-                            </button>
-
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={handleRecalculate}
@@ -1848,8 +2112,21 @@ export default function AdminPage() {
                                   marginBottom: '4px',
                                   lineHeight: 1.3
                                 }}>
-                                  {showMaskedPreview ? leaderboard[0].maskedName : leaderboard[0].dealerName}
+                                  {leaderboard[0].dealerName}
                                 </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    background: leaderboard[0].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                                    color: leaderboard[0].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
+                                    border: `1px solid ${leaderboard[0].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                                  }}>
+                                    {leaderboard[0].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                  </span>
+                                </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                   📍 {leaderboard[0].city}
                                 </div>
@@ -1916,8 +2193,21 @@ export default function AdminPage() {
                                   marginBottom: '4px',
                                   lineHeight: 1.3
                                 }}>
-                                  {showMaskedPreview ? leaderboard[1].maskedName : leaderboard[1].dealerName}
+                                  {leaderboard[1].dealerName}
                                 </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    background: leaderboard[1].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                                    color: leaderboard[1].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
+                                    border: `1px solid ${leaderboard[1].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                                  }}>
+                                    {leaderboard[1].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                  </span>
+                                </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                   📍 {leaderboard[1].city}
                                 </div>
@@ -1984,8 +2274,21 @@ export default function AdminPage() {
                                   marginBottom: '4px',
                                   lineHeight: 1.3
                                 }}>
-                                  {showMaskedPreview ? leaderboard[2].maskedName : leaderboard[2].dealerName}
+                                  {leaderboard[2].dealerName}
                                 </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    background: leaderboard[2].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                                    color: leaderboard[2].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
+                                    border: `1px solid ${leaderboard[2].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                                  }}>
+                                    {leaderboard[2].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                  </span>
+                                </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                   📍 {leaderboard[2].city}
                                 </div>
@@ -2011,7 +2314,7 @@ export default function AdminPage() {
                           </div>
                         )}
 
-                        {/* Search and Summary Bar */}
+                        {/* Search, Category Filter, and Summary Bar */}
                         <div style={{
                           display: 'flex',
                           flexWrap: 'wrap',
@@ -2020,8 +2323,8 @@ export default function AdminPage() {
                           gap: '12px',
                           marginBottom: '16px'
                         }}>
-                          <div style={{ flex: '1 1 320px', maxWidth: '480px' }}>
-                            <div className="search-input-box">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: '1 1 450px' }}>
+                            <div className="search-input-box" style={{ flex: '1 1 240px', maxWidth: '380px' }}>
                               <Search className="w-4 h-4 search-icon-left" />
                               <input
                                 type="text"
@@ -2040,6 +2343,32 @@ export default function AdminPage() {
                                 </button>
                               )}
                             </div>
+
+                            {/* Category Filter Buttons in Standings */}
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                              {[
+                                { key: 'ALL', label: 'All Standings' },
+                                { key: 'OEM', label: 'OEM Dealers (Sellers)', color: '#34d399' },
+                                { key: 'USED', label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
+                              ].map(pill => (
+                                <button
+                                  key={pill.key}
+                                  className="btn btn-xs"
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '0.74rem',
+                                    borderRadius: '999px',
+                                    background: leaderboardCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                    border: `1px solid ${leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                    color: leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                    fontWeight: leaderboardCategoryFilter === pill.key ? 700 : 500,
+                                  }}
+                                  onClick={() => setLeaderboardCategoryFilter(pill.key)}
+                                >
+                                  {pill.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
 
                           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
@@ -2053,7 +2382,8 @@ export default function AdminPage() {
                             <thead>
                               <tr>
                                 <th style={{ width: '80px' }}>Rank</th>
-                                <th>Dealership Legal Name {showMaskedPreview ? '(Masked Preview)' : '(Unmasked)'}</th>
+                                <th>Dealership Legal Name</th>
+                                <th>Category & Role</th>
                                 <th style={{ width: '120px' }}>Dealer Code</th>
                                 <th style={{ width: '140px' }}>City / Hub</th>
                                 <th style={{ width: '160px' }}>Championship Points</th>
@@ -2089,14 +2419,60 @@ export default function AdminPage() {
                                           color: 'var(--text-primary)',
                                           letterSpacing: '-0.01em'
                                         }}>
-                                          {showMaskedPreview ? d.maskedName : d.dealerName}
+                                          {d.dealerName}
                                         </span>
-                                        {!showMaskedPreview && (
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                            Public mask: {d.maskedName}
-                                          </span>
-                                        )}
                                       </div>
+                                    </td>
+                                    <td>
+                                      {d.category === 'OEM Dealer' ? (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          background: 'rgba(16, 185, 129, 0.15)',
+                                          color: '#34d399',
+                                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          🏢 OEM • Seller
+                                        </span>
+                                      ) : d.category === 'Used Car Dealer' ? (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          background: 'rgba(56, 189, 248, 0.15)',
+                                          color: '#38bdf8',
+                                          border: '1px solid rgba(56, 189, 248, 0.35)',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          🚗 Used Car • Buyer
+                                        </span>
+                                      ) : (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 600,
+                                          background: 'rgba(148, 163, 184, 0.15)',
+                                          color: '#94a3b8',
+                                          border: '1px solid rgba(148, 163, 184, 0.3)',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          {d.category || 'Other'}
+                                        </span>
+                                      )}
                                     </td>
                                     <td>
                                       <span style={{
@@ -2406,7 +2782,7 @@ export default function AdminPage() {
                                       <div className="match-card-metrics">
                                         <span style={{ color: 'var(--text-muted)' }}>Completed</span> •{' '}
                                         <span style={{ color: 'var(--text-muted)' }}>
-                                          {new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+                                          {formatDateDDMMYYYY(m.date)}
                                         </span>
                                       </div>
                                       {isSelected && (
@@ -2466,7 +2842,7 @@ export default function AdminPage() {
                     {/* Live Metric Tiles Grid */}
                     <div className="admin-stats-grid">
                       <div className="admin-stat-card">
-                        <span className="admin-stat-label">Live Bids Placed (+2)</span>
+                        <span className="admin-stat-label">Live Bids Placed (+1)</span>
                         <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
                           {liveStats?.totalBids ?? 0}
                         </div>
@@ -2484,15 +2860,15 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className="admin-stat-card">
-                        <span className="admin-stat-label">Room Attendees (+15)</span>
+                        <span className="admin-stat-label">Room Attendees (+1)</span>
                         <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
                           {liveStats?.totalParticipation ?? 0}
                         </div>
                       </div>
                       <div className="admin-stat-card">
-                        <span className="admin-stat-label">Inspections (+1)</span>
-                        <div className="admin-stat-val" style={{ color: 'var(--accent-blue)' }}>
-                          {(liveStats?.totalInspections ?? 0) + (liveStats?.totalWatchlist ?? 0)}
+                        <span className="admin-stat-label">Vehicles Listed (+5)</span>
+                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
+                          {liveStats?.totalListings ?? 0}
                         </div>
                       </div>
                       <div className="admin-stat-card">
@@ -3440,8 +3816,16 @@ export default function AdminPage() {
                                 className="interactive-telemetry-row"
                                 title="Click row to inspect vehicle specification & telemetry details"
                               >
-                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
-                                  {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                <td 
+                                  style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}
+                                  title={formatDateTimeDDMMYYYY(act.timestamp)}
+                                >
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginRight: '6px' }}>
+                                    {formatDateDDMMYYYY(act.timestamp)}
+                                  </span>
+                                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    {formatTimeIST(act.timestamp)}
+                                  </span>
                                 </td>
                                 <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                                   {act.dealerName}
@@ -3454,16 +3838,18 @@ export default function AdminPage() {
                                   <span className={`badge ${
                                     act.activityType === 'BUY' ? 'badge-success' :
                                     act.activityType === 'SELL' ? 'badge-info' :
+                                    act.activityType === 'SELL_LISTING' ? 'badge-primary' :
+                                    act.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
                                     act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
                                     act.activityType === 'BID_PLACED' ? 'badge-primary' :
                                     'badge-warning'
                                   }`}>
-                                    {act.activityType === 'BUY' ? '🏆 WON LOT' :
-                                     act.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
+                                    {act.activityType === 'BUY' ? '🏆 WON LOT (CONVERSION)' :
+                                     act.activityType === 'SELL' ? '💰 SOLD (CONVERSION)' :
+                                     act.activityType === 'SELL_LISTING' ? '📋 VEHICLE LISTED' :
+                                     act.activityType === 'SELL_COMMISSION' ? '💵 COMMISSION' :
                                      act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
                                      act.activityType === 'MATCH_PARTICIPATION' ? '👥 ROOM ATTENDEE' :
-                                     act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
-                                     act.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
                                      act.activityType.replace(/_/g, ' ')}
                                   </span>
                                 </td>
@@ -3625,70 +4011,365 @@ export default function AdminPage() {
                 )}
 
                 {/* ── 3. Dealers Fleet Management Tab ──────────────────────────────── */}
+                {/* ── 3. Dealers Fleet Management Tab ──────────────────────────────── */}
                 {activeTab === 'dealers' && !selectedDealer && (
-                  <div className="card">
-                    <div className="card-header">
-                      <div>
-                        <h3 className="card-title">
-                          <Users className="w-5 h-5 text-sky-400" />
-                          Dealer Fleet Directory & Score Oversight
-                        </h3>
-                        <p className="card-subtitle">
-                          Manage enrolled dealers, inspect individual transactions, and make score adjustments
-                        </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Executive Fleet Categorization Metrics Strip */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                      gap: '14px',
+                    }}>
+                      <div 
+                        className="card" 
+                        style={{ 
+                          padding: '16px 20px', 
+                          borderLeft: '4px solid var(--accent-cyan)',
+                          cursor: 'pointer',
+                          background: fleetCategoryFilter === 'ALL' ? 'rgba(6, 214, 160, 0.08)' : 'var(--bg-card)'
+                        }}
+                        onClick={() => { setFleetCategoryFilter('ALL'); setFleetPage(1); }}
+                      >
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Total Fleet Enrolled
+                        </div>
+                        <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--text-primary)', marginTop: '4px' }}>
+                          {(fleetCategoryCounts.total || stats?.totalDealers || 1545).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', marginTop: '2px' }}>
+                          Super Cup Verified Network
+                        </div>
+                      </div>
+
+                      <div 
+                        className="card" 
+                        style={{ 
+                          padding: '16px 20px', 
+                          borderLeft: '4px solid #34d399', 
+                          cursor: 'pointer',
+                          background: fleetCategoryFilter === 'OEM' ? 'rgba(16, 185, 129, 0.08)' : 'var(--bg-card)'
+                        }} 
+                        onClick={() => { setFleetCategoryFilter('OEM'); setFleetPage(1); }}
+                      >
+                        <div style={{ fontSize: '0.74rem', color: '#34d399', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          🏢 OEM Dealers • Sellers
+                        </div>
+                        <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#34d399', marginTop: '4px' }}>
+                          {(fleetCategoryCounts.oem || 124).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Authorized Brand Dealerships
+                        </div>
+                      </div>
+
+                      <div 
+                        className="card" 
+                        style={{ 
+                          padding: '16px 20px', 
+                          borderLeft: '4px solid #38bdf8', 
+                          cursor: 'pointer',
+                          background: fleetCategoryFilter === 'USED' ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-card)'
+                        }} 
+                        onClick={() => { setFleetCategoryFilter('USED'); setFleetPage(1); }}
+                      >
+                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          🚗 Used Car Dealers • Buyers
+                        </div>
+                        <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#38bdf8', marginTop: '4px' }}>
+                          {(fleetCategoryCounts.usedCar || 1278).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Multi-Brand Pre-Owned Traders
+                        </div>
+                      </div>
+
+                      <div 
+                        className="card" 
+                        style={{ 
+                          padding: '16px 20px', 
+                          borderLeft: '4px solid #94a3b8', 
+                          cursor: 'pointer',
+                          background: fleetCategoryFilter === 'CORPORATE' ? 'rgba(148, 163, 184, 0.08)' : 'var(--bg-card)'
+                        }} 
+                        onClick={() => { setFleetCategoryFilter('CORPORATE'); setFleetPage(1); }}
+                      >
+                        <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          🏛️ Corporate / Internal
+                        </div>
+                        <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#cbd5e1', marginTop: '4px' }}>
+                          {(fleetCategoryCounts.corporate || 143).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          TVS Outsource & Central Operations
+                        </div>
                       </div>
                     </div>
 
-                    <div className="search-bar-wrap">
-                      <div className="search-input-box">
-                        <Search className="w-4 h-4 search-icon-left" />
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Search dealer by name, ID, or city..."
-                          value={searchQuery}
-                          onChange={e => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                    </div>
+                    {/* Main Directory Card */}
+                    <div className="card">
+                      <div className="card-header" style={{ flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <h3 className="card-title">
+                            <Users className="w-5 h-5 text-sky-400" />
+                            Dealer Fleet Directory & Role Oversight
+                          </h3>
+                          <p className="card-subtitle">
+                            Classified directory with OEM Sellers vs Used Car Buyers, scores, and profile telemetry
+                          </p>
+                        </div>
 
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="admin-table">
-                        <thead>
-                          <tr>
-                            <th>Rank</th>
-                            <th>Dealer Name</th>
-                            <th>ID</th>
-                            <th>City</th>
-                            <th>Total Points</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredLeaderboard.map(d => (
-                            <tr key={d.dealerId}>
-                              <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>#{d.rank}</td>
-                              <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{d.dealerName}</td>
-                              <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{d.externalId}</td>
-                              <td>{d.city}</td>
-                              <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>{d.points} PTS</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button className="btn btn-primary btn-sm" onClick={() => loadDealerDetail(d.dealerId)}>
-                                    Details
-                                  </button>
-                                  <button 
-                                    className="btn btn-ghost btn-sm" 
-                                    onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
-                                  >
-                                    Adjust
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => loadFleetDealers()}
+                            disabled={fleetLoading}
+                            title="Reload fleet roster"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${fleetLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                          </button>
+
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => triggerExportDownload('dealers', 'csv')}
+                            title="Export dealers CSV with Category & Primary Role"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Export Fleet CSV</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Search Bar & Category Filter Pills */}
+                      <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div className="search-bar-wrap" style={{ padding: 0 }}>
+                          <div className="search-input-box">
+                            <Search className="w-4 h-4 search-icon-left" />
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Search dealer by name, external dealer code, or city..."
+                              value={fleetSearchQuery}
+                              onChange={e => {
+                                setFleetSearchQuery(e.target.value);
+                                setFleetPage(1);
+                              }}
+                            />
+                            {fleetSearchQuery && (
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)' }}
+                                onClick={() => {
+                                  setFleetSearchQuery('');
+                                  setFleetPage(1);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Interactive Category Filter Pills */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                            Category Filter:
+                          </span>
+                          {[
+                            { key: 'ALL', label: `All Dealers (${(fleetCategoryCounts.total || stats?.totalDealers || 1545).toLocaleString()})` },
+                            { key: 'OEM', label: `🏢 OEM Dealers / Sellers (${fleetCategoryCounts.oem || 124})`, color: '#34d399' },
+                            { key: 'USED', label: `🚗 Used Car Dealers / Buyers (${fleetCategoryCounts.usedCar || 1278})`, color: '#38bdf8' },
+                            { key: 'CORPORATE', label: `🏛️ Corporate (${fleetCategoryCounts.corporate || 143})`, color: '#94a3b8' },
+                          ].map(pill => (
+                            <button
+                              key={pill.key}
+                              className="btn btn-xs"
+                              style={{
+                                padding: '4px 12px',
+                                fontSize: '0.74rem',
+                                borderRadius: '999px',
+                                background: fleetCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                border: `1px solid ${fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                color: fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                fontWeight: fleetCategoryFilter === pill.key ? 700 : 500,
+                              }}
+                              onClick={() => {
+                                setFleetCategoryFilter(pill.key);
+                                setFleetPage(1);
+                              }}
+                            >
+                              {pill.label}
+                            </button>
                           ))}
-                        </tbody>
-                      </table>
+                        </div>
+                      </div>
+
+                      {/* Directory Table */}
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '80px' }}>Rank</th>
+                              <th>Dealer Legal Name</th>
+                              <th>Category & Primary Role</th>
+                              <th style={{ width: '120px' }}>Dealer Code</th>
+                              <th style={{ width: '150px' }}>City / Location</th>
+                              <th style={{ width: '130px' }}>Total Points</th>
+                              <th style={{ width: '100px' }}>Status</th>
+                              <th style={{ width: '140px' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fleetLoading && (
+                              <tr>
+                                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-sky-400" />
+                                  Loading fleet directory...
+                                </td>
+                              </tr>
+                            )}
+                            {!fleetLoading && filteredFleetDealers.slice((fleetPage - 1) * fleetPageSize, fleetPage * fleetPageSize).map(d => (
+                              <tr key={d.id}>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                                  {d.rank ? `#${d.rank}` : '-'}
+                                </td>
+                                <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  {d.displayName}
+                                </td>
+                                <td>
+                                  {d.category === 'OEM Dealer' ? (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(16, 185, 129, 0.15)',
+                                      color: '#34d399',
+                                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      🏢 OEM Dealer • Seller
+                                    </span>
+                                  ) : d.category === 'Used Car Dealer' ? (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(56, 189, 248, 0.15)',
+                                      color: '#38bdf8',
+                                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      🚗 Used Car Dealer • Buyer
+                                    </span>
+                                  ) : (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 600,
+                                      background: 'rgba(148, 163, 184, 0.15)',
+                                      color: '#94a3b8',
+                                      border: '1px solid rgba(148, 163, 184, 0.3)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {d.category || 'Other'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                  {d.externalId}
+                                </td>
+                                <td>{d.city}</td>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>
+                                  {d.points ? `${d.points.toLocaleString()} PTS` : '0 PTS'}
+                                </td>
+                                <td>
+                                  <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>
+                                    {d.status || 'ACTIVE'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button 
+                                      className="btn btn-primary btn-sm" 
+                                      onClick={() => loadDealerDetail(d.id)}
+                                      title="Inspect full activity and vehicle history"
+                                    >
+                                      Details
+                                    </button>
+                                    <button 
+                                      className="btn btn-ghost btn-sm" 
+                                      onClick={() => setAdjustModal({ dealerId: d.id, dealerName: d.displayName })}
+                                      title="Manually adjust points"
+                                    >
+                                      Adjust
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {!fleetLoading && filteredFleetDealers.length === 0 && (
+                              <tr>
+                                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                  No dealerships match &quot;{fleetSearchQuery}&quot; under &quot;{fleetCategoryFilter}&quot;
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination Footer */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Showing <strong>{filteredFleetDealers.length === 0 ? 0 : (fleetPage - 1) * fleetPageSize + 1}</strong> to <strong>{Math.min(fleetPage * fleetPageSize, filteredFleetDealers.length)}</strong> of <strong>{filteredFleetDealers.length.toLocaleString()}</strong> dealerships
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={fleetPage <= 1}
+                            onClick={() => setFleetPage(p => Math.max(1, p - 1))}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                          </button>
+
+                          <span style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)', padding: '0 8px', color: 'var(--text-primary)' }}>
+                            Page {fleetPage} of {Math.max(1, Math.ceil(filteredFleetDealers.length / fleetPageSize))}
+                          </span>
+
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={fleetPage * fleetPageSize >= filteredFleetDealers.length}
+                            onClick={() => setFleetPage(p => p + 1)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                          >
+                            Next <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3697,14 +4378,60 @@ export default function AdminPage() {
                 {activeTab === 'dealers' && selectedDealer && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDealer(null)}>
                           ← Back to Directory
                         </button>
-                        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                           {selectedDealer.displayName}
                         </h2>
                         <span className="badge badge-info">{selectedDealer.externalDealerId}</span>
+                        {selectedDealer.category === 'OEM Dealer' ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            background: 'rgba(16, 185, 129, 0.2)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.45)',
+                            fontSize: '0.74rem',
+                            fontWeight: 800
+                          }}>
+                            🏢 OEM Dealer • Primary Seller
+                          </span>
+                        ) : selectedDealer.category === 'Used Car Dealer' ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            background: 'rgba(56, 189, 248, 0.2)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.45)',
+                            fontSize: '0.74rem',
+                            fontWeight: 800
+                          }}>
+                            🚗 Used Car Dealer • Primary Buyer
+                          </span>
+                        ) : (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            background: 'rgba(148, 163, 184, 0.15)',
+                            color: '#94a3b8',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            fontSize: '0.74rem',
+                            fontWeight: 600
+                          }}>
+                            🏛️ {selectedDealer.category || 'Corporate / Internal'}
+                          </span>
+                        )}
                       </div>
 
                       <button 
@@ -3715,7 +4442,7 @@ export default function AdminPage() {
                       </button>
                     </div>
 
-                    <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                    <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                       <div className="admin-stat-card">
                         <span className="admin-stat-label">Current Standings</span>
                         <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
@@ -3733,6 +4460,15 @@ export default function AdminPage() {
                         <div className="admin-stat-val">
                           {selectedDealer.activities.length}
                         </div>
+                      </div>
+                      <div className="admin-stat-card">
+                        <span className="admin-stat-label">Dealer Classification</span>
+                        <div className="admin-stat-val" style={{ fontSize: '1.05rem', color: selectedDealer.category === 'OEM Dealer' ? '#34d399' : selectedDealer.category === 'Used Car Dealer' ? '#38bdf8' : 'var(--text-primary)' }}>
+                          {selectedDealer.category || 'Used Car Dealer'}
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          {selectedDealer.category === 'OEM Dealer' ? 'Primary Seller Role' : selectedDealer.category === 'Used Car Dealer' ? 'Primary Buyer Role' : 'Internal Account'}
+                        </span>
                       </div>
                     </div>
 
@@ -3772,7 +4508,7 @@ export default function AdminPage() {
                                   {a.externalTransactionId}
                                 </td>
                                 <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                  {new Date(a.timestamp).toLocaleString()}
+                                  {formatDateTimeDDMMYYYY(a.timestamp)}
                                 </td>
                               </tr>
                             ))}
@@ -3819,11 +4555,19 @@ export default function AdminPage() {
                                   <span className={`badge ${
                                     r.activityType === 'BUY' ? 'badge-success' :
                                     r.activityType === 'SELL' ? 'badge-info' :
+                                    r.activityType === 'SELL_LISTING' ? 'badge-primary' :
+                                    r.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
                                     r.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
                                     r.activityType === 'BID_PLACED' ? 'badge-primary' :
                                     'badge-warning'
                                   }`}>
-                                    {r.activityType.replace(/_/g, ' ')}
+                                    {r.activityType === 'BUY' ? 'BUY: CONVERSION (10)' :
+                                     r.activityType === 'SELL' ? 'SELL: CONVERSION (10)' :
+                                     r.activityType === 'SELL_LISTING' ? 'SELL: LISTING (5)' :
+                                     r.activityType === 'SELL_COMMISSION' ? 'SELL: COMMISSION (5)' :
+                                     r.activityType === 'MATCH_PARTICIPATION' ? 'BUY: PARTICIPATION (1)' :
+                                     r.activityType === 'BID_PLACED' ? 'BUY: BIDS (1)' :
+                                     r.activityType.replace(/_/g, ' ')}
                                   </span>
                                 </td>
                                 <td style={{ fontSize: '0.85rem' }}>{r.description}</td>
@@ -3901,23 +4645,40 @@ export default function AdminPage() {
                             )}
                           </div>
                           <div className="match-date">
-                            {new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {formatDateDDMMYYYY(m.date)}
                           </div>
-                          <label style={{ width: '100%', marginTop: '8px', fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'left' }}>
-                            TVS AUCTION ID
-                            <input
-                              className="form-input"
-                              style={{ marginTop: '5px', padding: '7px 9px', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}
-                              defaultValue={m.auctionId || ''}
-                              placeholder="Enter real TVS auction ID"
-                              onBlur={(event) => {
-                                const nextAuctionId = event.target.value.trim();
-                                if (nextAuctionId && nextAuctionId !== m.auctionId) {
-                                  handleUpdateMatch(m.id, m.status, nextAuctionId);
-                                }
+                          <div style={{ width: '100%', marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>TVS AUCTION ID</span>
+                            <button
+                              type="button"
+                              onClick={() => handleAutoDiscoverAuction(m.id)}
+                              title="Query TVS Certified for live or scheduled auction"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--tvs-blue)',
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                padding: 0,
                               }}
-                            />
-                          </label>
+                            >
+                              ⚡ Auto-Fetch
+                            </button>
+                          </div>
+                          <input
+                            className="form-input"
+                            style={{ marginTop: '5px', padding: '7px 9px', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}
+                            defaultValue={m.auctionId || ''}
+                            placeholder="Enter real TVS auction ID"
+                            onBlur={(event) => {
+                              const nextAuctionId = event.target.value.trim();
+                              if (nextAuctionId && nextAuctionId !== m.auctionId) {
+                                handleUpdateMatch(m.id, m.status, nextAuctionId);
+                              }
+                            }}
+                          />
 
                           <div style={{ marginTop: '12px', width: '100%' }}>
                             <select
@@ -3968,7 +4729,7 @@ export default function AdminPage() {
                           {auditLog.map(log => (
                             <tr key={log.id}>
                               <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                {new Date(log.createdAt).toLocaleString()}
+                                {formatDateTimeDDMMYYYY(log.createdAt)}
                               </td>
                               <td style={{ fontWeight: 600 }}>{log.adminUser}</td>
                               <td>
@@ -4285,16 +5046,18 @@ export default function AdminPage() {
                     <span className={`badge ${
                       selectedActivity.activityType === 'BUY' ? 'badge-success' :
                       selectedActivity.activityType === 'SELL' ? 'badge-info' :
+                      selectedActivity.activityType === 'SELL_LISTING' ? 'badge-primary' :
+                      selectedActivity.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
                       selectedActivity.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
                       selectedActivity.activityType === 'BID_PLACED' ? 'badge-primary' :
                       'badge-warning'
                     }`} style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
-                      {selectedActivity.activityType === 'BUY' ? '🏆 WON LOT' :
-                       selectedActivity.activityType === 'SELL' ? '💰 SOLD VEHICLE' :
+                      {selectedActivity.activityType === 'BUY' ? '🏆 WON LOT (CONVERSION)' :
+                       selectedActivity.activityType === 'SELL' ? '💰 SOLD (CONVERSION)' :
+                       selectedActivity.activityType === 'SELL_LISTING' ? '📋 VEHICLE LISTED' :
+                       selectedActivity.activityType === 'SELL_COMMISSION' ? '💵 COMMISSION SETTLED' :
                        selectedActivity.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
                        selectedActivity.activityType === 'MATCH_PARTICIPATION' ? '👥 ROOM ATTENDEE' :
-                       selectedActivity.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
-                       selectedActivity.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
                        selectedActivity.activityType.replace(/_/g, ' ')}
                     </span>
 
@@ -4319,7 +5082,7 @@ export default function AdminPage() {
                     {selectedActivity.metadata?.vehicleName ? String(selectedActivity.metadata.vehicleName) : `${selectedActivity.activityType.replace(/_/g, ' ')} Interaction`}
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
-                    Captured at {new Date(selectedActivity.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
+                    Captured at {formatDateTimeDDMMYYYY(selectedActivity.timestamp)}
                   </p>
                 </div>
 

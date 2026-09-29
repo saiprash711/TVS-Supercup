@@ -110,22 +110,47 @@ export async function syncDealerActivities(
 
     // Default to the current live or upcoming match if unmapped
     const liveMatch = matchDays.find(m => m.status === 'LIVE') || matchDays.find(m => m.status === 'UPCOMING') || matchDays[0];
-    const targetAuctionId = liveMatch?.auctionId || '2003';
+    let targetAuctionId = liveMatch?.auctionId || '2003';
 
-    // Date-based IDs are safe placeholders. An admin must replace them with
-    // the real TVS auction ID before a test or live sync can contact TVS.
+    // If date-based placeholder, attempt auto-discovery from TVS platform
     if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(targetAuctionId)) {
-      const score = await prisma.dealerScore.findUnique({
-        where: { dealerId_campaignId: { dealerId, campaignId } },
-      });
-      return {
-        dealerId,
-        externalDealerId,
-        newActivitiesCount: 0,
-        newPointsAwarded: 0,
-        totalPoints: score?.totalPoints || 0,
-        rank: score?.rank || 0,
-      };
+      if (provider.discoverAuction && liveMatch) {
+        const discovered = await provider.discoverAuction(liveMatch.date, token);
+        if (discovered?.id) {
+          targetAuctionId = discovered.id;
+          await prisma.matchDay.update({
+            where: { id: liveMatch.id },
+            data: {
+              auctionId: discovered.id,
+              ...(discovered.stage === 'live' && liveMatch.status === 'UPCOMING' ? { status: 'LIVE' } : {}),
+            },
+          }).catch(() => {});
+        } else {
+          const score = await prisma.dealerScore.findUnique({
+            where: { dealerId_campaignId: { dealerId, campaignId } },
+          });
+          return {
+            dealerId,
+            externalDealerId,
+            newActivitiesCount: 0,
+            newPointsAwarded: 0,
+            totalPoints: score?.totalPoints || 0,
+            rank: score?.rank || 0,
+          };
+        }
+      } else {
+        const score = await prisma.dealerScore.findUnique({
+          where: { dealerId_campaignId: { dealerId, campaignId } },
+        });
+        return {
+          dealerId,
+          externalDealerId,
+          newActivitiesCount: 0,
+          newPointsAwarded: 0,
+          totalPoints: score?.totalPoints || 0,
+          rank: score?.rank || 0,
+        };
+      }
     }
 
     // 1. Fetch live activities from TVS APIs strictly for this auction
@@ -222,7 +247,7 @@ export async function syncAuctionActivities(
   auctionId: string = '2003',
   campaignId: number,
   token?: string
-): Promise<{ processed: number; pointsAwarded: number; totalActivitiesFound: number }> {
+): Promise<{ processed: number; pointsAwarded: number; totalActivitiesFound: number; auctionId?: string }> {
   const provider = getTVSProvider();
   let processed = 0;
   let pointsAwarded = 0;
@@ -233,18 +258,58 @@ export async function syncAuctionActivities(
       select: { startDate: true, endDate: true },
     });
     const match = await prisma.matchDay.findFirst({
-      where: { campaignId, auctionId },
+      where: {
+        campaignId,
+        OR: [
+          { auctionId },
+          { id: !isNaN(Number(auctionId)) ? Number(auctionId) : undefined },
+        ],
+      },
+    }) || await prisma.matchDay.findFirst({
+      where: { campaignId, status: 'LIVE' },
+    }) || await prisma.matchDay.findFirst({
+      where: { campaignId, status: 'UPCOMING' },
+      orderBy: { date: 'asc' },
     });
+
     if (!campaign || !match) {
-      return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
-    }
-    // Date-based references are placeholders until an administrator maps the
-    // real TVS auction ID. Never send them to the live provider.
-    if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(auctionId)) {
-      return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
+      return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0, auctionId };
     }
 
-    const fetchedActivities = await provider.getAuctionActivities(auctionId, token);
+    let targetAuctionId: string = auctionId || match.auctionId || '2003';
+    // Date-based references are placeholders until an administrator maps the real TVS auction ID
+    // or until the system automatically discovers the published TVS auction.
+    if (/^TVSC-\d{4}-\d{2}-\d{2}$/.test(targetAuctionId)) {
+      if (provider.discoverAuction) {
+        const discovered = await provider.discoverAuction(match.date, token);
+        if (discovered?.id) {
+          targetAuctionId = discovered.id;
+          await prisma.matchDay.update({
+            where: { id: match.id },
+            data: {
+              auctionId: targetAuctionId,
+              ...(discovered.stage === 'live' && match.status === 'UPCOMING' ? { status: 'LIVE' } : {}),
+            },
+          });
+          await prisma.auditLog.create({
+            data: {
+              adminUser: 'system',
+              action: 'AUCTION_ID_AUTO_DISCOVERED',
+              targetType: 'MATCH_DAY',
+              targetId: String(match.id),
+              details: JSON.stringify(discovered),
+              reason: `Automatically resolved TVS Auction #${targetAuctionId} (${discovered.title}) replacing placeholder ${auctionId}`,
+            },
+          }).catch(() => {});
+        } else {
+          return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
+        }
+      } else {
+        return { processed: 0, pointsAwarded: 0, totalActivitiesFound: 0 };
+      }
+    }
+
+    const fetchedActivities = await provider.getAuctionActivities(targetAuctionId, token);
     const activities = fetchedActivities.filter(act => isWithinCampaign(act.timestamp, campaign));
 
     // Map dealers by externalDealerId (supporting both raw ID and USR- prefixed ID)
@@ -257,7 +322,7 @@ export async function syncAuctionActivities(
     }
 
     const sellerNames = activities
-      .filter(a => a.activityType === 'SELL')
+      .filter(a => a.activityType === 'SELL' || a.activityType === 'SELL_LISTING')
       .map(a => {
         const meta = (a.metadata || {}) as Record<string, unknown>;
         const name = meta.sellerName || meta.customerName;
@@ -398,10 +463,10 @@ export async function syncAuctionActivities(
       await recalculateRankings(campaignId);
     }
 
-    return { processed, pointsAwarded, totalActivitiesFound: fetchedActivities.length };
+    return { processed, pointsAwarded, totalActivitiesFound: fetchedActivities.length, auctionId: targetAuctionId };
   } catch (error) {
     console.error(`Error syncing auction ${auctionId}:`, error);
-    return { processed, pointsAwarded, totalActivitiesFound: 0 };
+    return { processed, pointsAwarded, totalActivitiesFound: 0, auctionId };
   }
 }
 
@@ -430,7 +495,7 @@ export async function syncLiveAuction(
     processed: result.processed,
     pointsAwarded: result.pointsAwarded,
     totalActivitiesFound: result.totalActivitiesFound,
-    auctionId: targetAuctionId,
+    auctionId: (result as any).auctionId || targetAuctionId,
   };
 }
 
