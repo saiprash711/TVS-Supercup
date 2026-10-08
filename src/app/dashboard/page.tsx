@@ -23,12 +23,18 @@ import {
   ArrowDown,
   Layers,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Trophy,
+  Info,
+  Crown,
+  Scale
 } from 'lucide-react';
 import ScrollVideoHero from '../components/ScrollVideoHero';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
 import PrizeShowcase from '../components/PrizeShowcase';
+import SuperCupPointsRulesModal from '../components/SuperCupPointsRulesModal';
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
 
 interface DashboardData {
   dealer: { displayName?: string; maskedName: string; city: string };
@@ -37,15 +43,29 @@ interface DashboardData {
     points: number;
     above: { rank: number; dealer: string; points: number; gap: number } | null;
     below: { rank: number; dealer: string; points: number; gap: number } | null;
+    buyerPosition?: {
+      rank: number;
+      points: number;
+      above: { rank: number; dealer: string; points: number; gap: number } | null;
+      below: { rank: number; dealer: string; points: number; gap: number } | null;
+    } | null;
+    sellerPosition?: {
+      rank: number;
+      points: number;
+      above: { rank: number; dealer: string; points: number; gap: number } | null;
+      below: { rank: number; dealer: string; points: number; gap: number } | null;
+    } | null;
   };
   breakdown: {
+    buyerPoints?: number;
+    sellerPoints?: number;
     // SELLING
     sellingListing?: { count: number; points: number; perUnit: number };
     sellingConversion?: { count: number; points: number; perUnit: number };
     sellingCommission?: { count: number; points: number; perUnit: number };
     // BUYING
     buyingParticipation?: { count: number; points: number; perUnit: number };
-    buyingBids?: { count: number; points: number; perUnit: number };
+    buyingBids?: { count: number; totalBids?: number; points: number; perUnit: number };
     buyingConversion?: { count: number; points: number; perUnit: number };
     // Backwards Compatibility Aliases
     buyTransactions: { count: number; points: number; perUnit: number };
@@ -54,7 +74,7 @@ interface DashboardData {
     bidsPlaced?: { count: number; points: number; perUnit: number };
     vehicleInspected?: { count: number; points: number; perUnit: number };
     watchlistAdd?: { count: number; points: number; perUnit: number };
-    allMatchesBonus?: { points: number };
+    allMatchesBonus?: { points: number; awarded?: boolean };
     totalPoints: number;
   };
   recentActivities?: Array<{
@@ -79,6 +99,22 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  // Auto-display Points Rules Handbook upon dealer login / first visit
+  useEffect(() => {
+    try {
+      const autoDismiss = localStorage.getItem('tvs_supercup_rules_auto_dismiss');
+      const seenSession = sessionStorage.getItem('tvs_supercup_rules_seen_session');
+      if (!autoDismiss && !seenSession) {
+        const timer = setTimeout(() => {
+          setShowRulesModal(true);
+        }, 750);
+        return () => clearTimeout(timer);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetch('/api/me/dashboard')
@@ -209,6 +245,28 @@ export default function DashboardPage() {
                 <span>My Dashboard</span>
               </span>
             </li>
+            <li>
+              <button 
+                onClick={() => setShowRulesModal(true)} 
+                className="rules-nav-pill-btn"
+                title="View Official Super Cup Points & Scoring Handbook"
+              >
+                <span className="rules-badge-pulse-indicator" />
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>Point Rules</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setShowTermsModal(true)} 
+                className="navbar-link"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                title="View Official Terms & Conditions for Buyers and Sellers"
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>Terms & Rules</span>
+              </button>
+            </li>
           </ul>
 
           <div className="navbar-user">
@@ -253,14 +311,14 @@ export default function DashboardPage() {
             type: 'accent',
           },
           {
-            label: 'SELLING POINTS',
-            value: 'LISTING = +5 PTS • CONVERSION = +10 PTS • COMMISSION = +5 PTS',
+            label: 'SELLING ALLOCATIONS',
+            value: 'VEHICLE LISTING = +5 PTS • COMMISSION SETTLEMENT = +5 PTS',
             badge: 'SELLING',
             type: 'positive',
           },
           {
-            label: 'BUYING POINTS',
-            value: 'PARTICIPATION = +1 PT • BIDS = +1 PT • CONVERSION = +10 PTS',
+            label: 'BUYING ALLOCATIONS',
+            value: 'MATCH ATTENDANCE = +1 PT • BIDS = +1 PT (PER-CAR BASIS) • BONUS = +20 PTS',
             badge: 'BUYING',
             type: 'positive',
           },
@@ -299,11 +357,47 @@ export default function DashboardPage() {
             <span className="badge badge-warning">LIVE CAMPAIGN STARTS 15 OCT</span>
           </section>
         )}
+
+        {/* Interactive Points Rules Spotlight Banner */}
+        <div className="rules-showcase-banner">
+          <div className="rules-showcase-left">
+            <div className="rules-showcase-icon">
+              <Trophy className="w-6 h-6 text-amber-400" />
+            </div>
+            <div>
+              <div className="rules-showcase-title">
+                <span>Official Scoring Rules & League Structure</span>
+                <span className="badge badge-success" style={{ fontSize: '0.68rem', padding: '2px 8px', letterSpacing: '0.04em' }}>ACTIVE ALLOCATIONS</span>
+              </div>
+              <div className="rules-showcase-desc">
+                Listings (+5 pts) • Commissions (+5 pts) • Unique Car Bids (+1 pt) • Match Attendance (+1 pt) • All-Matches Bonus (+20 pts). Separate Buyer & Seller Leagues.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button 
+              className="rules-showcase-btn"
+              onClick={() => setShowRulesModal(true)}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Point Rules</span>
+            </button>
+            <button 
+              className="rules-showcase-btn"
+              onClick={() => setShowTermsModal(true)}
+              style={{ background: 'rgba(54, 78, 162, 0.25)', borderColor: 'rgba(54, 78, 162, 0.5)' }}
+            >
+              <Scale className="w-3.5 h-3.5 text-blue-400" />
+              <span>Terms & Rules</span>
+            </button>
+          </div>
+        </div>
+
         {/* Executive Scroll-Driven Analyst Video Hero */}
         <ScrollVideoHero
           dealerName={dealerName}
-          rank={position?.rank || '-'}
-          points={position?.points?.toLocaleString('en-IN') || '0'}
+          rank={position?.buyerPosition?.rank || position?.rank || '-'}
+          points={`${breakdown?.buyerPoints || 0} Buyer / ${breakdown?.sellerPoints || 0} Seller`}
           city={dealer.city || 'TVS Certified Hub'}
           nextAuctionLabel={getNextAuctionDateLabel(matchTracker)}
           tagline="A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW"
@@ -313,40 +407,91 @@ export default function DashboardPage() {
           <PrizeShowcase />
         </div>
 
-        {/* Primary Score & Standings Matrix (Double-Bezel Architecture) */}
-        <div id="national-standings" className="card double-bezel" style={{ marginBottom: '24px' }}>
-          <div className="inner-bezel-core score-display">
-            <div className="score-display-bg-glow"></div>
-            
-            <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldCheck className="w-4 h-4 text-[#364ea2]" />
-              OFFICIAL SUPER CUP NATIONAL STANDINGS
-            </div>
+        {/* Dual League Standings Matrix (Separate Buyer & Seller Leagues) */}
+        <div id="national-standings" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+          {/* Buyer League Card */}
+          <div className="card double-bezel">
+            <div className="inner-bezel-core score-display" style={{ borderColor: 'rgba(59, 130, 246, 0.35)' }}>
+              <div className="score-display-bg-glow" style={{ background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)' }}></div>
+              
+              <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-blue)' }}>
+                <ShoppingCart className="w-4 h-4" />
+                BUYER LEAGUE STANDINGS (₹50,000 PRIZE POOL)
+              </div>
 
-            <div className="score-rank">
-              <span style={{ fontSize: '0.6em', opacity: 0.7, marginRight: '4px' }}>#</span>
-              {position?.rank || '-'}
-            </div>
+              <div className="score-rank">
+                <span style={{ fontSize: '0.6em', opacity: 0.7, marginRight: '4px' }}>#</span>
+                {position?.buyerPosition?.rank ?? position?.rank ?? '-'}
+              </div>
 
-            <div className="score-points">
-              {position?.points?.toLocaleString('en-IN') || 0}
-            </div>
-            <div className="score-points-label">Total Verified Points</div>
+              <div className="score-points" style={{ color: 'var(--accent-blue)' }}>
+                {(breakdown?.buyerPoints ?? 0).toLocaleString('en-IN')}
+              </div>
+              <div className="score-points-label">Buyer League Verified Points</div>
 
-            {/* Gap Indicators */}
-            <div className="gap-indicators">
-              {position?.above && (
-                <div className="gap-indicator behind">
-                  <ArrowUp className="w-3.5 h-3.5" />
-                  <span>{position.above.gap} PTS BEHIND #{position.above.rank} ({position.above.dealer})</span>
-                </div>
-              )}
-              {position?.below && (
-                <div className="gap-indicator ahead">
-                  <ArrowDown className="w-3.5 h-3.5" />
-                  <span>{position.below.gap} PTS AHEAD OF #{position.below.rank} ({position.below.dealer})</span>
-                </div>
-              )}
+              {/* Gap Indicators for Buyer League */}
+              <div className="gap-indicators">
+                {position?.buyerPosition?.above ? (
+                  <div className="gap-indicator behind">
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>{position.buyerPosition.above.gap} PTS BEHIND #{position.buyerPosition.above.rank} ({position.buyerPosition.above.dealer})</span>
+                  </div>
+                ) : position?.buyerPosition && position.buyerPosition.rank === 1 ? (
+                  <div className="gap-indicator" style={{ color: 'var(--accent-amber)', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>LEAGUE LEADER • RANK #1</span>
+                  </div>
+                ) : null}
+                {position?.buyerPosition?.below && (
+                  <div className="gap-indicator ahead">
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>{position.buyerPosition.below.gap} PTS AHEAD OF #{position.buyerPosition.below.rank} ({position.buyerPosition.below.dealer})</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Seller League Card */}
+          <div className="card double-bezel">
+            <div className="inner-bezel-core score-display" style={{ borderColor: 'rgba(56, 189, 248, 0.35)' }}>
+              <div className="score-display-bg-glow" style={{ background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%)' }}></div>
+              
+              <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)' }}>
+                <Layers className="w-4 h-4" />
+                SELLER LEAGUE STANDINGS (₹50,000 PRIZE POOL)
+              </div>
+
+              <div className="score-rank">
+                <span style={{ fontSize: '0.6em', opacity: 0.7, marginRight: '4px' }}>#</span>
+                {position?.sellerPosition?.rank ?? '-'}
+              </div>
+
+              <div className="score-points" style={{ color: 'var(--accent-cyan)' }}>
+                {(breakdown?.sellerPoints ?? 0).toLocaleString('en-IN')}
+              </div>
+              <div className="score-points-label">Seller League Verified Points</div>
+
+              {/* Gap Indicators for Seller League */}
+              <div className="gap-indicators">
+                {position?.sellerPosition?.above ? (
+                  <div className="gap-indicator behind">
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>{position.sellerPosition.above.gap} PTS BEHIND #{position.sellerPosition.above.rank} ({position.sellerPosition.above.dealer})</span>
+                  </div>
+                ) : position?.sellerPosition && position.sellerPosition.rank === 1 ? (
+                  <div className="gap-indicator" style={{ color: 'var(--accent-amber)', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>LEAGUE LEADER • RANK #1</span>
+                  </div>
+                ) : null}
+                {position?.sellerPosition?.below && (
+                  <div className="gap-indicator ahead">
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>{position.sellerPosition.below.gap} PTS AHEAD OF #{position.sellerPosition.below.rank} ({position.sellerPosition.below.dealer})</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -382,14 +527,16 @@ export default function DashboardPage() {
                   <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 5} pts</td>
                   <td>+{breakdown.sellingListing?.points ?? 0}</td>
                 </tr>
-                <tr>
-                  <td>
-                    <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
-                    Conversion (10 pts)
-                  </td>
-                  <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit ?? breakdown.sellTransactions.perUnit} pts</td>
-                  <td>+{breakdown.sellingConversion?.points ?? breakdown.sellTransactions.points}</td>
-                </tr>
+                {(breakdown.sellingConversion?.perUnit ?? 0) > 0 && (
+                  <tr>
+                    <td>
+                      <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
+                      Conversion ({breakdown.sellingConversion?.perUnit} pts)
+                    </td>
+                    <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit} pts</td>
+                    <td>+{breakdown.sellingConversion?.points ?? breakdown.sellTransactions.points}</td>
+                  </tr>
+                )}
                 <tr>
                   <td>
                     <CheckCircle2 className="w-4 h-4 text-amber-400 mr-2" />
@@ -416,24 +563,50 @@ export default function DashboardPage() {
                 <tr>
                   <td>
                     <Gavel className="w-4 h-4 text-blue-400 mr-2" />
-                    Bids (1 pt)
+                    Auction Bids (Per-Car Basis)
                   </td>
-                  <td>{breakdown.buyingBids?.count ?? (breakdown.bidsPlaced?.count ?? 0)} × {breakdown.buyingBids?.perUnit ?? (breakdown.bidsPlaced?.perUnit ?? 1)} pts</td>
+                  <td>
+                    <span>{breakdown.buyingBids?.count ?? (breakdown.bidsPlaced?.count ?? 0)} unique cars bid on × {breakdown.buyingBids?.perUnit ?? (breakdown.bidsPlaced?.perUnit ?? 1)} pt</span>
+                    {breakdown.buyingBids?.totalBids && breakdown.buyingBids.totalBids > (breakdown.buyingBids.count ?? 0) ? (
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        ({breakdown.buyingBids.totalBids} total bids placed across auction)
+                      </span>
+                    ) : null}
+                  </td>
                   <td>+{breakdown.buyingBids?.points ?? (breakdown.bidsPlaced?.points ?? 0)}</td>
                 </tr>
                 <tr>
                   <td>
-                    <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
-                    Conversion (10 pts)
+                    <Sparkles className="w-4 h-4 text-amber-400 mr-2" />
+                    All-Matches Attendance Bonus
                   </td>
-                  <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit ?? breakdown.buyTransactions.perUnit} pts</td>
-                  <td>+{breakdown.buyingConversion?.points ?? breakdown.buyTransactions.points}</td>
+                  <td>
+                    {(breakdown.allMatchesBonus?.points ?? 0) > 0 ? (
+                      <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>AWARDED (+20 PTS)</span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Participate in all 4 matches (+20 pts)</span>
+                    )}
+                  </td>
+                  <td>+{(breakdown.allMatchesBonus?.points ?? 0)}</td>
                 </tr>
+                {(breakdown.buyingConversion?.perUnit ?? 0) > 0 && (
+                  <tr>
+                    <td>
+                      <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
+                      Conversion ({breakdown.buyingConversion?.perUnit} pts)
+                    </td>
+                    <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit} pts</td>
+                    <td>+{breakdown.buyingConversion?.points ?? breakdown.buyTransactions.points}</td>
+                  </tr>
+                )}
 
-                <tr className="breakdown-total">
-                  <td>TOTAL SUPERCUP SCORE</td>
-                  <td></td>
-                  <td>{breakdown.totalPoints} PTS</td>
+                <tr className="breakdown-total" style={{ borderTop: '2px solid var(--border-subtle)' }}>
+                  <td colSpan={2} style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>BUYER LEAGUE SCORE</td>
+                  <td style={{ color: 'var(--accent-blue)', fontWeight: 800 }}>{(breakdown.buyerPoints ?? 0)} PTS</td>
+                </tr>
+                <tr className="breakdown-total" style={{ borderTop: '1px dashed var(--border-subtle)' }}>
+                  <td colSpan={2} style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>SELLER LEAGUE SCORE</td>
+                  <td style={{ color: 'var(--accent-cyan)', fontWeight: 800 }}>{(breakdown.sellerPoints ?? 0)} PTS</td>
                 </tr>
               </tbody>
             </table>
@@ -694,51 +867,59 @@ export default function DashboardPage() {
 
         {/* Incentive Protocol: How to Earn Points */}
         <div className="card" style={{ marginTop: '24px' }}>
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h2 className="card-title">
                 <Sparkles className="w-5 h-5 text-amber-400" />
-                Scoring Protocol & Earning Directives
+                Scoring Protocol & Point Allocations
               </h2>
-              <p className="card-subtitle">Maximize your rank during every Thursday event</p>
+              <p className="card-subtitle">Verified point earning structure for the TVS Super Cup</p>
             </div>
+            <button 
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowRulesModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', border: '1px solid var(--border-hairline)', borderRadius: '9999px', padding: '6px 14px' }}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <span>Full Rules Handbook</span>
+            </button>
           </div>
 
           <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">🛒</div>
-              <div className="stat-value blue">+10</div>
-              <div className="stat-label">Won Vehicle (BUY)</div>
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
+              <div className="stat-icon">📋</div>
+              <div className="stat-value blue">+5</div>
+              <div className="stat-label">Vehicle Listing (SELL)</div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon">💰</div>
-              <div className="stat-value blue">+10</div>
-              <div className="stat-label">Sold Vehicle (SELL)</div>
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
+              <div className="stat-icon">💳</div>
+              <div className="stat-value lime">+5</div>
+              <div className="stat-label">Commission Settlement (SELL)</div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon">🏏</div>
-              <div className="stat-value lime">+15</div>
-              <div className="stat-label">2 PM Match Room Attendance</div>
-            </div>
-
-            <div className="stat-card">
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">🔨</div>
-              <div className="stat-value blue">+2</div>
-              <div className="stat-label">Live Bid Placed</div>
+              <div className="stat-value blue">+1</div>
+              <div className="stat-label">Unique Car Bid (BUY - Per Car)</div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon">🔍</div>
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
+              <div className="stat-icon">⏱️</div>
               <div className="stat-value gold">+1</div>
-              <div className="stat-label">Vehicle Technical Inspection</div>
+              <div className="stat-label">Match Room Attendance (BUY)</div>
             </div>
 
-            <div className="stat-card">
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">🌟</div>
               <div className="stat-value gold">+20</div>
-              <div className="stat-label">All {matchCount} Matches Bonus</div>
+              <div className="stat-label">All-Matches Bonus (BUY)</div>
+            </div>
+
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
+              <div className="stat-icon">🏆</div>
+              <div className="stat-value gold">₹1.0L</div>
+              <div className="stat-label">Season Prize (₹50k Buy / ₹50k Sell)</div>
             </div>
           </div>
         </div>
@@ -755,13 +936,57 @@ export default function DashboardPage() {
           <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
             Official TVS Certified Dealership Portal. All points and ranks are subject to automated verification.
           </p>
-          <div style={{ marginTop: '12px' }}>
+          <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <Link href="/leaderboard" style={{ color: 'var(--accent-blue)', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none' }}>
               View Public Leaderboard →
+            </Link>
+            <span style={{ color: 'var(--border-subtle)' }}>•</span>
+            <button
+              type="button"
+              onClick={() => setShowTermsModal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                textDecoration: 'underline',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontWeight: 600,
+              }}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>Official Terms & Conditions (Buyer & Seller Leagues)</span>
+            </button>
+            <span style={{ color: 'var(--border-subtle)' }}>•</span>
+            <Link
+              href="/terms"
+              style={{
+                color: 'var(--text-muted)',
+                fontSize: '0.8rem',
+                textDecoration: 'underline',
+              }}
+            >
+              Standalone Terms Page
             </Link>
           </div>
         </footer>
       </main>
+
+      {/* Super Cup Points Rules & Transparency Animated Modal */}
+      <SuperCupPointsRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        dealerName={dealerName}
+      />
+
+      {/* Super Cup Official Terms & Conditions Modal */}
+      <TermsAndConditionsModal
+        isOpen={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+      />
     </div>
   );
 }

@@ -97,13 +97,14 @@ async function main() {
   // 2. Point Rules
   const rules = [
     // SELLING
-    { activityType: 'SELL_LISTING', points: 5, description: 'Selling: Points per vehicle listing' },
-    { activityType: 'SELL', points: 10, description: 'Selling: Points per vehicle conversion/sold' },
-    { activityType: 'SELL_COMMISSION', points: 5, description: 'Selling: Commission points allocation' },
+    { activityType: 'SELL_LISTING', points: 5, description: 'Selling: Points per vehicle listing', active: true },
+    { activityType: 'SELL_COMMISSION', points: 5, description: 'Selling: Commission points allocation', active: true },
+    { activityType: 'SELL', points: 0, description: 'Selling: Conversion (deactivated / not captured in website)', active: false },
     // BUYING
-    { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Buying: Match day participation points' },
-    { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per live/pre auction bid placed' },
-    { activityType: 'BUY', points: 10, description: 'Buying: Points per vehicle conversion/purchased' },
+    { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Buying: Match day participation points', active: true },
+    { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per unique car bid on (per-car basis)', active: true },
+    { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Buying: Bonus points for participating in all scheduled matches', active: true },
+    { activityType: 'BUY', points: 0, description: 'Buying: Conversion (deactivated / not captured in website)', active: false },
   ];
 
   for (const rule of rules) {
@@ -114,13 +115,13 @@ async function main() {
           activityType: rule.activityType,
         },
       },
-      update: { points: rule.points, description: rule.description, active: true },
+      update: { points: rule.points, description: rule.description, active: rule.active },
       create: {
         campaignId: campaign.id,
         activityType: rule.activityType,
         points: rule.points,
         description: rule.description,
-        active: true,
+        active: rule.active,
       },
     });
   }

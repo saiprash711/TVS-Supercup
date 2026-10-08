@@ -12,9 +12,9 @@ export interface TickerItem {
 const DEFAULT_ITEMS: TickerItem[] = [
   { label: 'AUCTION FLOOR', value: 'OPENS THURSDAYS AT 2:00 PM IST', badge: 'BROADCAST', type: 'live' },
   { label: 'SEASON GRAND PRIZE POOL', value: '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)', badge: 'REWARD', type: 'accent' },
-  { label: 'SELLING ALLOCATIONS', value: 'LISTING = +5 PTS • CONVERSION = +10 PTS • COMMISSION = +5 PTS', badge: 'SELLING', type: 'positive' },
+  { label: 'SELLING ALLOCATIONS', value: 'LISTING = +5 PTS • COMMISSION = +5 PTS', badge: 'SELLING', type: 'positive' },
   { label: 'TVS CERTIFIED', value: 'OFFICIAL DEALER SUPERCUP 2026–27', badge: 'CHAMPIONSHIP', type: 'accent' },
-  { label: 'BUYING ALLOCATIONS', value: 'PARTICIPATION = +1 PT • BIDS = +1 PT • CONVERSION = +10 PTS', badge: 'BUYING', type: 'positive' },
+  { label: 'BUYING ALLOCATIONS', value: 'MATCH PARTICIPATION = +1 PT • BIDS = +1 PT', badge: 'BUYING', type: 'positive' },
   { label: 'DEALER COMMUNITY', value: 'A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW', badge: 'VISION', type: 'neutral' },
 ];
 

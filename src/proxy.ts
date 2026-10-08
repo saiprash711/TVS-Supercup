@@ -12,7 +12,6 @@ import type { NextRequest } from 'next/server';
  */
 
 const SESSION_COOKIE = 'supercup_session';
-const ADMIN_COOKIE = 'supercup_admin';
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -39,13 +38,6 @@ export function proxy(request: NextRequest) {
       url.pathname = '/admin';
       return NextResponse.redirect(url);
     }
-
-    // If an admin navigates to dealer dashboard, redirect to admin console
-    if (pathname.startsWith('/dashboard')) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/admin';
-      return NextResponse.redirect(url);
-    }
   }
 
   // 3. Dealer Domain Routing (e.g., https://supercup.tvs.in)
@@ -64,9 +56,10 @@ export function proxy(request: NextRequest) {
   }
 
   // 4. Strict Subdomain Isolation (Optional flag: STRICT_ADMIN_SUBDOMAIN=true)
-  // If enabled, prevents accessing /admin on the dealer-facing domain
+  // When enabled in production, prevents accessing /admin on the dealer-facing domain
   if (
     process.env.STRICT_ADMIN_SUBDOMAIN === 'true' &&
+    host.includes('supercup.tvs.in') &&
     pathname.startsWith('/admin') &&
     !isAdminSubdomain
   ) {
@@ -75,7 +68,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 5. Forward request with normalized proxy headers
+  // 6. Forward request with normalized proxy headers
   const response = NextResponse.next();
   response.headers.set('X-Supercup-Routing-Mode', isAdminSubdomain ? 'admin-console' : 'dealer-portal');
 

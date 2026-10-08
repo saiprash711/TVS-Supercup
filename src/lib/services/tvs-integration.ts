@@ -116,6 +116,11 @@ export interface TVSAuctionProvider {
   getAuctionVehicles(auctionId?: string, token?: string): Promise<any[]>;
 
   /**
+   * Find a TVS customer profile by ID, code, phone, or company name.
+   */
+  findCustomer?(identifier: string): TVSCustomerProfile | null;
+
+  /**
    * Find a TVS customer profile by company name.
    */
   findCustomerByCompanyName?(name: string): TVSCustomerProfile | null;
@@ -320,10 +325,11 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
 
         if (item && !item.error && item.token && item.userData?.[0]) {
           const user = item.userData[0];
-          const keyId = user.key_id ? String(user.key_id) : `USR-${user.id}`;
+          const mappedKeyId = user.key_id ? String(user.key_id) : (this.userToKeyMap.get(String(user.id)) || `USR-${user.id}`);
+          const keyId = mappedKeyId;
           
           // Match against TVS customers to retrieve official Company Name
-          const cust = this.customerMap.get(String(user.key_id || '')) || 
+          const cust = this.customerMap.get(String(user.key_id || mappedKeyId || '')) || 
                        (user.mobile ? this.customerMap.get(String(user.mobile).trim()) : null);
           const companyName = cust?.companyName;
           const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
@@ -373,7 +379,8 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         const data = await res.json();
         const user = data?.data?.data?.[0] || data?.data?.[0];
         if (user) {
-          const keyId = user.key_id ? String(user.key_id) : `USR-${user.id}`;
+          const mappedKeyId = user.key_id ? String(user.key_id) : (this.userToKeyMap.get(String(user.id)) || `USR-${user.id}`);
+          const keyId = mappedKeyId;
           const cust = this.customerMap.get(keyId) || (user.mobile ? this.customerMap.get(String(user.mobile).trim()) : null);
           const companyName = cust?.companyName || user.user_name;
           return {
@@ -401,11 +408,17 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       const rawId = String(userId).trim();
       const cleanId = rawId.replace('USR-', '');
 
-      // 1. Direct customer lookup by customer ID
-      let cust = this.customerMap.get(cleanId);
-      // 2. If cleanId was a user ID, check if it maps to customer key_id
-      if (!cust && this.userToKeyMap.has(cleanId)) {
-        cust = this.customerMap.get(this.userToKeyMap.get(cleanId)!);
+      // 1. If cleanId was a user ID (or rawId started with USR-), check if it maps to customer key_id
+      let cust: TVSCustomerProfile | undefined;
+      if (rawId.startsWith('USR-') || this.userToKeyMap.has(cleanId)) {
+        const keyId = this.userToKeyMap.get(cleanId);
+        if (keyId && this.customerMap.has(keyId)) {
+          cust = this.customerMap.get(keyId);
+        }
+      }
+      // 2. Direct customer lookup by customer ID
+      if (!cust) {
+        cust = this.customerMap.get(cleanId);
       }
       if (cust) {
         return {
@@ -511,6 +524,18 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
   resolveDealerKeyId(rawId: string | number): string {
     const s = String(rawId).trim();
     return this.userToKeyMap.get(s) || s;
+  }
+
+  findCustomer(identifier: string): TVSCustomerProfile | null {
+    if (!identifier) return null;
+    const s = identifier.trim();
+    if (this.customerMap.has(s)) return this.customerMap.get(s)!;
+    if (s.startsWith('USR-')) {
+      const uId = s.replace('USR-', '').trim();
+      const resolved = this.userToKeyMap.get(uId);
+      if (resolved && this.customerMap.has(resolved)) return this.customerMap.get(resolved)!;
+    }
+    return this.findCustomerByCompanyName(s);
   }
 
   findCustomerByCompanyName(name: string): TVSCustomerProfile | null {

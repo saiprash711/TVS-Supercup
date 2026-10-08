@@ -1,9 +1,10 @@
 'use client';
 
-import type { CSSProperties } from 'react';
-import { CalendarDays, Crown, IndianRupee, ShoppingCart, Sparkles, Store, Trophy } from 'lucide-react';
+import { useState, type CSSProperties } from 'react';
+import { CalendarDays, Crown, IndianRupee, ShoppingCart, Sparkles, Store, Trophy, Scale, FileText, ChevronRight } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import styles from './PrizeShowcase.module.css';
+import TermsAndConditionsModal from './TermsAndConditionsModal';
 
 const podium = [
   { place: '1st', amount: '25,000', label: 'Champion', tone: 'gold' },
@@ -73,6 +74,7 @@ function PrizeLeague({ title, eyebrow, type }: {
 
 export default function PrizeShowcase() {
   const reduceMotion = useReducedMotion();
+  const [showTerms, setShowTerms] = useState(false);
 
   return (
     <motion.section
@@ -125,14 +127,103 @@ export default function PrizeShowcase() {
         <PrizeLeague title="Sellers’ podium" eyebrow="Win through selling" type="seller" />
       </div>
 
+      {/* Tie-Breaker & Equal Points Distribution Policy */}
+      <div
+        style={{
+          marginTop: '24px',
+          padding: '20px 24px',
+          borderRadius: '16px',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(250, 204, 21, 0.22)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Scale size={18} style={{ color: '#facc15' }} />
+            <strong style={{ fontSize: '0.92rem', color: '#f8fafc', letterSpacing: '-0.01em' }}>
+              Equal Points Prize Distribution Rule (Tie-Breaker Policy)
+            </strong>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTerms(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(250, 204, 21, 0.1)',
+              border: '1px solid rgba(250, 204, 21, 0.3)',
+              color: '#fef08a',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              padding: '6px 14px',
+              borderRadius: '9999px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <FileText size={13} />
+            <span>Full Terms & Conditions</span>
+            <ChevronRight size={13} />
+          </button>
+        </div>
+
+        <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.6 }}>
+          If two or more buyers or sellers score the exact same points in a podium position, the combined prize purse for those tied positions is <strong style={{ color: '#f8fafc' }}>pooled and distributed equally</strong> among the tied dealerships:
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
+          <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <div style={{ fontSize: '0.72rem', color: '#facc15', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 1st</div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
+              1st (₹25k) + 2nd (₹15k) = ₹40k pooled<br />
+              <strong style={{ color: '#4ade80' }}>₹20,000 each</strong> • Next gets ₹10,000
+            </div>
+          </div>
+
+          <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <div style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 2nd</div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
+              2nd (₹15k) + 3rd (₹10k) = ₹25k pooled<br />
+              <strong style={{ color: '#4ade80' }}>₹12,500 each</strong> • 1st gets ₹25,000
+            </div>
+          </div>
+
+          <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <div style={{ fontSize: '0.72rem', color: '#fb923c', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 3rd</div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
+              3rd Place (₹10,000) split equally<br />
+              <strong style={{ color: '#4ade80' }}>₹5,000 each</strong> • 1st & 2nd full
+            </div>
+          </div>
+
+          <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <div style={{ fontSize: '0.72rem', color: '#e879f9', fontWeight: 700, textTransform: 'uppercase' }}>3-Way Tie for 1st</div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
+              All 3 prizes (₹50k total) pooled<br />
+              <strong style={{ color: '#4ade80' }}>₹16,666.67 each</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <footer className={styles.footerNote}>
         <span className={styles.liveDot} aria-hidden="true" />
         <strong>₹50,000 for buyers</strong>
         <span className={styles.divider} aria-hidden="true" />
         <strong>₹50,000 for sellers</strong>
         <span className={styles.footerFill} />
-        <span>Final standings determine the winners</span>
+        <span>Separate league standings determine the winners • Total dealer points not combined</span>
       </footer>
+
+      <TermsAndConditionsModal
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+        defaultTab="prizes"
+      />
     </motion.section>
   );
 }

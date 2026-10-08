@@ -1,18 +1,28 @@
 /**
  * GET /api/leaderboard
  * 
- * Returns the leaderboard for the active Super Cup campaign.
- * By default, public users see masked names (e.g., "R*****").
- * When requested by authenticated admins (or ?unmask=true with admin session), returns unmasked names.
+ * Returns the segmented leaderboards for the active Super Cup campaign:
+ * - buyers: Dealers competing on buyer points (bids, wins/conversions, participation)
+ * - sellers: Dealers competing on seller points (listings, conversions)
+ * - overall: Combined national championship standings
+ * 
+ * Visibility & Masking Rules:
+ * - Admin Login: Fully VISIBLE and UNMASKED (legal entity names, external IDs, customer IDs).
+ * - Dealer Specific Login: Competitor dealer names are MASKED (e.g. "R*****"), while the
+ *   authenticated dealer's own dealership is identified and highlighted.
+ * - Public: All dealer names are MASKED.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getLeaderboard } from '@/lib/services/ranking-engine';
-import { isAdmin } from '@/lib/auth';
+import { NextResponse } from 'next/server';
+import { getSegmentedLeaderboard } from '@/lib/services/ranking-engine';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
+import { isAdmin, getCurrentDealer } from '@/lib/auth';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get('category') || searchParams.get('type') || undefined;
+
     // Get the active Super Cup campaign
     const campaign = await getCurrentSuperCupCampaign();
 
@@ -24,11 +34,25 @@ export async function GET(request: NextRequest) {
     }
 
     const admin = await isAdmin();
-    const { searchParams } = new URL(request.url);
-    // Only authenticated admins are allowed to unmask dealer enterprise names
+    const currentDealer = await getCurrentDealer();
+
+    // In admin login: full unmasked dealer names are visible!
+    // For dealer specific login: competitor dealer names are masked.
     const shouldUnmask = admin && searchParams.get('unmask') !== 'false';
 
-    const leaderboard = await getLeaderboard(campaign.id, undefined, shouldUnmask);
+    const segmented = await getSegmentedLeaderboard(
+      campaign.id,
+      undefined,
+      shouldUnmask,
+      currentDealer?.dealerId
+    );
+
+    let activeLeaderboard = segmented.buyers;
+    if (category === 'seller' || category === 'sellers') {
+      activeLeaderboard = segmented.sellers;
+    } else if (category === 'buyer' || category === 'buyers') {
+      activeLeaderboard = segmented.buyers;
+    }
 
     return NextResponse.json({
       campaign: {
@@ -38,9 +62,14 @@ export async function GET(request: NextRequest) {
         startDate: campaign.startDate,
         endDate: campaign.endDate,
       },
-      leaderboard,
+      leaderboard: activeLeaderboard,
+      buyers: segmented.buyers,
+      sellers: segmented.sellers,
+      overall: segmented.overall,
+      counts: segmented.counts,
       isAdmin: admin,
       unmasked: shouldUnmask,
+      currentDealerId: currentDealer?.dealerId,
     });
   } catch (error) {
     console.error('Leaderboard error:', error);

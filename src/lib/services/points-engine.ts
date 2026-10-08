@@ -14,13 +14,13 @@ import { prisma } from '@/lib/db';
 export type ActivityType =
   // SELLING
   | 'SELL_LISTING'        // Listing: 5 points
-  | 'SELL'                // Conversion: 10 points
   | 'SELL_COMMISSION'     // Commission: 5 points
   // BUYING
   | 'MATCH_PARTICIPATION' // Participation: 1 point
   | 'BID_PLACED'          // Bids: 1 point
-  | 'BUY'                 // Conversion: 10 points
-  // Legacy / Deactivated
+  // Legacy / Deactivated (Conversions ignored as cannot be captured reliably)
+  | 'SELL'                // Conversion: 0 points (deactivated)
+  | 'BUY'                 // Conversion: 0 points (deactivated)
   | 'VEHICLE_INSPECTED'
   | 'WATCHLIST_ADD'
   | 'ALL_MATCHES_BONUS';
@@ -120,7 +120,48 @@ export async function recordActivity(params: {
     }
   }
 
-  const points = await calculatePoints(params.campaignId, params.activityType);
+  let points = await calculatePoints(params.campaignId, params.activityType);
+
+  // Per car basis for BID_PLACED: points are awarded strictly once per car
+  if (params.activityType === 'BID_PLACED') {
+    let vehicleId: string | number | undefined;
+    if (params.metadata) {
+      try {
+        const meta = typeof params.metadata === 'string'
+          ? JSON.parse(params.metadata)
+          : params.metadata;
+        vehicleId = meta?.vehicleId;
+      } catch {}
+    }
+    if (!vehicleId && params.externalTransactionId) {
+      const m = params.externalTransactionId.match(/^(?:BID|PREBID)-[^-]+-([^-]+)-/);
+      if (m) vehicleId = m[1];
+    }
+
+    if (vehicleId != null) {
+      const existingVehicleBid = await prisma.dealerActivity.findFirst({
+        where: {
+          dealerId: params.dealerId,
+          campaignId: params.campaignId,
+          ...(matchId !== null ? { matchId } : {}),
+          activityType: 'BID_PLACED',
+          points: { gt: 0 },
+          OR: [
+            { metadata: { contains: `"vehicleId":${vehicleId}` } },
+            { metadata: { contains: `"vehicleId":"${vehicleId}"` } },
+            { externalTransactionId: { contains: `-${vehicleId}-` } },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (existingVehicleBid) {
+        // Subsequent bids on the same car do not earn duplicate points
+        points = 0;
+      }
+    }
+  }
+
   const metadataString = typeof params.metadata === 'string'
     ? params.metadata
     : JSON.stringify(params.metadata || {});
@@ -151,20 +192,23 @@ export async function recordActivity(params: {
 
 /**
  * Check if a dealer qualifies for the ALL_MATCHES_BONUS.
+ * Awards bonus points to buyers who participate in all scheduled match days.
  */
 export async function checkAllMatchesBonus(
   dealerId: number,
   campaignId: number
 ): Promise<boolean> {
-  // Get all completed match days for this campaign
-  const completedMatches = await prisma.matchDay.findMany({
-    where: {
-      campaignId,
-      status: { in: ['COMPLETED', 'LIVE'] },
-    },
+  // Get all scheduled match days for this campaign
+  const allMatches = await prisma.matchDay.findMany({
+    where: { campaignId },
+    select: { id: true, status: true },
   });
 
-  if (completedMatches.length < 4) return false;
+  if (allMatches.length === 0) return false;
+
+  // All matches must be completed or live
+  const completedMatches = allMatches.filter(m => m.status === 'COMPLETED' || m.status === 'LIVE');
+  if (completedMatches.length < allMatches.length) return false;
 
   // Check if dealer participated in all of them
   const participations = await prisma.dealerActivity.findMany({
@@ -172,12 +216,13 @@ export async function checkAllMatchesBonus(
       dealerId,
       campaignId,
       activityType: 'MATCH_PARTICIPATION',
-      matchId: { in: completedMatches.map(m => m.id) },
+      matchId: { in: allMatches.map(m => m.id) },
     },
+    select: { matchId: true },
   });
 
   const participatedMatchIds = new Set(participations.map(activity => activity.matchId));
-  return completedMatches.every(match => participatedMatchIds.has(match.id));
+  return allMatches.every(match => participatedMatchIds.has(match.id));
 }
 
 /**
@@ -257,8 +302,10 @@ export async function getActivityBreakdown(dealerId: number, campaignId: number)
         breakdown.matchParticipationPoints += activity.points;
         break;
       case 'BID_PLACED':
-        breakdown.buyBidCount++;
-        breakdown.buyBidPoints += activity.points;
+        if (activity.points > 0) {
+          breakdown.buyBidCount++;
+          breakdown.buyBidPoints += activity.points;
+        }
         breakdown.bidCount++;
         breakdown.bidPoints += activity.points;
         break;

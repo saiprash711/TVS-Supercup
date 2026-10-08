@@ -5,14 +5,18 @@ const prisma = new PrismaClient();
 
 const ACTIVE_RULES = [
   { activityType: 'SELL_LISTING', points: 5, description: 'Selling: Points per vehicle listing' },
-  { activityType: 'SELL', points: 10, description: 'Selling: Points per vehicle conversion/sold' },
   { activityType: 'SELL_COMMISSION', points: 5, description: 'Selling: Commission points allocation' },
   { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Buying: Match day participation points' },
-  { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per live/pre auction bid placed' },
-  { activityType: 'BUY', points: 10, description: 'Buying: Points per vehicle conversion/purchased' },
+  { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per unique vehicle bid placed (per-car basis)' },
+  { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Buying: Bonus points for participating in all scheduled matches' },
 ];
 
-const DEACTIVATED_RULES = ['WATCHLIST_ADD', 'VEHICLE_INSPECTED', 'ALL_MATCHES_BONUS'];
+const DEACTIVATED_RULES = [
+  'SELL',
+  'BUY',
+  'WATCHLIST_ADD',
+  'VEHICLE_INSPECTED',
+];
 
 async function main() {
   console.log('🔄 Updating point allocation rules in database...');

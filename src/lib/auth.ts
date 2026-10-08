@@ -86,16 +86,40 @@ export async function loginDealer(
     if (authResult.authenticated && authResult.dealerId) {
       liveToken = authResult.token;
 
-      // Find or auto-provision the dealer in the local database
-      dealer = await prisma.dealer.findFirst({
-        where: {
-          OR: [
-            { externalDealerId: authResult.dealerId },
-            ...(authResult.userId ? [{ externalDealerId: `USR-${authResult.userId}` }, { externalDealerId: authResult.userId }] : []),
-            ...(/^\d{10}$/.test(trimmed) ? [{ phone: trimmed }] : []),
-          ],
-        },
-      });
+      // 1. Primary: Match by authoritative externalDealerId (Customer/Dealer ID from TVS Certified)
+      if (authResult.dealerId) {
+        dealer = await prisma.dealer.findUnique({
+          where: { externalDealerId: authResult.dealerId },
+        });
+      }
+
+      // 2. Secondary: If dealer was registered with USR- prefix for non-customer accounts
+      if (!dealer && authResult.userId) {
+        dealer = await prisma.dealer.findUnique({
+          where: { externalDealerId: `USR-${authResult.userId}` },
+        });
+      }
+
+      // 3. Tertiary: Match by official registered phone number
+      const userPhone = typeof authResult.userData?.mobile === 'string'
+        ? authResult.userData.mobile.trim()
+        : (typeof authResult.userData?.mobile === 'number' ? String(authResult.userData.mobile) : null);
+      const searchPhone = (userPhone && /^\d{10}$/.test(userPhone))
+        ? userPhone
+        : (/^\d{10}$/.test(trimmed) ? trimmed : null);
+
+      if (!dealer && searchPhone) {
+        dealer = await prisma.dealer.findFirst({
+          where: { phone: searchPhone },
+        });
+      }
+
+      // 4. Quaternary: Match by exact official company name
+      if (!dealer && authResult.dealerName) {
+        dealer = await prisma.dealer.findFirst({
+          where: { displayName: authResult.dealerName },
+        });
+      }
 
       if (!dealer) {
         const displayName = authResult.dealerName || authResult.dealerId;
@@ -108,6 +132,7 @@ export async function loginDealer(
             maskedName,
             city: authResult.city || 'Tamil Nadu',
             status: 'ACTIVE',
+            phone: searchPhone,
           },
         });
 
@@ -128,24 +153,74 @@ export async function loginDealer(
         };
       }
     } else {
-      return {
-        success: false,
-        error: authResult.error || 'Invalid TVS Certified credentials. Please check your username and password.',
-      };
+      // Fallback: Check local database if credentials match a seeded/local dealer account (e.g. for development or testing)
+      // 1. Direct externalDealerId match in database
+      let localDealer = await prisma.dealer.findFirst({
+        where: { externalDealerId: trimmed, password: password, status: 'ACTIVE' },
+      });
+
+      // 2. If not found, resolve customer profile (e.g. if code like CUST... or mapped username was entered)
+      if (!localDealer && provider.findCustomer) {
+        const cust = provider.findCustomer(trimmed);
+        if (cust) {
+          localDealer = await prisma.dealer.findFirst({
+            where: { externalDealerId: String(cust.id), password: password, status: 'ACTIVE' },
+          });
+          if (!localDealer) {
+            localDealer = await prisma.dealer.findFirst({
+              where: { displayName: cust.companyName, password: password, status: 'ACTIVE' },
+            });
+          }
+        }
+      }
+
+      // 3. Match by exact displayName
+      if (!localDealer) {
+        localDealer = await prisma.dealer.findFirst({
+          where: { displayName: trimmed, password: password, status: 'ACTIVE' },
+        });
+      }
+
+      // 4. Match by registered 10-digit phone
+      if (!localDealer && /^\d{10}$/.test(trimmed)) {
+        localDealer = await prisma.dealer.findFirst({
+          where: { phone: trimmed, password: password, status: 'ACTIVE' },
+        });
+      }
+
+      if (localDealer) {
+        dealer = localDealer;
+      } else {
+        return {
+          success: false,
+          error: authResult.error || 'Invalid TVS Certified credentials. Please check your username and password.',
+        };
+      }
     }
   } else {
     // SSO token verification
     const authResult = await provider.verifyAuthentication(trimmed);
     if (authResult.authenticated && authResult.dealerId) {
       liveToken = authResult.token;
-      dealer = await prisma.dealer.findFirst({
-        where: {
-          OR: [
-            { externalDealerId: authResult.dealerId },
-            ...(authResult.userId ? [{ externalDealerId: `USR-${authResult.userId}` }, { externalDealerId: authResult.userId }] : []),
-          ],
-        },
+
+      // 1. Primary: Match by authoritative externalDealerId (Customer/Dealer ID from TVS Certified)
+      dealer = await prisma.dealer.findUnique({
+        where: { externalDealerId: authResult.dealerId },
       });
+
+      // 2. Secondary: If dealer was registered with USR- prefix for non-customer accounts
+      if (!dealer && authResult.userId) {
+        dealer = await prisma.dealer.findUnique({
+          where: { externalDealerId: `USR-${authResult.userId}` },
+        });
+      }
+
+      // 3. Tertiary: Match by official company name
+      if (!dealer && authResult.dealerName) {
+        dealer = await prisma.dealer.findFirst({
+          where: { displayName: authResult.dealerName },
+        });
+      }
     }
 
     if (!dealer) {
@@ -245,7 +320,6 @@ export async function loginAdmin(password: string): Promise<boolean> {
 export async function isAdmin(): Promise<boolean> {
   try {
     const cookieStore = await cookies();
-
     const adminCookie = cookieStore.get(ADMIN_COOKIE);
     const secret = getAdminSecret();
     if (!adminCookie?.value || !secret) return false;

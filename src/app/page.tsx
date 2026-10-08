@@ -142,6 +142,9 @@ export default function LoginPage() {
         } else {
           localStorage.removeItem('supercup_remembered_dealer');
         }
+        try {
+          sessionStorage.removeItem('tvs_supercup_rules_seen_session');
+        } catch {}
         router.push('/dashboard');
       } else {
         setErrorMessage(data.error || 'Authentication failed. Please verify your credentials.');

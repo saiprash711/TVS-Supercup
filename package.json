@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx prisma generate && next build",
+    "build": "node scripts/prisma-generate.js && next build",
     "start": "next start",
     "lint": "eslint",
     "db:push": "npx prisma db push",
@@ -12,6 +12,8 @@
     "db:setup": "npx prisma db push && npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "db:studio": "npx prisma studio",
     "sync:live": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/live-sync-daemon.ts",
+    "db:production:setup": "node scripts/setup_production_db.js",
+    "db:production:push": "npx prisma db push --schema=prisma/schema.production.prisma",
     "verify": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/verify_live_readiness.ts",
     "setup:test-campaign": "npx ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/setup_prelaunch_test_campaign.ts"
   },

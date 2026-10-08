@@ -13,13 +13,13 @@ const campaignData = {
 
 const rules = [
   // SELLING
-  ['SELL_LISTING', 5, 'Selling: Points per vehicle listing'],
-  ['SELL', 10, 'Selling: Points per vehicle conversion/sold'],
-  ['SELL_COMMISSION', 5, 'Selling: Commission points allocation'],
+  ['SELL_LISTING', 5, 'Selling: Points per vehicle listing', true],
+  ['SELL_COMMISSION', 5, 'Selling: Commission points allocation', true],
+  ['SELL', 0, 'Selling: Conversion (deactivated / not captured in website)', false],
   // BUYING
-  ['MATCH_PARTICIPATION', 1, 'Buying: Test match participation points'],
-  ['BID_PLACED', 1, 'Buying: Points per verified live auction bid'],
-  ['BUY', 10, 'Buying: Points per vehicle conversion/purchased'],
+  ['MATCH_PARTICIPATION', 1, 'Buying: Test match participation points', true],
+  ['BID_PLACED', 1, 'Buying: Points per verified live auction bid', true],
+  ['BUY', 0, 'Buying: Conversion (deactivated / not captured in website)', false],
 ] as const;
 
 const matches = [
@@ -40,11 +40,11 @@ async function main() {
       create: { slug: CAMPAIGN_SLUG, ...campaignData },
     });
 
-    for (const [activityType, points, description] of rules) {
+    for (const [activityType, points, description, active] of rules) {
       await tx.pointRule.upsert({
         where: { campaignId_activityType: { campaignId: result.id, activityType } },
-        update: { points, description, active: true },
-        create: { campaignId: result.id, activityType, points, description, active: true },
+        update: { points, description, active },
+        create: { campaignId: result.id, activityType, points, description, active },
       });
     }
 

@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { recalculateRankings } from '@/lib/services/ranking-engine';
+import { recalculateRankings, getSegmentedLeaderboard } from '@/lib/services/ranking-engine';
 import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
 import { getTVSProvider } from '@/lib/services/tvs-integration';
 import { clearPointRulesCache } from '@/lib/services/points-engine';
@@ -122,12 +122,7 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        const leaderboard = await prisma.dealerScore.findMany({
-          where: { campaignId: campaign.id },
-          include: { dealer: true },
-          orderBy: { rank: 'asc' },
-          take: 250,
-        });
+        const segmented = await getSegmentedLeaderboard(campaign.id, undefined, true);
 
         // Recent real-time activities for Overview telemetry stream
         const recentActivities = await prisma.dealerActivity.findMany({
@@ -189,19 +184,35 @@ export async function GET(request: NextRequest) {
               matchNumber: a.match?.matchNumber || 1,
             };
           }),
-          leaderboard: leaderboard.map(s => {
-            const displayName = s.dealer.displayName || `Dealer ${s.dealer.externalDealerId}`;
-            return {
-              rank: s.rank,
-              dealerName: displayName,
-              maskedName: displayName,
-              externalId: s.dealer.externalDealerId,
-              city: s.dealer.city,
-              category: (s.dealer as any).category || 'Used Car Dealer',
-              points: s.totalPoints,
-              dealerId: s.dealer.id,
-            };
-          }),
+          leaderboard: segmented.overall.map(s => ({
+            rank: s.rank,
+            dealerName: s.dealerName,
+            maskedName: s.dealerName,
+            realName: s.realName || s.dealerName,
+            externalId: s.externalId || '',
+            customerId: s.customerId,
+            customerCode: s.customerCode,
+            city: s.city,
+            category: s.category || 'Used Car Dealer',
+            role: s.role,
+            points: s.points,
+            totalPoints: s.totalPoints,
+            buyerPoints: s.buyerPoints,
+            sellerPoints: s.sellerPoints,
+            buyerRank: s.buyerRank,
+            sellerRank: s.sellerRank,
+            overallRank: s.overallRank,
+            buysCount: s.buysCount,
+            bidsCount: s.bidsCount,
+            salesCount: s.salesCount,
+            listingsCount: s.listingsCount,
+            dealerId: s.dealerId,
+            isUnmasked: true,
+          })),
+          buyers: segmented.buyers,
+          sellers: segmented.sellers,
+          overall: segmented.overall,
+          counts: segmented.counts,
           campaign: {
             id: campaign.id,
             slug: campaign.slug,
@@ -297,7 +308,7 @@ export async function GET(request: NextRequest) {
             scores: { where: { campaignId: campaign.id } },
             activities: {
               where: { campaignId: campaign.id },
-              include: { match: { select: { matchNumber: true, date: true } } },
+              include: { match: { select: { matchNumber: true, date: true, auctionId: true } } },
               orderBy: { timestamp: 'desc' },
             },
           },
@@ -307,7 +318,83 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Dealer not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ dealer });
+        // Enrich with customer mapping dictionary
+        let enriched: any = {};
+        try {
+          const mapping = require('@/lib/data/tvs-customer-mapping.json');
+          enriched = mapping[dealer.externalDealerId] || 
+                     Object.values(mapping).find((m: any) => String(m.code) === String(dealer.externalDealerId)) || 
+                     {};
+        } catch {}
+
+        const parsedActivities = dealer.activities.map(a => {
+          let meta: Record<string, any> = {};
+          if (typeof a.metadata === 'string') {
+            try { meta = JSON.parse(a.metadata); } catch {}
+          } else if (a.metadata) {
+            meta = a.metadata as Record<string, any>;
+          }
+          return {
+            id: a.id,
+            activityType: a.activityType,
+            points: a.points,
+            timestamp: a.timestamp,
+            externalTransactionId: a.externalTransactionId,
+            metadata: meta,
+            match: a.match,
+          };
+        });
+
+        const segmented = await getSegmentedLeaderboard(campaign.id, undefined, true);
+        const bEntry = segmented.buyers.find(b => b.dealerId === dealer.id);
+        const sEntry = segmented.sellers.find(s => s.dealerId === dealer.id);
+        const oEntry = segmented.overall.find(o => o.dealerId === dealer.id);
+
+        let bPts = 0, sPts = 0, buysCount = 0, bidsCount = 0, salesCount = 0, listingsCount = 0;
+        for (const a of dealer.activities) {
+          if (['BUY', 'BID_PLACED', 'MATCH_PARTICIPATION', 'ALL_MATCHES_BONUS'].includes(a.activityType)) {
+            bPts += a.points;
+            if (a.activityType === 'BUY') buysCount++;
+            if (a.activityType === 'BID_PLACED') bidsCount++;
+          } else if (['SELL', 'SELL_LISTING', 'SELL_COMMISSION'].includes(a.activityType)) {
+            sPts += a.points;
+            if (a.activityType === 'SELL') salesCount++;
+            if (a.activityType === 'SELL_LISTING') listingsCount++;
+          }
+        }
+
+        const enrichedScores = [{
+          rank: oEntry?.rank ?? (dealer.scores[0]?.rank || 0),
+          totalPoints: oEntry?.totalPoints ?? (dealer.scores[0]?.totalPoints || (bPts + sPts)),
+          overallRank: oEntry?.rank,
+          buyerRank: bEntry?.rank,
+          sellerRank: sEntry?.rank,
+          buyerPoints: bEntry?.buyerPoints ?? bPts,
+          sellerPoints: sEntry?.sellerPoints ?? sPts,
+          buysCount: bEntry?.buysCount ?? buysCount,
+          bidsCount: bEntry?.bidsCount ?? bidsCount,
+          salesCount: sEntry?.salesCount ?? salesCount,
+          listingsCount: sEntry?.listingsCount ?? listingsCount,
+        }];
+
+        return NextResponse.json({
+          dealer: {
+            id: dealer.id,
+            externalDealerId: dealer.externalDealerId,
+            customerId: enriched.code || dealer.externalDealerId,
+            displayName: dealer.displayName,
+            maskedName: dealer.maskedName,
+            city: dealer.city || enriched.city || '',
+            category: dealer.category || enriched.category || 'Used Car Dealer',
+            role: enriched.role || (dealer.category === 'OEM Dealer' ? 'Seller' : 'Buyer'),
+            phone: dealer.phone || enriched.phone || undefined,
+            email: enriched.email || undefined,
+            contactName: enriched.firstName ? `${enriched.firstName} ${enriched.lastName || ''}`.trim() : undefined,
+            status: dealer.status,
+            scores: enrichedScores,
+            activities: parsedActivities,
+          },
+        });
       }
 
       case 'vehicleDetails': {
@@ -595,12 +682,96 @@ export async function GET(request: NextRequest) {
                 displayName: true,
                 externalDealerId: true,
                 city: true,
+                category: true,
               },
             },
           },
           orderBy: { timestamp: 'desc' },
           take,
         });
+
+        // Extract dealer references from metadata to resolve buyer and seller names
+        const dealerIds = new Set<string>();
+        const parsedMetas = activities.map(a => {
+          let meta: any = {};
+          try {
+            if (a.metadata) {
+              meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : a.metadata;
+            }
+          } catch {
+            meta = {};
+          }
+          if (meta.buyerDealerId) dealerIds.add(String(meta.buyerDealerId));
+          if (meta.buyerWinnerId) dealerIds.add(String(meta.buyerWinnerId));
+          if (meta.winnerId) dealerIds.add(String(meta.winnerId));
+          return meta;
+        });
+
+        const matchedDealers = dealerIds.size > 0 ? await prisma.dealer.findMany({
+          where: {
+            OR: [
+              { externalDealerId: { in: Array.from(dealerIds) } },
+              { id: { in: Array.from(dealerIds).map(id => parseInt(id, 10)).filter(n => !isNaN(n)) } },
+            ],
+          },
+          select: { id: true, externalDealerId: true, displayName: true },
+        }) : [];
+
+        const dealerLookup = new Map<string, string>();
+        for (const d of matchedDealers) {
+          dealerLookup.set(String(d.externalDealerId), d.displayName);
+          dealerLookup.set(String(d.id), d.displayName);
+        }
+
+        const vehicleSellerMap = new Map<string, string>();
+        const vehicleBuyerMap = new Map<string, string>();
+
+        activities.forEach((a, idx) => {
+          const meta = parsedMetas[idx];
+          const vId = String(meta.vehicleId || meta.id || '');
+          if (vId) {
+            const s = meta.sellerName || meta.customerName || (a.activityType === 'SELL' || a.activityType === 'SELL_LISTING' ? a.dealer.displayName : '');
+            if (s && !vehicleSellerMap.has(vId)) {
+              vehicleSellerMap.set(vId, s);
+            }
+            const b = (a.activityType === 'BUY' ? a.dealer.displayName : '') || dealerLookup.get(String(meta.buyerDealerId)) || dealerLookup.get(String(meta.winnerId));
+            if (b && !vehicleBuyerMap.has(vId)) {
+              vehicleBuyerMap.set(vId, b);
+            }
+          }
+        });
+
+        // For any vehicles where seller isn't yet known, check other SELL/LISTING records in DB
+        const vehicleIds = Array.from(new Set(
+          parsedMetas.map(m => String(m.vehicleId || m.id || '')).filter(Boolean)
+        ));
+        const missingSellerVehicleIds = vehicleIds.filter(vId => !vehicleSellerMap.has(vId));
+        if (missingSellerVehicleIds.length > 0) {
+          try {
+            const otherVehicleActs = await prisma.dealerActivity.findMany({
+              where: {
+                OR: missingSellerVehicleIds.slice(0, 30).map(vId => ({ metadata: { contains: vId } })),
+                activityType: { in: ['SELL', 'SELL_LISTING', 'BUY'] },
+              },
+              include: { dealer: { select: { displayName: true } } },
+              take: 60,
+            });
+            for (const ova of otherVehicleActs) {
+              try {
+                const meta = typeof ova.metadata === 'string' ? JSON.parse(ova.metadata) : (ova.metadata || {});
+                const vId = String(meta.vehicleId || meta.id || '');
+                if (vId && !vehicleSellerMap.has(vId)) {
+                  const s = meta.sellerName || meta.customerName || (ova.activityType === 'SELL' || ova.activityType === 'SELL_LISTING' ? ova.dealer.displayName : '');
+                  if (s) vehicleSellerMap.set(vId, s);
+                }
+                if (vId && !vehicleBuyerMap.has(vId)) {
+                  const b = ova.activityType === 'BUY' ? ova.dealer.displayName : (dealerLookup.get(String(meta.buyerDealerId)) || '');
+                  if (b) vehicleBuyerMap.set(vId, b);
+                }
+              } catch {}
+            }
+          } catch {}
+        }
 
         const [activityCounts, activeDealersCount] = await Promise.all([
           prisma.dealerActivity.groupBy({
@@ -631,19 +802,48 @@ export async function GET(request: NextRequest) {
         const totalWatchlist = countMap['WATCHLIST_ADD'] || 0;
 
         return NextResponse.json({
-          activities: activities.map(a => {
-            let parsedMetadata = {};
-            try {
-              if (a.metadata) {
-                parsedMetadata = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : a.metadata;
+          activities: activities.map((a, idx) => {
+            const parsedMetadata = parsedMetas[idx];
+            const vId = String(parsedMetadata.vehicleId || parsedMetadata.id || '');
+            let buyerName = '—';
+            let sellerName = '—';
+
+            if (a.activityType === 'BUY') {
+              buyerName = a.dealer.displayName;
+              sellerName = parsedMetadata.sellerName || parsedMetadata.customerName || vehicleSellerMap.get(vId) || '—';
+            } else if (a.activityType === 'SELL' || a.activityType === 'SELL_LISTING' || a.activityType === 'SELL_COMMISSION') {
+              sellerName = a.dealer.displayName || parsedMetadata.sellerName || parsedMetadata.customerName || '—';
+              buyerName = dealerLookup.get(String(parsedMetadata.buyerDealerId)) ||
+                          dealerLookup.get(String(parsedMetadata.winnerId)) ||
+                          vehicleBuyerMap.get(vId) ||
+                          (parsedMetadata.buyerDealerId ? `Dealer #${parsedMetadata.buyerDealerId}` : '—');
+            } else if (a.activityType === 'BID_PLACED') {
+              buyerName = a.dealer.displayName;
+              sellerName = parsedMetadata.sellerName || parsedMetadata.customerName || vehicleSellerMap.get(vId) || '—';
+            } else if (a.activityType === 'MATCH_PARTICIPATION') {
+              if (a.dealer.category === 'OEM Dealer') {
+                sellerName = a.dealer.displayName;
+                buyerName = '—';
+              } else {
+                buyerName = a.dealer.displayName;
+                sellerName = '—';
               }
-            } catch {
-              parsedMetadata = {};
+            } else {
+              if (a.dealer.category === 'OEM Dealer') {
+                sellerName = a.dealer.displayName;
+                buyerName = '—';
+              } else {
+                buyerName = a.dealer.displayName;
+                sellerName = parsedMetadata.sellerName || parsedMetadata.customerName || vehicleSellerMap.get(vId) || '—';
+              }
             }
+
             return {
               id: a.id,
               dealerId: a.dealerId,
               dealerName: a.dealer.displayName,
+              buyerName,
+              sellerName,
               externalDealerId: a.dealer.externalDealerId,
               city: a.dealer.city,
               activityType: a.activityType,
@@ -847,6 +1047,33 @@ export async function GET(request: NextRequest) {
           });
 
           if (!isAll) {
+            // Fetch corresponding seller listing activities for this auction
+            const listingActivities = await prisma.dealerActivity.findMany({
+              where: {
+                activityType: 'SELL_LISTING',
+                OR: [
+                  { externalTransactionId: { contains: auctionId } },
+                  { match: { auctionId } },
+                ],
+              },
+              select: { externalTransactionId: true, points: true, metadata: true },
+            });
+
+            const listingPointsMap = new Map<string, number>();
+            for (const la of listingActivities) {
+              if (la.externalTransactionId) {
+                listingPointsMap.set(la.externalTransactionId, la.points);
+                const suffix = la.externalTransactionId.replace(/^LISTING-/, '');
+                listingPointsMap.set(suffix, la.points);
+              }
+              try {
+                const lMeta = typeof la.metadata === 'string' ? JSON.parse(la.metadata) : la.metadata;
+                if (lMeta?.vehicleId) {
+                  listingPointsMap.set(String(lMeta.vehicleId), la.points);
+                }
+              } catch {}
+            }
+
             // Bilateral Auction Transactions pairing Seller and Buyer side-by-side
             const headers = [
               'Lot #',
@@ -895,6 +1122,10 @@ export async function GET(request: NextRequest) {
               const sellerCity = meta.sellerCity || sellerCustomer?.city || meta.location || '';
               const sellerPhone = meta.sellerPhone || sellerCustomer?.phone || '';
 
+              const vId = meta.vehicleId ? String(meta.vehicleId) : '';
+              const txSuffix = a.externalTransactionId ? a.externalTransactionId.replace(/^BUY-/, '') : '';
+              const sellerListingPts = (vId && listingPointsMap.get(vId)) ?? (txSuffix && listingPointsMap.get(txSuffix)) ?? 0;
+
               return [
                 meta.lotNo || meta.sequence || '',
                 auctionId,
@@ -920,8 +1151,8 @@ export async function GET(request: NextRequest) {
                 a.dealer?.externalDealerId || meta.winnerId || '',
                 a.dealer?.city || '',
                 a.dealer?.phone || '',
-                a.points,
-                10, // Seller awarded 10 points
+                a.points, // 0 pts (conversions ignored as cannot be reliably captured in website)
+                sellerListingPts, // Points earned from vehicle listing (5 pts; conversions ignored)
                 a.externalTransactionId || '',
                 'SOLD',
                 campaign.name,

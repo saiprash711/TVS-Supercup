@@ -51,7 +51,11 @@ import {
   Info,
   MapPin,
   Hash,
-  Shield
+  Shield,
+  Tag,
+  Trophy,
+  Phone,
+  Mail
 } from 'lucide-react';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
@@ -88,11 +92,26 @@ interface LeaderboardDealer {
   rank: number;
   dealerName: string;
   maskedName?: string;
+  realName?: string;
   externalId: string;
+  customerId?: string;
+  customerCode?: string;
+  numericCustomerId?: number | null;
   city: string;
   category?: string;
+  role?: string;
   points: number;
+  totalPoints?: number;
+  buyerPoints?: number;
+  sellerPoints?: number;
+  buysCount?: number;
+  bidsCount?: number;
+  salesCount?: number;
+  listingsCount?: number;
   dealerId: number;
+  buyerRank?: number;
+  sellerRank?: number;
+  overallRank?: number;
 }
 
 interface FleetDealer {
@@ -137,19 +156,37 @@ interface AuditEntry {
 interface DealerDetail {
   id: number;
   externalDealerId: string;
+  customerId?: string;
   displayName: string;
   maskedName?: string;
   city: string;
   category?: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+  contactName?: string;
   status: string;
-  scores: Array<{ totalPoints: number; rank: number }>;
+  scores: Array<{
+    totalPoints: number;
+    rank: number;
+    overallRank?: number;
+    buyerRank?: number;
+    sellerRank?: number;
+    buyerPoints?: number;
+    sellerPoints?: number;
+    buysCount?: number;
+    salesCount?: number;
+    bidsCount?: number;
+    listingsCount?: number;
+  }>;
   activities: Array<{
     id: number;
     activityType: string;
     points: number;
     timestamp: string;
     externalTransactionId: string;
-    match: { matchNumber: number; date: string } | null;
+    metadata?: Record<string, any>;
+    match: { matchNumber: number; date: string; auctionId?: string } | null;
   }>;
 }
 
@@ -157,6 +194,8 @@ interface LiveActivityItem {
   id: number;
   dealerId: number;
   dealerName: string;
+  buyerName?: string;
+  sellerName?: string;
   externalDealerId: string;
   city: string;
   activityType: string;
@@ -232,6 +271,16 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDealer[]>([]);
+  const [buyersLeaderboard, setBuyersLeaderboard] = useState<LeaderboardDealer[]>([]);
+  const [sellersLeaderboard, setSellersLeaderboard] = useState<LeaderboardDealer[]>([]);
+  const [overallLeaderboard, setOverallLeaderboard] = useState<LeaderboardDealer[]>([]);
+  const [adminLeaderboardTab, setAdminLeaderboardTab] = useState<'buyers' | 'sellers' | 'overall'>('buyers');
+  const [adminLeaderboardCounts, setAdminLeaderboardCounts] = useState<{ buyers: number; sellers: number; overall: number }>({
+    buyers: 0,
+    sellers: 0,
+    overall: 0,
+  });
+  const [copiedCustomerId, setCopiedCustomerId] = useState<string | null>(null);
   const [overviewLeaderboardLimit, setOverviewLeaderboardLimit] = useState(30);
   const [leaderboardCategoryFilter, setLeaderboardCategoryFilter] = useState<string>('ALL');
 
@@ -253,6 +302,8 @@ export default function AdminPage() {
   const [rules, setRules] = useState<PointRuleItem[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<DealerDetail | null>(null);
+  const [inspectingDealerId, setInspectingDealerId] = useState<number | null>(null);
+  const [inspectorActivityFilter, setInspectorActivityFilter] = useState<string>('ALL');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -312,6 +363,13 @@ export default function AdminPage() {
     setSelectedImageIndex(0);
     setCopiedPayload(false);
     setShowRawPayload(false);
+  };
+
+  const copyCustomerId = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(id);
+    setCopiedCustomerId(id);
+    setTimeout(() => setCopiedCustomerId(null), 2000);
   };
 
   const getVehicleImages = (imgData: any): string[] => {
@@ -541,6 +599,18 @@ export default function AdminPage() {
       if (data.stats) {
         setStats(data.stats);
         setLeaderboard(data.leaderboard || []);
+        if (Array.isArray(data.buyers)) setBuyersLeaderboard(data.buyers);
+        if (Array.isArray(data.sellers)) setSellersLeaderboard(data.sellers);
+        if (Array.isArray(data.overall)) setOverallLeaderboard(data.overall);
+        if (data.counts) {
+          setAdminLeaderboardCounts(data.counts);
+        } else {
+          setAdminLeaderboardCounts({
+            buyers: data.buyers?.length || 0,
+            sellers: data.sellers?.length || 0,
+            overall: data.overall?.length || data.leaderboard?.length || 0,
+          });
+        }
         if (data.recentActivities) {
           setRecentActivities(data.recentActivities);
         }
@@ -678,6 +748,8 @@ export default function AdminPage() {
       id: Number(veh.id || veh.vehicleId || Math.floor(Math.random() * 100000)),
       dealerId: veh.winnerId ? Number(veh.winnerId) : 0,
       dealerName: veh.status === 'COMPLETED' ? (veh.winnerId ? `Winner Dealer #${veh.winnerId}` : 'Hammered / Closed') : (veh.status === 'ONGOING' ? 'Active Lot on Block' : 'Upcoming in Queue'),
+      buyerName: veh.status === 'COMPLETED' ? (veh.winnerId ? `Winner Dealer #${veh.winnerId}` : '—') : '—',
+      sellerName: veh.locationName ? `Fleet (${veh.locationName})` : 'TVS Fleet',
       externalDealerId: veh.winnerId ? String(veh.winnerId) : 'N/A',
       city: veh.locationName || 'Tamil Nadu',
       activityType: veh.status === 'COMPLETED' ? 'BUY' : (veh.status === 'ONGOING' ? 'BID_PLACED' : 'VEHICLE_INSPECTED'),
@@ -753,9 +825,25 @@ export default function AdminPage() {
   };
 
   const loadDealerDetail = async (dealerId: number) => {
-    const res = await fetch(`/api/admin?action=dealer&id=${dealerId}`);
-    const data = await res.json();
-    if (data.dealer) setSelectedDealer(data.dealer);
+    setInspectingDealerId(dealerId);
+    try {
+      const campaignParam = selectedCampaignId ? `&campaignId=${selectedCampaignId}` : '';
+      const res = await fetch(`/api/admin?action=dealer&id=${dealerId}${campaignParam}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (data.dealer) {
+        setSelectedDealer(data.dealer);
+        setInspectorActivityFilter('ALL');
+      } else {
+        showToast(data.error || 'Dealership profile not found', 'error');
+      }
+    } catch {
+      showToast('Network error while connecting to dealership inspector', 'error');
+    } finally {
+      setInspectingDealerId(null);
+    }
   };
 
   useEffect(() => {
@@ -766,13 +854,15 @@ export default function AdminPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedActivity) {
-        setSelectedActivity(null);
+      if (e.key === 'Escape') {
+        if (selectedDealer) setSelectedDealer(null);
+        if (selectedActivity) setSelectedActivity(null);
+        if (adjustModal) setAdjustModal(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedActivity]);
+  }, [selectedDealer, selectedActivity, adjustModal]);
 
   useEffect(() => {
     if (authenticated && activeTab === 'overview' && !stats && !loading) {
@@ -978,21 +1068,51 @@ export default function AdminPage() {
   };
 
   // ─── Memoized Computations (Called unconditionally before early returns) ─────
+  const activeAdminLeaderboard = useMemo(() => {
+    if (adminLeaderboardTab === 'sellers') {
+      if (sellersLeaderboard.length > 0) return sellersLeaderboard;
+      return leaderboard
+        .filter(d => (d.sellerPoints || 0) > 0 || d.role === 'Seller' || d.category === 'OEM Dealer')
+        .sort((a, b) => (b.sellerPoints || 0) - (a.sellerPoints || 0))
+        .map((d, idx) => ({ ...d, rank: idx + 1, points: d.sellerPoints || d.points, sellerRank: idx + 1 }));
+    }
+    if (adminLeaderboardTab === 'buyers') {
+      if (buyersLeaderboard.length > 0) return buyersLeaderboard;
+      return leaderboard
+        .filter(d => (d.buyerPoints || 0) > 0 || d.role === 'Buyer' || d.category === 'Used Car Dealer')
+        .sort((a, b) => (b.buyerPoints || 0) - (a.buyerPoints || 0))
+        .map((d, idx) => ({ ...d, rank: idx + 1, points: d.buyerPoints || d.points, buyerRank: idx + 1 }));
+    }
+    return overallLeaderboard.length > 0 ? overallLeaderboard : leaderboard;
+  }, [adminLeaderboardTab, buyersLeaderboard, sellersLeaderboard, overallLeaderboard, leaderboard]);
+
   const filteredLeaderboard = useMemo(() => {
-    return leaderboard.filter(d => {
-      if (leaderboardCategoryFilter === 'OEM' && d.category !== 'OEM Dealer') return false;
-      if (leaderboardCategoryFilter === 'USED' && d.category !== 'Used Car Dealer') return false;
-      if (leaderboardCategoryFilter === 'CORPORATE' && d.category !== 'Corporate / Other') return false;
+    return activeAdminLeaderboard.filter(d => {
+      if (adminLeaderboardTab === 'overall') {
+        if (leaderboardCategoryFilter === 'OEM' && d.category !== 'OEM Dealer' && d.role !== 'Seller') return false;
+        if (leaderboardCategoryFilter === 'USED' && d.category !== 'Used Car Dealer' && d.role !== 'Buyer') return false;
+        if (leaderboardCategoryFilter === 'CORPORATE' && d.category !== 'Corporate / Other') return false;
+      }
       if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      const currentRank = adminLeaderboardTab === 'sellers'
+        ? (d.sellerRank ?? d.rank)
+        : adminLeaderboardTab === 'buyers'
+        ? (d.buyerRank ?? d.rank)
+        : (d.overallRank ?? d.rank);
       return (
-        d.dealerName.toLowerCase().includes(q) ||
-        d.externalId.toLowerCase().includes(q) ||
-        d.city.toLowerCase().includes(q) ||
-        (d.category && d.category.toLowerCase().includes(q))
+        d.dealerName?.toLowerCase().includes(q) ||
+        (d.realName && d.realName.toLowerCase().includes(q)) ||
+        d.externalId?.toLowerCase().includes(q) ||
+        (d.customerId && d.customerId.toLowerCase().includes(q)) ||
+        (d.customerCode && d.customerCode.toLowerCase().includes(q)) ||
+        d.city?.toLowerCase().includes(q) ||
+        (d.category && d.category.toLowerCase().includes(q)) ||
+        String(currentRank) === q ||
+        `#${currentRank}` === q
       );
     });
-  }, [leaderboard, leaderboardCategoryFilter, searchQuery]);
+  }, [activeAdminLeaderboard, adminLeaderboardTab, leaderboardCategoryFilter, searchQuery]);
 
   const filteredFleetDealers = useMemo(() => {
     const sourceList: FleetDealer[] = fleetDealers.length > 0 ? fleetDealers : leaderboard.map(d => ({
@@ -1027,6 +1147,8 @@ export default function AdminPage() {
     if (liveSearchQuery) {
       const q = liveSearchQuery.toLowerCase();
       return a.dealerName.toLowerCase().includes(q) ||
+             (a.buyerName && a.buyerName.toLowerCase().includes(q)) ||
+             (a.sellerName && a.sellerName.toLowerCase().includes(q)) ||
              a.externalDealerId.toLowerCase().includes(q) ||
              a.city.toLowerCase().includes(q) ||
              JSON.stringify(a.metadata).toLowerCase().includes(q);
@@ -1714,27 +1836,33 @@ export default function AdminPage() {
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', padding: '0 16px 12px' }}>
                               <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
                               {[
-                                { key: 'ALL', label: 'All Dealerships' },
-                                { key: 'OEM', label: 'OEM Dealers (Sellers)', color: '#34d399' },
-                                { key: 'USED', label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
-                              ].map(pill => (
-                                <button
-                                  key={pill.key}
-                                  className="btn btn-xs"
-                                  style={{
-                                    padding: '3px 9px',
-                                    fontSize: '0.72rem',
-                                    borderRadius: '999px',
-                                    background: leaderboardCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
-                                    border: `1px solid ${leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
-                                    color: leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
-                                    fontWeight: leaderboardCategoryFilter === pill.key ? 700 : 500,
-                                  }}
-                                  onClick={() => setLeaderboardCategoryFilter(pill.key)}
-                                >
-                                  {pill.label}
-                                </button>
-                              ))}
+                                { key: 'ALL', tab: 'overall' as const, label: 'All Dealerships' },
+                                { key: 'OEM', tab: 'sellers' as const, label: 'OEM Dealers (Sellers)', color: '#34d399' },
+                                { key: 'USED', tab: 'buyers' as const, label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
+                              ].map(pill => {
+                                const isActive = adminLeaderboardTab === pill.tab;
+                                return (
+                                  <button
+                                    key={pill.key}
+                                    className="btn btn-xs"
+                                    style={{
+                                      padding: '3px 9px',
+                                      fontSize: '0.72rem',
+                                      borderRadius: '999px',
+                                      background: isActive ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                      border: `1px solid ${isActive ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                      color: isActive ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                      fontWeight: isActive ? 700 : 500,
+                                    }}
+                                    onClick={() => {
+                                      setAdminLeaderboardTab(pill.tab);
+                                      setLeaderboardCategoryFilter(pill.key);
+                                    }}
+                                  >
+                                    {pill.label}
+                                  </button>
+                                );
+                              })}
                             </div>
 
                             <div style={{ overflowX: 'auto', maxHeight: '520px' }}>
@@ -1751,13 +1879,19 @@ export default function AdminPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {filteredLeaderboard.slice(0, overviewLeaderboardLimit).map(d => (
+                                  {filteredLeaderboard.slice(0, overviewLeaderboardLimit).map(d => {
+                                    const currentRank = adminLeaderboardTab === 'sellers'
+                                      ? (d.sellerRank ?? d.rank)
+                                      : adminLeaderboardTab === 'buyers'
+                                      ? (d.buyerRank ?? d.rank)
+                                      : (d.overallRank ?? d.rank);
+                                    return (
                                     <tr key={d.dealerId}>
                                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
-                                        {d.rank === 1 ? '🥇 #1' :
-                                         d.rank === 2 ? '🥈 #2' :
-                                         d.rank === 3 ? '🥉 #3' :
-                                         `#${d.rank}`}
+                                        {currentRank === 1 ? '🥇 #1' :
+                                         currentRank === 2 ? '🥈 #2' :
+                                         currentRank === 3 ? '🥉 #3' :
+                                         `#${currentRank}`}
                                       </td>
                                       <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                                         {d.dealerName}
@@ -1817,17 +1951,30 @@ export default function AdminPage() {
                                         {d.externalId}
                                       </td>
                                       <td>{d.city}</td>
-                                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)', fontSize: '0.92rem' }}>
-                                        {d.points} PTS
+                                      <td style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontWeight: 800,
+                                        color: adminLeaderboardTab === 'sellers' ? 'var(--accent-amber)' : adminLeaderboardTab === 'buyers' ? 'var(--accent-emerald)' : 'var(--accent-cyan)',
+                                        fontSize: '0.92rem'
+                                      }}>
+                                        {(adminLeaderboardTab === 'sellers' ? (d.sellerPoints ?? d.points) : adminLeaderboardTab === 'buyers' ? (d.buyerPoints ?? d.points) : d.points).toLocaleString()} PTS
                                       </td>
                                       <td>
                                         <div style={{ display: 'flex', gap: '4px' }}>
                                           <button 
                                             className="btn btn-ghost btn-sm" 
-                                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                            style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                             onClick={() => loadDealerDetail(d.dealerId)}
+                                            disabled={inspectingDealerId === d.dealerId}
                                           >
-                                            Inspect
+                                            {inspectingDealerId === d.dealerId ? (
+                                              <>
+                                                <span style={{ width: '10px', height: '10px', border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }} />
+                                                <span>Loading...</span>
+                                              </>
+                                            ) : (
+                                              'Inspect'
+                                            )}
                                           </button>
                                           <button 
                                             className="btn btn-sm" 
@@ -1839,7 +1986,8 @@ export default function AdminPage() {
                                         </div>
                                       </td>
                                     </tr>
-                                  ))}
+                                  );
+                                })}
                                 </tbody>
                               </table>
                             </div>
@@ -2061,8 +2209,140 @@ export default function AdminPage() {
                           </div>
                         </div>
 
+                        {/* ── Segmented League Switcher (Buyer Leaderboard, Seller Leaderboard, Overall Standings) ── */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '12px',
+                          padding: '10px 14px',
+                          marginBottom: '20px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminLeaderboardTab('buyers');
+                                setLeaderboardCategoryFilter('USED');
+                              }}
+                              className="btn btn-sm"
+                              style={{
+                                borderRadius: '8px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 14px',
+                                background: adminLeaderboardTab === 'buyers' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255, 255, 255, 0.05)',
+                                border: `1px solid ${adminLeaderboardTab === 'buyers' ? '#10b981' : 'var(--border-subtle)'}`,
+                                color: adminLeaderboardTab === 'buyers' ? '#ffffff' : 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                boxShadow: adminLeaderboardTab === 'buyers' ? '0 2px 10px rgba(16, 185, 129, 0.3)' : 'none'
+                              }}
+                            >
+                              <ShoppingCart className="w-4 h-4 text-emerald-300" />
+                              <span>Buyer Leaderboard</span>
+                              <span style={{
+                                fontSize: '0.7rem',
+                                background: adminLeaderboardTab === 'buyers' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.08)',
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                color: '#fff'
+                              }}>
+                                {adminLeaderboardCounts.buyers || buyersLeaderboard.length}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminLeaderboardTab('sellers');
+                                setLeaderboardCategoryFilter('OEM');
+                              }}
+                              className="btn btn-sm"
+                              style={{
+                                borderRadius: '8px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 14px',
+                                background: adminLeaderboardTab === 'sellers' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255, 255, 255, 0.05)',
+                                border: `1px solid ${adminLeaderboardTab === 'sellers' ? '#f59e0b' : 'var(--border-subtle)'}`,
+                                color: adminLeaderboardTab === 'sellers' ? '#000000' : 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                boxShadow: adminLeaderboardTab === 'sellers' ? '0 2px 10px rgba(245, 158, 11, 0.3)' : 'none'
+                              }}
+                            >
+                              <Tag className="w-4 h-4" />
+                              <span>Seller Leaderboard</span>
+                              <span style={{
+                                fontSize: '0.7rem',
+                                background: adminLeaderboardTab === 'sellers' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.08)',
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                color: adminLeaderboardTab === 'sellers' ? '#000' : '#fff'
+                              }}>
+                                {adminLeaderboardCounts.sellers || sellersLeaderboard.length}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminLeaderboardTab('overall');
+                                setLeaderboardCategoryFilter('ALL');
+                              }}
+                              className="btn btn-sm"
+                              style={{
+                                borderRadius: '8px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 14px',
+                                background: adminLeaderboardTab === 'overall' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'rgba(255, 255, 255, 0.05)',
+                                border: `1px solid ${adminLeaderboardTab === 'overall' ? '#3b82f6' : 'var(--border-subtle)'}`,
+                                color: adminLeaderboardTab === 'overall' ? '#ffffff' : 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                boxShadow: adminLeaderboardTab === 'overall' ? '0 2px 10px rgba(59, 130, 246, 0.3)' : 'none'
+                              }}
+                            >
+                              <Trophy className="w-4 h-4 text-blue-200" />
+                              <span>Overall Standings</span>
+                              <span style={{
+                                fontSize: '0.7rem',
+                                background: adminLeaderboardTab === 'overall' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.08)',
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                color: '#fff'
+                              }}>
+                                {adminLeaderboardCounts.overall || overallLeaderboard.length || leaderboard.length}
+                              </span>
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            <span style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              background: '#10b981',
+                              boxShadow: '0 0 8px #10b981'
+                            }}></span>
+                            <span>Viewing: <strong style={{ color: 'var(--text-primary)' }}>{adminLeaderboardTab === 'buyers' ? 'Buyer Standings (Unmasked)' : adminLeaderboardTab === 'sellers' ? 'Seller Standings (Unmasked)' : 'National Super Cup Standings (Unmasked)'}</strong></span>
+                          </div>
+                        </div>
+
                         {/* Top 3 Championship Podium Cards */}
-                        {leaderboard.length >= 3 && !searchQuery && (
+                        {activeAdminLeaderboard.length >= 3 && !searchQuery && (
                           <div style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -2070,79 +2350,60 @@ export default function AdminPage() {
                             marginBottom: '24px'
                           }}>
                             {/* Gold - Rank 1 */}
-                            {leaderboard[0] && (
-                              <div style={{
-                                background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(15, 23, 42, 0.8))',
-                                border: '1px solid rgba(234, 179, 8, 0.45)',
-                                borderRadius: '12px',
-                                padding: '18px 20px',
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}>
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '-15px',
-                                  right: '-10px',
-                                  fontSize: '4.5rem',
-                                  opacity: 0.12,
-                                  userSelect: 'none'
-                                }}>
-                                  🥇
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                  <span style={{
-                                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                    color: '#000',
-                                    fontWeight: 900,
-                                    fontSize: '0.75rem',
-                                    padding: '2px 8px',
-                                    borderRadius: '6px',
-                                    letterSpacing: '0.05em'
-                                  }}>
+                            {activeAdminLeaderboard[0] && (
+                              <div className="admin-podium-card rank-1">
+                                <div className="podium-watermark">🥇</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                                  <span className="podium-rank-badge">
                                     1ST PLACE • CHAMPION
                                   </span>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#fbbf24' }}>
-                                    #{leaderboard[0].externalId}
-                                  </span>
+                                  {activeAdminLeaderboard[0].customerId && (
+                                    <span className="customer-id-pill" title={`TVS Customer ID: ${activeAdminLeaderboard[0].customerId}`}>
+                                      <span>{activeAdminLeaderboard[0].customerId}</span>
+                                      <button
+                                        type="button"
+                                        className="copy-id-btn"
+                                        onClick={(e) => copyCustomerId(activeAdminLeaderboard[0].customerId!, e)}
+                                        title="Copy Customer ID"
+                                      >
+                                        {copiedCustomerId === activeAdminLeaderboard[0].customerId ? (
+                                          <Check className="w-3 h-3 text-emerald-500" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </span>
+                                  )}
                                 </div>
-                                <h3 style={{
-                                  fontSize: '1.05rem',
-                                  fontWeight: 800,
-                                  color: 'var(--text-primary)',
-                                  marginBottom: '4px',
-                                  lineHeight: 1.3
-                                }}>
-                                  {leaderboard[0].dealerName}
+                                <h3 className="podium-dealer-title">
+                                  {activeAdminLeaderboard[0].realName || activeAdminLeaderboard[0].dealerName}
                                 </h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    background: leaderboard[0].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
-                                    color: leaderboard[0].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
-                                    border: `1px solid ${leaderboard[0].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
-                                  }}>
-                                    {leaderboard[0].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
-                                  </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                  {adminLeaderboardTab === 'buyers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-emerald)' }}>{activeAdminLeaderboard[0].buysCount || 0}</strong> Won • {activeAdminLeaderboard[0].bidsCount || 0} Bids
+                                    </span>
+                                  ) : adminLeaderboardTab === 'sellers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-amber)' }}>{activeAdminLeaderboard[0].salesCount || 0}</strong> Sold • {activeAdminLeaderboard[0].listingsCount || 0} Listed
+                                    </span>
+                                  ) : (
+                                    <span className={`admin-category-badge ${activeAdminLeaderboard[0].category === 'OEM Dealer' ? 'oem' : 'used'}`}>
+                                      {activeAdminLeaderboard[0].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                    </span>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                                  📍 {leaderboard[0].city}
+                                <div className="podium-dealer-location">
+                                  📍 {activeAdminLeaderboard[0].city}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                  <span style={{
-                                    fontFamily: 'var(--font-mono)',
-                                    fontSize: '1.4rem',
-                                    fontWeight: 900,
-                                    color: '#fbbf24'
-                                  }}>
-                                    {leaderboard[0].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                <div className="podium-score-row">
+                                  <span className="podium-points-wrap podium-points-val">
+                                    {(adminLeaderboardTab === 'buyers' ? (activeAdminLeaderboard[0].buyerPoints ?? activeAdminLeaderboard[0].points) : adminLeaderboardTab === 'sellers' ? (activeAdminLeaderboard[0].sellerPoints ?? activeAdminLeaderboard[0].points) : activeAdminLeaderboard[0].points).toLocaleString()}
+                                    <span className="podium-points-unit">{adminLeaderboardTab === 'buyers' ? 'BUYER PTS' : adminLeaderboardTab === 'sellers' ? 'SELLER PTS' : 'PTS'}</span>
                                   </span>
                                   <button
-                                    className="btn btn-ghost btn-xs"
-                                    style={{ fontSize: '0.72rem', color: '#fbbf24' }}
-                                    onClick={() => loadDealerDetail(leaderboard[0].dealerId)}
+                                    className="podium-inspect-btn"
+                                    onClick={() => loadDealerDetail(activeAdminLeaderboard[0].dealerId)}
                                   >
                                     Inspect Fleet →
                                   </button>
@@ -2151,79 +2412,60 @@ export default function AdminPage() {
                             )}
 
                             {/* Silver - Rank 2 */}
-                            {leaderboard[1] && (
-                              <div style={{
-                                background: 'linear-gradient(135deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0.8))',
-                                border: '1px solid rgba(148, 163, 184, 0.4)',
-                                borderRadius: '12px',
-                                padding: '18px 20px',
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}>
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '-15px',
-                                  right: '-10px',
-                                  fontSize: '4.5rem',
-                                  opacity: 0.1,
-                                  userSelect: 'none'
-                                }}>
-                                  🥈
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                  <span style={{
-                                    background: 'linear-gradient(135deg, #94a3b8, #64748b)',
-                                    color: '#000',
-                                    fontWeight: 900,
-                                    fontSize: '0.75rem',
-                                    padding: '2px 8px',
-                                    borderRadius: '6px',
-                                    letterSpacing: '0.05em'
-                                  }}>
+                            {activeAdminLeaderboard[1] && (
+                              <div className="admin-podium-card rank-2">
+                                <div className="podium-watermark">🥈</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                                  <span className="podium-rank-badge">
                                     2ND PLACE • RUNNER UP
                                   </span>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                                    #{leaderboard[1].externalId}
-                                  </span>
+                                  {activeAdminLeaderboard[1].customerId && (
+                                    <span className="customer-id-pill" title={`TVS Customer ID: ${activeAdminLeaderboard[1].customerId}`}>
+                                      <span>{activeAdminLeaderboard[1].customerId}</span>
+                                      <button
+                                        type="button"
+                                        className="copy-id-btn"
+                                        onClick={(e) => copyCustomerId(activeAdminLeaderboard[1].customerId!, e)}
+                                        title="Copy Customer ID"
+                                      >
+                                        {copiedCustomerId === activeAdminLeaderboard[1].customerId ? (
+                                          <Check className="w-3 h-3 text-emerald-500" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </span>
+                                  )}
                                 </div>
-                                <h3 style={{
-                                  fontSize: '1.05rem',
-                                  fontWeight: 800,
-                                  color: 'var(--text-primary)',
-                                  marginBottom: '4px',
-                                  lineHeight: 1.3
-                                }}>
-                                  {leaderboard[1].dealerName}
+                                <h3 className="podium-dealer-title">
+                                  {activeAdminLeaderboard[1].realName || activeAdminLeaderboard[1].dealerName}
                                 </h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    background: leaderboard[1].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
-                                    color: leaderboard[1].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
-                                    border: `1px solid ${leaderboard[1].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
-                                  }}>
-                                    {leaderboard[1].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
-                                  </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                  {adminLeaderboardTab === 'buyers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-emerald)' }}>{activeAdminLeaderboard[1].buysCount || 0}</strong> Won • {activeAdminLeaderboard[1].bidsCount || 0} Bids
+                                    </span>
+                                  ) : adminLeaderboardTab === 'sellers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-amber)' }}>{activeAdminLeaderboard[1].salesCount || 0}</strong> Sold • {activeAdminLeaderboard[1].listingsCount || 0} Listed
+                                    </span>
+                                  ) : (
+                                    <span className={`admin-category-badge ${activeAdminLeaderboard[1].category === 'OEM Dealer' ? 'oem' : 'used'}`}>
+                                      {activeAdminLeaderboard[1].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                    </span>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                                  📍 {leaderboard[1].city}
+                                <div className="podium-dealer-location">
+                                  📍 {activeAdminLeaderboard[1].city}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                  <span style={{
-                                    fontFamily: 'var(--font-mono)',
-                                    fontSize: '1.4rem',
-                                    fontWeight: 900,
-                                    color: '#cbd5e1'
-                                  }}>
-                                    {leaderboard[1].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                <div className="podium-score-row">
+                                  <span className="podium-points-wrap podium-points-val">
+                                    {(adminLeaderboardTab === 'buyers' ? (activeAdminLeaderboard[1].buyerPoints ?? activeAdminLeaderboard[1].points) : adminLeaderboardTab === 'sellers' ? (activeAdminLeaderboard[1].sellerPoints ?? activeAdminLeaderboard[1].points) : activeAdminLeaderboard[1].points).toLocaleString()}
+                                    <span className="podium-points-unit">{adminLeaderboardTab === 'buyers' ? 'BUYER PTS' : adminLeaderboardTab === 'sellers' ? 'SELLER PTS' : 'PTS'}</span>
                                   </span>
                                   <button
-                                    className="btn btn-ghost btn-xs"
-                                    style={{ fontSize: '0.72rem', color: '#cbd5e1' }}
-                                    onClick={() => loadDealerDetail(leaderboard[1].dealerId)}
+                                    className="podium-inspect-btn"
+                                    onClick={() => loadDealerDetail(activeAdminLeaderboard[1].dealerId)}
                                   >
                                     Inspect Fleet →
                                   </button>
@@ -2232,79 +2474,60 @@ export default function AdminPage() {
                             )}
 
                             {/* Bronze - Rank 3 */}
-                            {leaderboard[2] && (
-                              <div style={{
-                                background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(15, 23, 42, 0.8))',
-                                border: '1px solid rgba(217, 119, 6, 0.4)',
-                                borderRadius: '12px',
-                                padding: '18px 20px',
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}>
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '-15px',
-                                  right: '-10px',
-                                  fontSize: '4.5rem',
-                                  opacity: 0.1,
-                                  userSelect: 'none'
-                                }}>
-                                  🥉
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                  <span style={{
-                                    background: 'linear-gradient(135deg, #d97706, #b45309)',
-                                    color: '#fff',
-                                    fontWeight: 900,
-                                    fontSize: '0.75rem',
-                                    padding: '2px 8px',
-                                    borderRadius: '6px',
-                                    letterSpacing: '0.05em'
-                                  }}>
+                            {activeAdminLeaderboard[2] && (
+                              <div className="admin-podium-card rank-3">
+                                <div className="podium-watermark">🥉</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                                  <span className="podium-rank-badge">
                                     3RD PLACE • PODIUM
                                   </span>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#f59e0b' }}>
-                                    #{leaderboard[2].externalId}
-                                  </span>
+                                  {activeAdminLeaderboard[2].customerId && (
+                                    <span className="customer-id-pill" title={`TVS Customer ID: ${activeAdminLeaderboard[2].customerId}`}>
+                                      <span>{activeAdminLeaderboard[2].customerId}</span>
+                                      <button
+                                        type="button"
+                                        className="copy-id-btn"
+                                        onClick={(e) => copyCustomerId(activeAdminLeaderboard[2].customerId!, e)}
+                                        title="Copy Customer ID"
+                                      >
+                                        {copiedCustomerId === activeAdminLeaderboard[2].customerId ? (
+                                          <Check className="w-3 h-3 text-emerald-500" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </span>
+                                  )}
                                 </div>
-                                <h3 style={{
-                                  fontSize: '1.05rem',
-                                  fontWeight: 800,
-                                  color: 'var(--text-primary)',
-                                  marginBottom: '4px',
-                                  lineHeight: 1.3
-                                }}>
-                                  {leaderboard[2].dealerName}
+                                <h3 className="podium-dealer-title">
+                                  {activeAdminLeaderboard[2].realName || activeAdminLeaderboard[2].dealerName}
                                 </h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    background: leaderboard[2].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
-                                    color: leaderboard[2].category === 'OEM Dealer' ? '#34d399' : '#38bdf8',
-                                    border: `1px solid ${leaderboard[2].category === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
-                                  }}>
-                                    {leaderboard[2].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
-                                  </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                  {adminLeaderboardTab === 'buyers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-emerald)' }}>{activeAdminLeaderboard[2].buysCount || 0}</strong> Won • {activeAdminLeaderboard[2].bidsCount || 0} Bids
+                                    </span>
+                                  ) : adminLeaderboardTab === 'sellers' ? (
+                                    <span className="activity-telemetry-badge">
+                                      <strong style={{ color: 'var(--accent-amber)' }}>{activeAdminLeaderboard[2].salesCount || 0}</strong> Sold • {activeAdminLeaderboard[2].listingsCount || 0} Listed
+                                    </span>
+                                  ) : (
+                                    <span className={`admin-category-badge ${activeAdminLeaderboard[2].category === 'OEM Dealer' ? 'oem' : 'used'}`}>
+                                      {activeAdminLeaderboard[2].category === 'OEM Dealer' ? '🏢 OEM Dealer • Seller' : '🚗 Used Car Dealer • Buyer'}
+                                    </span>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                                  📍 {leaderboard[2].city}
+                                <div className="podium-dealer-location">
+                                  📍 {activeAdminLeaderboard[2].city}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                  <span style={{
-                                    fontFamily: 'var(--font-mono)',
-                                    fontSize: '1.4rem',
-                                    fontWeight: 900,
-                                    color: '#f59e0b'
-                                  }}>
-                                    {leaderboard[2].points.toLocaleString()} <span style={{ fontSize: '0.85rem' }}>PTS</span>
+                                <div className="podium-score-row">
+                                  <span className="podium-points-wrap podium-points-val">
+                                    {(adminLeaderboardTab === 'buyers' ? (activeAdminLeaderboard[2].buyerPoints ?? activeAdminLeaderboard[2].points) : adminLeaderboardTab === 'sellers' ? (activeAdminLeaderboard[2].sellerPoints ?? activeAdminLeaderboard[2].points) : activeAdminLeaderboard[2].points).toLocaleString()}
+                                    <span className="podium-points-unit">{adminLeaderboardTab === 'buyers' ? 'BUYER PTS' : adminLeaderboardTab === 'sellers' ? 'SELLER PTS' : 'PTS'}</span>
                                   </span>
                                   <button
-                                    className="btn btn-ghost btn-xs"
-                                    style={{ fontSize: '0.72rem', color: '#f59e0b' }}
-                                    onClick={() => loadDealerDetail(leaderboard[2].dealerId)}
+                                    className="podium-inspect-btn"
+                                    onClick={() => loadDealerDetail(activeAdminLeaderboard[2].dealerId)}
                                   >
                                     Inspect Fleet →
                                   </button>
@@ -2324,12 +2547,12 @@ export default function AdminPage() {
                           marginBottom: '16px'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: '1 1 450px' }}>
-                            <div className="search-input-box" style={{ flex: '1 1 240px', maxWidth: '380px' }}>
+                            <div className="search-input-box" style={{ flex: '1 1 240px', maxWidth: '420px' }}>
                               <Search className="w-4 h-4 search-icon-left" />
                               <input
                                 type="text"
                                 className="form-input"
-                                placeholder="Search by dealership legal name, dealer code, or city..."
+                                placeholder="Search by dealership legal name, TVS Customer ID, dealer code, or city..."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                               />
@@ -2347,32 +2570,38 @@ export default function AdminPage() {
                             {/* Category Filter Buttons in Standings */}
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                               {[
-                                { key: 'ALL', label: 'All Standings' },
-                                { key: 'OEM', label: 'OEM Dealers (Sellers)', color: '#34d399' },
-                                { key: 'USED', label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
-                              ].map(pill => (
-                                <button
-                                  key={pill.key}
-                                  className="btn btn-xs"
-                                  style={{
-                                    padding: '4px 10px',
-                                    fontSize: '0.74rem',
-                                    borderRadius: '999px',
-                                    background: leaderboardCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
-                                    border: `1px solid ${leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
-                                    color: leaderboardCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
-                                    fontWeight: leaderboardCategoryFilter === pill.key ? 700 : 500,
-                                  }}
-                                  onClick={() => setLeaderboardCategoryFilter(pill.key)}
-                                >
-                                  {pill.label}
-                                </button>
-                              ))}
+                                { key: 'ALL', tab: 'overall' as const, label: 'All Categories' },
+                                { key: 'OEM', tab: 'sellers' as const, label: 'OEM Dealers (Sellers)', color: '#34d399' },
+                                { key: 'USED', tab: 'buyers' as const, label: 'Used Car Dealers (Buyers)', color: '#38bdf8' },
+                              ].map(pill => {
+                                const isActive = adminLeaderboardTab === pill.tab;
+                                return (
+                                  <button
+                                    key={pill.key}
+                                    className="btn btn-xs"
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '0.74rem',
+                                      borderRadius: '999px',
+                                      background: isActive ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                      border: `1px solid ${isActive ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                      color: isActive ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                      fontWeight: isActive ? 700 : 500,
+                                    }}
+                                    onClick={() => {
+                                      setAdminLeaderboardTab(pill.tab);
+                                      setLeaderboardCategoryFilter(pill.key);
+                                    }}
+                                  >
+                                    {pill.label}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
 
                           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                            Showing <strong>{filteredLeaderboard.length}</strong> active scoring dealerships
+                            Showing <strong>{filteredLeaderboard.length}</strong> of <strong>{activeAdminLeaderboard.length}</strong> {adminLeaderboardTab === 'sellers' ? 'active OEM sellers' : adminLeaderboardTab === 'buyers' ? 'active buyers' : 'active unmasked dealerships'}
                           </div>
                         </div>
 
@@ -2381,150 +2610,173 @@ export default function AdminPage() {
                           <table className="admin-table">
                             <thead>
                               <tr>
-                                <th style={{ width: '80px' }}>Rank</th>
-                                <th>Dealership Legal Name</th>
-                                <th>Category & Role</th>
-                                <th style={{ width: '120px' }}>Dealer Code</th>
-                                <th style={{ width: '140px' }}>City / Hub</th>
-                                <th style={{ width: '160px' }}>Championship Points</th>
-                                <th style={{ width: '160px' }}>Actions</th>
+                                <th style={{ width: '74px', textAlign: 'center' }}>Rank</th>
+                                <th style={{ width: '170px' }}>Customer ID</th>
+                                <th>Dealership Legal Name (Unmasked)</th>
+                                <th style={{ width: '130px' }}>City / Hub</th>
+                                <th style={{ width: '170px' }}>
+                                  {adminLeaderboardTab === 'buyers' ? 'Buyer Stats' : adminLeaderboardTab === 'sellers' ? 'Seller Stats' : 'League Role'}
+                                </th>
+                                <th style={{ width: '160px', textAlign: 'right' }}>
+                                  {adminLeaderboardTab === 'buyers' ? 'Buyer Points' : adminLeaderboardTab === 'sellers' ? 'Seller Points' : 'Championship Points'}
+                                </th>
+                                <th style={{ width: '150px', textAlign: 'center' }}>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
                               {filteredLeaderboard.map((d, index) => {
-                                const maxPts = leaderboard[0]?.points || 1;
-                                const pct = Math.min(100, Math.round((d.points / maxPts) * 100));
+                                const maxPts = activeAdminLeaderboard[0]?.points || 1;
+                                const ptsVal = adminLeaderboardTab === 'buyers' ? (d.buyerPoints ?? d.points) : adminLeaderboardTab === 'sellers' ? (d.sellerPoints ?? d.points) : (d.totalPoints ?? d.points);
+                                const pct = Math.min(100, Math.round((ptsVal / maxPts) * 100));
+                                const currentRank = adminLeaderboardTab === 'sellers'
+                                  ? (d.sellerRank ?? d.rank)
+                                  : adminLeaderboardTab === 'buyers'
+                                  ? (d.buyerRank ?? d.rank)
+                                  : (d.overallRank ?? d.rank);
                                 return (
-                                  <tr key={d.dealerId} style={{ background: index < 3 ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
-                                    <td>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        {d.rank === 1 ? (
-                                          <span style={{ fontSize: '1.1rem' }}>🥇</span>
-                                        ) : d.rank === 2 ? (
-                                          <span style={{ fontSize: '1.1rem' }}>🥈</span>
-                                        ) : d.rank === 3 ? (
-                                          <span style={{ fontSize: '1.1rem' }}>🥉</span>
+                                  <tr key={`${adminLeaderboardTab}-${d.dealerId}-${index}`} style={{ background: index < 3 ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
+                                    {/* Rank */}
+                                    <td style={{ textAlign: 'center' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                        {currentRank === 1 ? (
+                                          <span style={{ fontSize: '1.2rem' }}>🥇</span>
+                                        ) : currentRank === 2 ? (
+                                          <span style={{ fontSize: '1.2rem' }}>🥈</span>
+                                        ) : currentRank === 3 ? (
+                                          <span style={{ fontSize: '1.2rem' }}>🥉</span>
                                         ) : (
                                           <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                            #{d.rank}
+                                            #{currentRank}
                                           </span>
                                         )}
                                       </div>
                                     </td>
+
+                                    {/* TVS Customer ID */}
+                                    <td>
+                                      <span className="customer-id-pill" title={`TVS Customer ID: ${d.customerId || d.externalId}`}>
+                                        <span>{d.customerId || d.externalId}</span>
+                                        <button
+                                          type="button"
+                                          className="copy-id-btn"
+                                          onClick={(e) => copyCustomerId(d.customerId || d.externalId, e)}
+                                          title="Copy Customer ID"
+                                        >
+                                          {copiedCustomerId === (d.customerId || d.externalId) ? (
+                                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                          ) : (
+                                            <Copy className="w-3.5 h-3.5" />
+                                          )}
+                                        </button>
+                                      </span>
+                                    </td>
+
+                                    {/* Dealership Name (Unmasked) & External ID */}
                                     <td>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                        <span style={{
-                                          fontWeight: 700,
-                                          fontSize: '0.88rem',
-                                          color: 'var(--text-primary)',
-                                          letterSpacing: '-0.01em'
-                                        }}>
-                                          {d.dealerName}
-                                        </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                          <span style={{
+                                            fontWeight: 700,
+                                            fontSize: '0.88rem',
+                                            color: 'var(--text-primary)',
+                                            letterSpacing: '-0.01em'
+                                          }}>
+                                            {d.realName || d.dealerName}
+                                          </span>
+                                          {currentRank <= 3 && (
+                                            <span style={{
+                                              fontSize: '0.62rem',
+                                              fontWeight: 800,
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              background: currentRank === 1 ? 'rgba(245, 158, 11, 0.15)' : currentRank === 2 ? 'rgba(100, 116, 139, 0.15)' : 'rgba(217, 119, 6, 0.15)',
+                                              color: currentRank === 1 ? 'var(--accent-amber)' : currentRank === 2 ? 'var(--text-secondary)' : '#d97706',
+                                              border: `1px solid ${currentRank === 1 ? 'rgba(245, 158, 11, 0.4)' : currentRank === 2 ? 'rgba(100, 116, 139, 0.4)' : 'rgba(217, 119, 6, 0.4)'}`
+                                            }}>
+                                              {currentRank === 1 ? 'GOLD' : currentRank === 2 ? 'SILVER' : 'BRONZE'}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+                                            Code: {d.externalId}
+                                          </span>
+                                          {d.category && <span>• {d.category}</span>}
+                                        </div>
                                       </div>
                                     </td>
+
+                                    {/* City */}
+                                    <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                      {d.city || 'Tamil Nadu'}
+                                    </td>
+
+                                    {/* Telemetry / Performance Stats */}
                                     <td>
-                                      {d.category === 'OEM Dealer' ? (
-                                        <span style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          padding: '2px 8px',
-                                          borderRadius: '999px',
-                                          fontSize: '0.72rem',
-                                          fontWeight: 700,
-                                          background: 'rgba(16, 185, 129, 0.15)',
-                                          color: '#34d399',
-                                          border: '1px solid rgba(16, 185, 129, 0.35)',
-                                          whiteSpace: 'nowrap'
-                                        }}>
-                                          🏢 OEM • Seller
+                                      {adminLeaderboardTab === 'buyers' ? (
+                                        <span className="activity-telemetry-badge">
+                                          <strong style={{ color: 'var(--accent-emerald)' }}>{d.buysCount || 0}</strong> Won • {d.bidsCount || 0} Bids
                                         </span>
-                                      ) : d.category === 'Used Car Dealer' ? (
-                                        <span style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          padding: '2px 8px',
-                                          borderRadius: '999px',
-                                          fontSize: '0.72rem',
-                                          fontWeight: 700,
-                                          background: 'rgba(56, 189, 248, 0.15)',
-                                          color: '#38bdf8',
-                                          border: '1px solid rgba(56, 189, 248, 0.35)',
-                                          whiteSpace: 'nowrap'
-                                        }}>
-                                          🚗 Used Car • Buyer
+                                      ) : adminLeaderboardTab === 'sellers' ? (
+                                        <span className="activity-telemetry-badge">
+                                          <strong style={{ color: 'var(--accent-amber)' }}>{d.salesCount || 0}</strong> Sold • {d.listingsCount || 0} Listed
                                         </span>
                                       ) : (
-                                        <span style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          padding: '2px 8px',
-                                          borderRadius: '999px',
-                                          fontSize: '0.72rem',
-                                          fontWeight: 600,
-                                          background: 'rgba(148, 163, 184, 0.15)',
-                                          color: '#94a3b8',
-                                          border: '1px solid rgba(148, 163, 184, 0.3)',
-                                          whiteSpace: 'nowrap'
-                                        }}>
-                                          {d.category || 'Other'}
+                                        <span className="activity-telemetry-badge">
+                                          Role: <strong style={{ color: 'var(--text-primary)' }}>{d.role || (d.category === 'OEM Dealer' ? 'Seller' : 'Buyer')}</strong>
                                         </span>
                                       )}
                                     </td>
-                                    <td>
-                                      <span style={{
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: '0.8rem',
-                                        color: 'var(--text-secondary)',
-                                        background: 'rgba(255, 255, 255, 0.04)',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        border: '1px solid var(--border-subtle)'
-                                      }}>
-                                        {d.externalId}
-                                      </span>
-                                    </td>
-                                    <td style={{ fontSize: '0.85rem' }}>
-                                      {d.city}
-                                    </td>
-                                    <td>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+
+                                    {/* Championship Points */}
+                                    <td style={{ textAlign: 'right' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                                         <span style={{
                                           fontFamily: 'var(--font-mono)',
                                           fontWeight: 800,
                                           fontSize: '0.95rem',
-                                          color: 'var(--accent-cyan)'
+                                          color: adminLeaderboardTab === 'buyers' ? 'var(--accent-emerald)' : adminLeaderboardTab === 'sellers' ? 'var(--accent-amber)' : 'var(--accent-cyan)'
                                         }}>
-                                          {d.points.toLocaleString()} PTS
+                                          {ptsVal.toLocaleString()} PTS
                                         </span>
                                         <div style={{
-                                          width: '100%',
+                                          width: '100px',
                                           height: '4px',
-                                          background: 'rgba(255, 255, 255, 0.08)',
+                                          background: 'var(--border-subtle)',
                                           borderRadius: '2px',
                                           overflow: 'hidden'
                                         }}>
                                           <div style={{
                                             width: `${pct}%`,
                                             height: '100%',
-                                            background: index === 0 ? '#f59e0b' : index === 1 ? '#94a3b8' : index === 2 ? '#d97706' : 'var(--accent-cyan)',
+                                            background: adminLeaderboardTab === 'buyers' ? '#10b981' : adminLeaderboardTab === 'sellers' ? '#f59e0b' : (index === 0 ? '#f59e0b' : index === 1 ? '#94a3b8' : index === 2 ? '#d97706' : 'var(--accent-cyan)'),
                                             borderRadius: '2px'
                                           }} />
                                         </div>
+                                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                          {adminLeaderboardTab === 'buyers' ? 'Buyer Score' : adminLeaderboardTab === 'sellers' ? 'Seller Score' : 'Total Score'}
+                                        </span>
                                       </div>
                                     </td>
-                                    <td>
-                                      <div style={{ display: 'flex', gap: '6px' }}>
+
+                                    {/* Actions */}
+                                    <td style={{ textAlign: 'center' }}>
+                                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                                         <button
                                           className="btn btn-ghost btn-sm"
-                                          style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                          style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                           onClick={() => loadDealerDetail(d.dealerId)}
+                                          disabled={inspectingDealerId === d.dealerId}
                                           title="Inspect dealership profile and complete activity stream"
                                         >
-                                          Inspect
+                                          {inspectingDealerId === d.dealerId ? (
+                                            <>
+                                              <span style={{ width: '10px', height: '10px', border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }} />
+                                              <span>Loading...</span>
+                                            </>
+                                          ) : (
+                                            'Inspect'
+                                          )}
                                         </button>
                                         <button
                                           className="btn btn-sm"
@@ -2535,7 +2787,7 @@ export default function AdminPage() {
                                             color: 'var(--tvs-blue)',
                                             border: '1px solid #c8d7ea'
                                           }}
-                                          onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.dealerName })}
+                                          onClick={() => setAdjustModal({ dealerId: d.dealerId, dealerName: d.realName || d.dealerName })}
                                           title="Manual points correction"
                                         >
                                           Adjust
@@ -3799,6 +4051,8 @@ export default function AdminPage() {
                             <tr>
                               <th>Time</th>
                               <th>Dealer Name</th>
+                              <th>Buyer Name</th>
+                              <th>Seller Name</th>
                               <th>External ID / City</th>
                               <th>Interaction</th>
                               <th>Vehicle & Bid Details</th>
@@ -3829,6 +4083,12 @@ export default function AdminPage() {
                                 </td>
                                 <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                                   {act.dealerName}
+                                </td>
+                                <td style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {act.buyerName || (act.activityType === 'BUY' || act.activityType === 'BID_PLACED' ? act.dealerName : '—')}
+                                </td>
+                                <td style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {act.sellerName || (act.activityType === 'SELL' || act.activityType === 'SELL_LISTING' ? act.dealerName : (act.metadata?.sellerName || act.metadata?.customerName || '—'))}
                                 </td>
                                 <td style={{ fontSize: '0.8rem' }}>
                                   <span style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>{act.externalDealerId}</span>
@@ -3942,7 +4202,7 @@ export default function AdminPage() {
 
                             {filteredLiveActivities.length === 0 && (
                               <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
+                                <td colSpan={10} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                     <span style={{ fontSize: '1.8rem' }}>{liveLoading ? '🔄' : '📡'}</span>
                                     <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
@@ -4011,8 +4271,7 @@ export default function AdminPage() {
                 )}
 
                 {/* ── 3. Dealers Fleet Management Tab ──────────────────────────────── */}
-                {/* ── 3. Dealers Fleet Management Tab ──────────────────────────────── */}
-                {activeTab === 'dealers' && !selectedDealer && (
+                {activeTab === 'dealers' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {/* Executive Fleet Categorization Metrics Strip */}
                     <div style={{
@@ -4305,10 +4564,19 @@ export default function AdminPage() {
                                   <div style={{ display: 'flex', gap: '6px' }}>
                                     <button 
                                       className="btn btn-primary btn-sm" 
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                       onClick={() => loadDealerDetail(d.id)}
+                                      disabled={inspectingDealerId === d.id}
                                       title="Inspect full activity and vehicle history"
                                     >
-                                      Details
+                                      {inspectingDealerId === d.id ? (
+                                        <>
+                                          <span style={{ width: '10px', height: '10px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#ffffff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }} />
+                                          <span>Loading...</span>
+                                        </>
+                                      ) : (
+                                        'Details'
+                                      )}
                                     </button>
                                     <button 
                                       className="btn btn-ghost btn-sm" 
@@ -4369,151 +4637,6 @@ export default function AdminPage() {
                             Next <ChevronRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Dealer Detail Subview */}
-                {activeTab === 'dealers' && selectedDealer && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDealer(null)}>
-                          ← Back to Directory
-                        </button>
-                        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                          {selectedDealer.displayName}
-                        </h2>
-                        <span className="badge badge-info">{selectedDealer.externalDealerId}</span>
-                        {selectedDealer.category === 'OEM Dealer' ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '3px 10px',
-                            borderRadius: '999px',
-                            background: 'rgba(16, 185, 129, 0.2)',
-                            color: '#34d399',
-                            border: '1px solid rgba(16, 185, 129, 0.45)',
-                            fontSize: '0.74rem',
-                            fontWeight: 800
-                          }}>
-                            🏢 OEM Dealer • Primary Seller
-                          </span>
-                        ) : selectedDealer.category === 'Used Car Dealer' ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '3px 10px',
-                            borderRadius: '999px',
-                            background: 'rgba(56, 189, 248, 0.2)',
-                            color: '#38bdf8',
-                            border: '1px solid rgba(56, 189, 248, 0.45)',
-                            fontSize: '0.74rem',
-                            fontWeight: 800
-                          }}>
-                            🚗 Used Car Dealer • Primary Buyer
-                          </span>
-                        ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '3px 10px',
-                            borderRadius: '999px',
-                            background: 'rgba(148, 163, 184, 0.15)',
-                            color: '#94a3b8',
-                            border: '1px solid rgba(148, 163, 184, 0.3)',
-                            fontSize: '0.74rem',
-                            fontWeight: 600
-                          }}>
-                            🏛️ {selectedDealer.category || 'Corporate / Internal'}
-                          </span>
-                        )}
-                      </div>
-
-                      <button 
-                        className="btn btn-primary btn-sm" 
-                        onClick={() => setAdjustModal({ dealerId: selectedDealer.id, dealerName: selectedDealer.displayName })}
-                      >
-                        ± Adjust Points
-                      </button>
-                    </div>
-
-                    <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                      <div className="admin-stat-card">
-                        <span className="admin-stat-label">Current Standings</span>
-                        <div className="admin-stat-val" style={{ color: 'var(--accent-gold)' }}>
-                          #{selectedDealer.scores[0]?.rank || '-'}
-                        </div>
-                      </div>
-                      <div className="admin-stat-card">
-                        <span className="admin-stat-label">Total Verified Points</span>
-                        <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)' }}>
-                          {selectedDealer.scores[0]?.totalPoints || 0}
-                        </div>
-                      </div>
-                      <div className="admin-stat-card">
-                        <span className="admin-stat-label">Logged Interactions</span>
-                        <div className="admin-stat-val">
-                          {selectedDealer.activities.length}
-                        </div>
-                      </div>
-                      <div className="admin-stat-card">
-                        <span className="admin-stat-label">Dealer Classification</span>
-                        <div className="admin-stat-val" style={{ fontSize: '1.05rem', color: selectedDealer.category === 'OEM Dealer' ? '#34d399' : selectedDealer.category === 'Used Car Dealer' ? '#38bdf8' : 'var(--text-primary)' }}>
-                          {selectedDealer.category || 'Used Car Dealer'}
-                        </div>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          {selectedDealer.category === 'OEM Dealer' ? 'Primary Seller Role' : selectedDealer.category === 'Used Car Dealer' ? 'Primary Buyer Role' : 'Internal Account'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="card">
-                      <div className="card-header">
-                        <h3 className="card-title">Activity Audit Trail</h3>
-                      </div>
-                      <div style={{ overflowX: 'auto' }}>
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Activity Type</th>
-                              <th>Points Awarded</th>
-                              <th>Match Association</th>
-                              <th>Transaction Reference</th>
-                              <th>Timestamp</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedDealer.activities.map(a => (
-                              <tr key={a.id}>
-                                <td>
-                                  <span className={`badge ${
-                                    a.activityType === 'BUY' ? 'badge-info' :
-                                    a.activityType === 'SELL' ? 'badge-success' :
-                                    a.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
-                                    'badge-warning'
-                                  }`}>
-                                    {a.activityType.replace('_', ' ')}
-                                  </span>
-                                </td>
-                                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>
-                                  +{a.points} PTS
-                                </td>
-                                <td>{a.match ? `Match #${a.match.matchNumber}` : 'General Season'}</td>
-                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  {a.externalTransactionId}
-                                </td>
-                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                  {formatDateTimeDDMMYYYY(a.timestamp)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
                       </div>
                     </div>
                   </div>
@@ -5339,6 +5462,16 @@ export default function AdminPage() {
                       <span style={{ margin: '0 6px' }}>•</span>
                       <span>{selectedActivity.city}</span>
                     </div>
+                    {(selectedActivity.buyerName || selectedActivity.sellerName) && (
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '0.78rem' }}>
+                        {selectedActivity.buyerName && selectedActivity.buyerName !== '—' && (
+                          <span><strong style={{ color: 'var(--text-muted)' }}>Buyer:</strong> <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{selectedActivity.buyerName}</span></span>
+                        )}
+                        {selectedActivity.sellerName && selectedActivity.sellerName !== '—' && (
+                          <span><strong style={{ color: 'var(--text-muted)' }}>Seller:</strong> <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{selectedActivity.sellerName}</span></span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -5406,6 +5539,489 @@ export default function AdminPage() {
               <div className="modal-actions" style={{ marginTop: '4px' }}>
                 <button className="btn btn-primary" onClick={() => setSelectedActivity(null)}>
                   Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dealership Telemetry & Profile Inspector Modal ── */}
+      {selectedDealer && (
+        <div
+          className="modal-overlay"
+          onClick={() => setSelectedDealer(null)}
+          style={{
+            zIndex: 1000,
+            padding: '16px',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            background: 'rgba(0, 0, 0, 0.78)',
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            className="modal double-bezel"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '920px',
+              width: '100%',
+              maxHeight: '94vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '6px',
+              boxShadow: '0 24px 64px -8px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.25)',
+            }}
+          >
+            <div
+              className="inner-bezel-core"
+              style={{
+                padding: '24px',
+                overflowY: 'auto',
+                maxHeight: 'calc(94vh - 16px)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px',
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '260px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <span className="pulsing-radar-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} />
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
+                      DEALERSHIP TELEMETRY & AUDIT INSPECTOR
+                    </span>
+                    <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
+                      AUDIT VERIFIED
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                      {selectedDealer.displayName}
+                    </h2>
+                    {(() => {
+                      const sRank = selectedDealer.scores[0]?.sellerRank;
+                      const bRank = selectedDealer.scores[0]?.buyerRank;
+                      const oRank = selectedDealer.scores[0]?.rank ?? 999;
+                      if (sRank && sRank <= 3) {
+                        return (
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: sRank === 1 ? 'rgba(245, 158, 11, 0.25)' : sRank === 2 ? 'rgba(148, 163, 184, 0.25)' : 'rgba(217, 119, 6, 0.25)',
+                            color: sRank === 1 ? '#fbbf24' : sRank === 2 ? '#cbd5e1' : '#f59e0b',
+                            border: `1px solid ${sRank === 1 ? '#f59e0b' : sRank === 2 ? '#94a3b8' : '#d97706'}`,
+                          }}>
+                            {sRank === 1 ? '🏆 #1 SELLER GOLD PODIUM' : sRank === 2 ? '🥈 #2 SELLER SILVER PODIUM' : '🥉 #3 SELLER BRONZE PODIUM'}
+                          </span>
+                        );
+                      }
+                      if (bRank && bRank <= 3) {
+                        return (
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: bRank === 1 ? 'rgba(245, 158, 11, 0.25)' : bRank === 2 ? 'rgba(148, 163, 184, 0.25)' : 'rgba(217, 119, 6, 0.25)',
+                            color: bRank === 1 ? '#fbbf24' : bRank === 2 ? '#cbd5e1' : '#f59e0b',
+                            border: `1px solid ${bRank === 1 ? '#f59e0b' : bRank === 2 ? '#94a3b8' : '#d97706'}`,
+                          }}>
+                            {bRank === 1 ? '🏆 #1 BUYER GOLD PODIUM' : bRank === 2 ? '🥈 #2 BUYER SILVER PODIUM' : '🥉 #3 BUYER BRONZE PODIUM'}
+                          </span>
+                        );
+                      }
+                      if (oRank <= 3) {
+                        return (
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: oRank === 1 ? 'rgba(245, 158, 11, 0.25)' : oRank === 2 ? 'rgba(148, 163, 184, 0.25)' : 'rgba(217, 119, 6, 0.25)',
+                            color: oRank === 1 ? '#fbbf24' : oRank === 2 ? '#cbd5e1' : '#f59e0b',
+                            border: `1px solid ${oRank === 1 ? '#f59e0b' : oRank === 2 ? '#94a3b8' : '#d97706'}`,
+                          }}>
+                            {oRank === 1 ? '🏆 GOLD PODIUM #1' : oRank === 2 ? '🥈 SILVER PODIUM #2' : '🥉 BRONZE PODIUM #3'}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Metadata Chips Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '3px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: 'var(--accent-cyan)',
+                      fontSize: '0.78rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 700,
+                    }}>
+                      <span>ID: {selectedDealer.customerId || selectedDealer.externalDealerId}</span>
+                      <button
+                        type="button"
+                        className="copy-id-btn"
+                        onClick={(e) => copyCustomerId(selectedDealer.customerId || selectedDealer.externalDealerId, e)}
+                        title="Copy Customer ID"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        {copiedCustomerId === (selectedDealer.customerId || selectedDealer.externalDealerId) ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
+                        )}
+                      </button>
+                    </span>
+
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.78rem',
+                      fontFamily: 'var(--font-mono)',
+                    }}>
+                      Code: {selectedDealer.externalDealerId}
+                    </span>
+
+                    {selectedDealer.category === 'OEM Dealer' ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                        fontSize: '0.76rem',
+                        fontWeight: 700
+                      }}>
+                        🏢 OEM Dealer • Seller Role
+                      </span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                        fontSize: '0.76rem',
+                        fontWeight: 700
+                      }}>
+                        🚗 Used Car Dealer • Buyer Role
+                      </span>
+                    )}
+
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.78rem',
+                    }}>
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      {selectedDealer.city || 'Tamil Nadu'}
+                    </span>
+
+                    {selectedDealer.phone && (
+                      <a
+                        href={`tel:${selectedDealer.phone}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '3px 10px',
+                          borderRadius: '8px',
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          color: '#34d399',
+                          fontSize: '0.78rem',
+                          textDecoration: 'none',
+                          fontWeight: 600
+                        }}
+                        title="Click to dial"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>{selectedDealer.phone}</span>
+                      </a>
+                    )}
+
+                    {selectedDealer.contactName && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.78rem',
+                      }}>
+                        <Users className="w-3.5 h-3.5 text-purple-400" />
+                        {selectedDealer.contactName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedDealer(null)}
+                  style={{
+                    padding: '8px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-muted)'
+                  }}
+                  title="Close Inspector (Esc)"
+                >
+                  <X className="w-5 h-5 hover:text-white" />
+                </button>
+              </div>
+
+              {/* Bento Metrics Strip */}
+              <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
+                <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid var(--accent-gold)' }}>
+                  <span className="admin-stat-label">National Overall Rank</span>
+                  <div className="admin-stat-val" style={{ color: 'var(--accent-gold)', fontSize: '1.6rem' }}>
+                    #{selectedDealer.scores[0]?.overallRank || selectedDealer.scores[0]?.rank || '-'}
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {selectedDealer.scores[0]?.sellerRank ? `Seller Rank: #${selectedDealer.scores[0].sellerRank}` : selectedDealer.scores[0]?.buyerRank ? `Buyer Rank: #${selectedDealer.scores[0].buyerRank}` : 'Official Standings'}
+                  </span>
+                </div>
+
+                <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid var(--accent-cyan)' }}>
+                  <span className="admin-stat-label">Total Verified Points</span>
+                  <div className="admin-stat-val" style={{ color: 'var(--accent-cyan)', fontSize: '1.6rem' }}>
+                    {(selectedDealer.scores[0]?.totalPoints || 0).toLocaleString()} PTS
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Accumulated Score</span>
+                </div>
+
+                <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid #38bdf8' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="admin-stat-label">Buyer Telemetry</span>
+                    {selectedDealer.scores[0]?.buyerRank ? (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8' }}>
+                        Rank #{selectedDealer.scores[0].buyerRank}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="admin-stat-val" style={{ color: '#38bdf8', fontSize: '1.25rem' }}>
+                    {selectedDealer.scores[0]?.buysCount || 0} Won • {selectedDealer.scores[0]?.bidsCount || 0} Bids
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Buyer Score: <strong>{selectedDealer.scores[0]?.buyerPoints ?? 0} PTS</strong>
+                  </span>
+                </div>
+
+                <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid #34d399' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="admin-stat-label">Seller Telemetry</span>
+                    {selectedDealer.scores[0]?.sellerRank ? (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: 'rgba(52, 211, 153, 0.2)', color: '#34d399' }}>
+                        Rank #{selectedDealer.scores[0].sellerRank}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="admin-stat-val" style={{ color: '#34d399', fontSize: '1.25rem' }}>
+                    {selectedDealer.scores[0]?.salesCount || 0} Sold • {selectedDealer.scores[0]?.listingsCount || 0} Listed
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Seller Score: <strong>{selectedDealer.scores[0]?.sellerPoints ?? 0} PTS</strong>
+                  </span>
+                </div>
+
+                <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid #a855f7' }}>
+                  <span className="admin-stat-label">Activity Stream</span>
+                  <div className="admin-stat-val" style={{ color: '#c084fc', fontSize: '1.6rem' }}>
+                    {selectedDealer.activities.length}
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Logged Events</span>
+                </div>
+              </div>
+
+              {/* Actions & Filters Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-hairline)', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Filter Activities:</span>
+                  <button
+                    className={`btn btn-xs ${inspectorActivityFilter === 'ALL' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setInspectorActivityFilter('ALL')}
+                    style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                  >
+                    All ({selectedDealer.activities.length})
+                  </button>
+                  <button
+                    className={`btn btn-xs ${inspectorActivityFilter === 'SELL_LISTING' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setInspectorActivityFilter('SELL_LISTING')}
+                    style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                  >
+                    Listings (+5 PTS)
+                  </button>
+                  <button
+                    className={`btn btn-xs ${inspectorActivityFilter === 'SELL_COMMISSION' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setInspectorActivityFilter('SELL_COMMISSION')}
+                    style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                  >
+                    Commissions (+5 PTS)
+                  </button>
+                  <button
+                    className={`btn btn-xs ${inspectorActivityFilter === 'BUY_BID' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setInspectorActivityFilter('BUY_BID')}
+                    style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                  >
+                    Bids Placed (+1 PT)
+                  </button>
+                  <button
+                    className={`btn btn-xs ${inspectorActivityFilter === 'BUY_MATCH_DAY' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setInspectorActivityFilter('BUY_MATCH_DAY')}
+                    style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                  >
+                    Attendance (+1 PT)
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    className="btn btn-sm"
+                    style={{
+                      background: 'rgba(54, 78, 162, 0.15)',
+                      color: 'var(--tvs-blue)',
+                      border: '1px solid #c8d7ea',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    onClick={() => setAdjustModal({ dealerId: selectedDealer.id, dealerName: selectedDealer.displayName })}
+                  >
+                    <span>± Adjust Points</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Activity Audit Trail Table */}
+              <div style={{ overflowX: 'auto', maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: '12px' }}>
+                <table className="admin-table" style={{ margin: 0 }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 2 }}>
+                    <tr>
+                      <th>Activity Type</th>
+                      <th>Points</th>
+                      <th>Auction / Match</th>
+                      <th>Reference / Vehicle Details</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDealer.activities
+                      .filter(a => {
+                        if (inspectorActivityFilter === 'ALL') return true;
+                        if (inspectorActivityFilter === 'SELL_LISTING') return a.activityType === 'SELL_LISTING';
+                        if (inspectorActivityFilter === 'SELL_COMMISSION') return a.activityType === 'SELL_COMMISSION';
+                        if (inspectorActivityFilter === 'BUY_BID') return a.activityType === 'BUY_BID' || a.activityType === 'BID_PLACED';
+                        if (inspectorActivityFilter === 'BUY_MATCH_DAY') return a.activityType === 'BUY_MATCH_DAY' || a.activityType === 'MATCH_PARTICIPATION';
+                        return a.activityType === inspectorActivityFilter;
+                      })
+                      .map(a => {
+                        const meta = a.metadata || {};
+                        return (
+                          <tr key={a.id}>
+                            <td>
+                              <span className={`badge ${
+                                a.activityType === 'SELL_LISTING' ? 'badge-info' :
+                                a.activityType === 'SELL_COMMISSION' ? 'badge-success' :
+                                a.activityType === 'BUY_BID' || a.activityType === 'BID_PLACED' ? 'badge-info' :
+                                a.activityType === 'BUY_MATCH_DAY' || a.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
+                                'badge-warning'
+                              }`} style={{ fontSize: '0.72rem' }}>
+                                {a.activityType.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: a.points > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>
+                              +{a.points} PTS
+                            </td>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {a.match?.auctionId ? `Auction #${a.match.auctionId} (Match ${a.match.matchNumber})` : a.match ? `Match #${a.match.matchNumber}` : 'General Season'}
+                            </td>
+                            <td style={{ fontSize: '0.8rem' }}>
+                              {meta.vehicleName ? (
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <strong style={{ color: 'var(--text-primary)' }}>{meta.vehicleName}</strong>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    {meta.fuelType ? `${meta.fuelType} • ` : ''}{meta.yearOfMfg ? `${meta.yearOfMfg} • ` : ''}Ref: {a.externalTransactionId}
+                                  </span>
+                                </div>
+                              ) : meta.bidAmount ? (
+                                <div>
+                                  <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>₹{Number(meta.bidAmount).toLocaleString('en-IN')} Bid</span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '6px' }}>Ref: {a.externalTransactionId}</span>
+                                </div>
+                              ) : (
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  {a.externalTransactionId || '—'}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {formatDateTimeDDMMYYYY(a.timestamp)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {selectedDealer.activities.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                          No recorded activities for this dealership in the current campaign.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px' }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setSelectedDealer(null)}
+                >
+                  Close
                 </button>
               </div>
             </div>

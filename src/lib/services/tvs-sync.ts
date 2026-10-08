@@ -321,6 +321,15 @@ export async function syncAuctionActivities(
       else searchIds.push(id.replace('USR-', ''));
     }
 
+    for (const act of activities) {
+      const meta = (act.metadata || {}) as Record<string, unknown>;
+      if (meta.sellerCustomerId) searchIds.push(String(meta.sellerCustomerId));
+      if (meta.sellerCustomerCode) searchIds.push(String(meta.sellerCustomerCode));
+      if (meta.winnerId) searchIds.push(String(meta.winnerId));
+      if (meta.buyerWinnerId) searchIds.push(String(meta.buyerWinnerId));
+      if (meta.bidderId) searchIds.push(String(meta.bidderId));
+    }
+
     const sellerNames = activities
       .filter(a => a.activityType === 'SELL' || a.activityType === 'SELL_LISTING')
       .map(a => {
@@ -344,8 +353,6 @@ export async function syncAuctionActivities(
       dealerMap.set(d.displayName, d.id);
       if (d.externalDealerId.startsWith('USR-')) {
         dealerMap.set(d.externalDealerId.replace('USR-', ''), d.id);
-      } else {
-        dealerMap.set(`USR-${d.externalDealerId}`, d.id);
       }
     }
 
@@ -372,28 +379,90 @@ export async function syncAuctionActivities(
       )
     );
 
+    const existingVehicleBids = await prisma.dealerActivity.findMany({
+      where: {
+        campaignId,
+        activityType: 'BID_PLACED',
+        points: { gt: 0 },
+        ...(match?.id ? { matchId: match.id } : {}),
+      },
+      select: {
+        dealerId: true,
+        metadata: true,
+        externalTransactionId: true,
+      },
+    });
+
+    const vehicleBidSet = new Set<string>();
+    for (const evb of existingVehicleBids) {
+      let vId: string | number | undefined;
+      try {
+        if (evb.metadata) {
+          const m = JSON.parse(evb.metadata);
+          vId = m.vehicleId;
+        }
+      } catch {}
+      if (!vId && evb.externalTransactionId) {
+        const m = evb.externalTransactionId.match(/^(?:BID|PREBID)-[^-]+-([^-]+)-/);
+        if (m) vId = m[1];
+      }
+      if (vId != null) {
+        vehicleBidSet.add(`${evb.dealerId}:${vId}`);
+      }
+    }
+
     for (const act of activities) {
       const meta = (act.metadata || {}) as Record<string, unknown>;
-      const rawSellerName = meta.sellerName || meta.customerName;
-      const sName = typeof rawSellerName === 'string' ? rawSellerName : undefined;
-      let dealerId = dealerMap.get(act.dealerId) || (sName ? dealerMap.get(sName) : undefined);
+      const isSellingActivity = act.activityType === 'SELL' ||
+                                act.activityType === 'SELL_LISTING' ||
+                                act.activityType === 'SELL_COMMISSION';
+
+      let dealerId: number | undefined;
+
+      if (isSellingActivity) {
+        const rawSellerName = meta.sellerName || meta.customerName;
+        const sName = typeof rawSellerName === 'string' ? rawSellerName : undefined;
+        dealerId = (sName ? dealerMap.get(sName) : undefined) ||
+          dealerMap.get(act.dealerId) ||
+          (meta.sellerCustomerId ? dealerMap.get(String(meta.sellerCustomerId)) : undefined) ||
+          (meta.sellerCustomerCode ? dealerMap.get(String(meta.sellerCustomerCode)) : undefined);
+      } else {
+        // Buying / Bidder activities (BUY, BID_PLACED, MATCH_PARTICIPATION)
+        // Must resolve strictly to the buyer / bidder, never to the vehicle's consigning seller!
+        dealerId = dealerMap.get(act.dealerId) ||
+          (meta.winnerId ? dealerMap.get(String(meta.winnerId)) : undefined) ||
+          (meta.buyerWinnerId ? dealerMap.get(String(meta.buyerWinnerId)) : undefined) ||
+          (meta.bidderId ? dealerMap.get(String(meta.bidderId)) : undefined) ||
+          (act.dealerId.startsWith('USR-')
+            ? dealerMap.get(act.dealerId.replace('USR-', ''))
+            : dealerMap.get(`USR-${act.dealerId}`));
+      }
 
       // If dealer is not in local DB (e.g. newly registered on TVS today), auto-provision them
       if (!dealerId) {
         try {
           const profile = await provider.getDealerProfile(act.dealerId, token);
-          const metaName = meta.sellerName || meta.customerName || meta.companyName || meta.dealerName;
-          const displayName: string = (profile?.dealerName && !profile.dealerName.startsWith('Dealer '))
-            ? profile.dealerName
-            : (metaName ? String(metaName) : (profile?.dealerName || `Dealer ${act.dealerId}`));
+          let displayName: string;
+          if (isSellingActivity) {
+            const rawSellerName = meta.sellerName || meta.customerName;
+            const metaName = rawSellerName || meta.companyName || meta.dealerName;
+            displayName = (profile?.dealerName && !profile.dealerName.startsWith('Dealer '))
+              ? profile.dealerName
+              : (metaName ? String(metaName) : (profile?.dealerName || `Dealer ${act.dealerId}`));
+          } else {
+            const metaName = meta.bidderName || meta.buyerName || meta.companyName || meta.dealerName;
+            displayName = (profile?.dealerName && !profile.dealerName.startsWith('Dealer '))
+              ? profile.dealerName
+              : (metaName ? String(metaName) : (profile?.dealerName || `Dealer ${act.dealerId}`));
+          }
           const maskedName: string = displayName.trim().charAt(0).toUpperCase() + '*****';
           const newDealer = await prisma.dealer.create({
             data: {
               externalDealerId: act.dealerId,
               displayName,
               maskedName,
-              city: profile?.city || (meta.sellerCity ? String(meta.sellerCity) : (meta.location ? String(meta.location) : 'Tamil Nadu')),
-              phone: profile?.phone || (meta.sellerPhone ? String(meta.sellerPhone) : null),
+              city: profile?.city || (isSellingActivity && meta.sellerCity ? String(meta.sellerCity) : (meta.location ? String(meta.location) : 'Tamil Nadu')),
+              phone: profile?.phone || (isSellingActivity && meta.sellerPhone ? String(meta.sellerPhone) : null),
               status: 'ACTIVE',
             },
           });
@@ -408,10 +477,7 @@ export async function syncAuctionActivities(
         } catch {
           const existing = await prisma.dealer.findFirst({
             where: {
-              OR: [
-                { externalDealerId: act.dealerId },
-                ...(sName ? [{ displayName: sName }] : []),
-              ],
+              externalDealerId: act.dealerId,
             },
           });
           if (existing) {
@@ -426,6 +492,13 @@ export async function syncAuctionActivities(
 
       const dedupeKey = `${dealerId}:${act.activityType}:${act.transactionId}`;
       if (existingSet.has(dedupeKey)) continue;
+
+      // Track vehicle bids per car basis
+      const vId = meta.vehicleId || act.vehicleId;
+      if (act.activityType === 'BID_PLACED' && vId != null) {
+        const vKey = `${dealerId}:${vId}`;
+        vehicleBidSet.add(vKey);
+      }
 
       const res = await recordActivity({
         dealerId,
@@ -455,6 +528,27 @@ export async function syncAuctionActivities(
         if (participation.success && !participation.duplicate) {
           processed++;
           pointsAwarded += participation.points;
+        }
+      }
+    }
+
+    // Check for ALL_MATCHES_BONUS for active participating dealers
+    const activeDealerIds = [...new Set(Array.from(dealerMap.values()))];
+    for (const dId of activeDealerIds) {
+      const qualifiesBonus = await checkAllMatchesBonus(dId, campaignId);
+      if (qualifiesBonus) {
+        const bonusResult = await recordActivity({
+          dealerId: dId,
+          campaignId,
+          matchId: null,
+          activityType: 'ALL_MATCHES_BONUS',
+          externalTransactionId: `BONUS-${campaignId}-${dId}`,
+          metadata: { campaignId, dealerId: dId, bonusType: 'ALL_MATCHES_BONUS' },
+        });
+
+        if (bonusResult.success && !bonusResult.duplicate) {
+          processed++;
+          pointsAwarded += bonusResult.points;
         }
       }
     }
