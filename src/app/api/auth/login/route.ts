@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       status: 500,
     });
     return NextResponse.json(
-      { error: 'Login failed' },
+      { error: process.env.NODE_ENV !== 'production' && error instanceof Error ? error.message : 'Login failed' },
       { status: 500 }
     );
   }
