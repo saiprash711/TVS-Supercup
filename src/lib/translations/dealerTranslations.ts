@@ -1070,8 +1070,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'டீலர் ஐடி, மொபைல் அல்லது மின்னஞ்சல்',
   },
   'login.idPlaceholder': {
-    en: 'e.g. murali@tvs.in or 8328416428',
-    ta: 'எ.கா. murali@tvs.in அல்லது 8328416428',
+    en: 'Enter Dealer ID, Mobile, or Email',
+    ta: 'டீலர் ஐடி, மொபைல் அல்லது மின்னஞ்சலை உள்ளிடவும்',
   },
   'login.pwdLabel': {
     en: 'Password',

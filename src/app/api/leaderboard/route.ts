@@ -36,6 +36,14 @@ export async function GET(request: Request) {
     const admin = await isAdmin();
     const currentDealer = await getCurrentDealer();
 
+    // Leaderboard data is restricted to authenticated users only
+    if (!admin && !currentDealer) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     // In admin login: full unmasked dealer names are visible!
     // For dealer specific login: competitor dealer names are masked.
     const shouldUnmask = admin && searchParams.get('unmask') !== 'false';

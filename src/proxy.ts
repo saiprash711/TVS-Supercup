@@ -29,6 +29,7 @@ export function proxy(request: NextRequest) {
     host.startsWith('supercup-admin.');
 
   const hasDealerSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const hasAdminSession = Boolean(request.cookies.get('supercup_admin')?.value);
 
   // 2. Admin Subdomain Routing (e.g., https://supercup-admin.tvs.in)
   if (isAdminSubdomain) {
@@ -48,8 +49,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If unauthenticated user attempts to visit /dashboard or /dealer, redirect to /
-  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/dealer')) && !hasDealerSession) {
+  // If unauthenticated user attempts to visit /dashboard, /dealer, or /leaderboard, redirect to /
+  if (
+    (pathname.startsWith('/dashboard') || pathname.startsWith('/dealer') || pathname.startsWith('/leaderboard')) &&
+    !hasDealerSession &&
+    !hasAdminSession
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);

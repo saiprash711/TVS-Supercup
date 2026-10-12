@@ -239,15 +239,6 @@ function LoginContent() {
               </div>
             </div>
           </div>
-
-          {/* Guest Link / Quick Leaderboard Jump */}
-          <div className="showcase-footer-pill">
-            <span>{t('login.inspectPrompt', 'Want to inspect active rankings?')}</span>
-            <Link href="/leaderboard" className="showcase-footer-link">
-              <span>{t('login.viewLeaderboard', 'View Public Leaderboard')}</span>
-              <ArrowRight size={14} />
-            </Link>
-          </div>
         </div>
 
         {/* Right Column: Executive Authentication Console */}
@@ -289,7 +280,7 @@ function LoginContent() {
                       id="dealerId"
                       type="text"
                       className="form-input"
-                      placeholder={t('login.idPlaceholder', 'e.g. murali@tvs.in or 8328416428')}
+                      placeholder={t('login.idPlaceholder', 'Enter Dealer ID, Mobile, or Email')}
                       value={dealerId}
                       onChange={(e) => {
                         setDealerId(e.target.value);
