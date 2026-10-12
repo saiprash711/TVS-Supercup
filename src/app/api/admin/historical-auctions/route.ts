@@ -395,19 +395,13 @@ export async function GET(request: NextRequest) {
         if (bId) winnerIds.add(String(bId));
       }
 
-      const dbDealers = winnerIds.size > 0 ? await prisma.dealer.findMany({
-        where: {
-          OR: [
-            { externalDealerId: { in: Array.from(winnerIds) } },
-            { id: { in: Array.from(winnerIds).map(n => parseInt(n, 10)).filter(n => !isNaN(n)) } },
-          ],
-        },
+      const dbDealers = await prisma.dealer.findMany({
         select: { id: true, externalDealerId: true, displayName: true, city: true, phone: true },
-      }) : [];
+      });
 
       const dbDealerMap = new Map<string, any>();
       for (const d of dbDealers) {
-        dbDealerMap.set(String(d.externalDealerId), d);
+        if (d.externalDealerId) dbDealerMap.set(String(d.externalDealerId), d);
         dbDealerMap.set(String(d.id), d);
       }
 
@@ -595,25 +589,14 @@ export async function GET(request: NextRequest) {
 
         const allRawVehicles = cachedAllVehicles || [];
 
-        // 3. Resolve all unique buyer/winner IDs against DB dealers
-        const winnerIds = new Set<string>();
-        for (const v of allRawVehicles) {
-          if (v.winner_id != null) winnerIds.add(String(v.winner_id));
-        }
-
-        const dbDealers = winnerIds.size > 0 ? await prisma.dealer.findMany({
-          where: {
-            OR: [
-              { externalDealerId: { in: Array.from(winnerIds) } },
-              { id: { in: Array.from(winnerIds).map(n => parseInt(n, 10)).filter(n => !isNaN(n)) } },
-            ],
-          },
+        // 3. Resolve all unique buyer/winner IDs against DB dealers safely without hitting SQLite parameter limit
+        const dbDealers = await prisma.dealer.findMany({
           select: { id: true, externalDealerId: true, displayName: true, city: true, phone: true },
-        }) : [];
+        });
 
         const dbDealerMap = new Map<string, any>();
         for (const d of dbDealers) {
-          dbDealerMap.set(String(d.externalDealerId), d);
+          if (d.externalDealerId) dbDealerMap.set(String(d.externalDealerId), d);
           dbDealerMap.set(String(d.id), d);
         }
 
@@ -871,19 +854,13 @@ export async function GET(request: NextRequest) {
         if (bId) winnerIds.add(String(bId));
       }
 
-      const dbDealers = winnerIds.size > 0 ? await prisma.dealer.findMany({
-        where: {
-          OR: [
-            { externalDealerId: { in: Array.from(winnerIds) } },
-            { id: { in: Array.from(winnerIds).map(n => parseInt(n, 10)).filter(n => !isNaN(n)) } },
-          ],
-        },
+      const dbDealers = await prisma.dealer.findMany({
         select: { id: true, externalDealerId: true, displayName: true, city: true, phone: true },
-      }) : [];
+      });
 
       const dbDealerMap = new Map<string, any>();
       for (const d of dbDealers) {
-        dbDealerMap.set(String(d.externalDealerId), d);
+        if (d.externalDealerId) dbDealerMap.set(String(d.externalDealerId), d);
         dbDealerMap.set(String(d.id), d);
       }
 

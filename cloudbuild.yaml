@@ -1,0 +1,62 @@
+# ==============================================================================
+# TVS Super Cup 2026-27 — Google Cloud Build Pipeline
+# Target: TVS Certified GCP Cloud (Cloud Run + Cloud SQL + Artifact Registry)
+# ==============================================================================
+
+steps:
+  # 1. Build the production Docker image with standalone Next.js output
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup:$COMMIT_SHA'
+      - '-t'
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup:latest'
+      - '.'
+    id: 'build-image'
+
+  # 2. Push image to Google Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup'
+    id: 'push-image'
+
+  # 3. Deploy container to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image=$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--min-instances=1'
+      - '--max-instances=10'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--concurrency=80'
+      - '--timeout=60s'
+      - '--add-cloudsql-instances=$_CLOUDSQL_INSTANCE'
+      - '--vpc-connector=$_VPC_CONNECTOR'
+      - '--set-secrets=DATABASE_URL=supercup-database-url:latest,ADMIN_PASSWORD=supercup-admin-password:latest,INTERNAL_API_KEY=supercup-internal-key:latest,SESSION_SECRET=supercup-session-secret:latest'
+      - '--set-env-vars=NODE_ENV=production,AUDIT_ALL_REQUESTS=true,STRICT_ADMIN_SUBDOMAIN=true'
+    id: 'deploy-cloud-run'
+
+substitutions:
+  _REGION: 'asia-south1' # Mumbai region (TVS certified datacenter location)
+  _AR_HOSTNAME: 'asia-south1-docker.pkg.dev'
+  _AR_REPO: 'tvs-apps'
+  _SERVICE_NAME: 'tvs-supercup'
+  _CLOUDSQL_INSTANCE: '$PROJECT_ID:asia-south1:tvs-supercup-db'
+  _VPC_CONNECTOR: 'projects/$PROJECT_ID/locations/asia-south1/connectors/tvs-vpc-connector'
+
+images:
+  - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup:$COMMIT_SHA'
+  - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/supercup:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

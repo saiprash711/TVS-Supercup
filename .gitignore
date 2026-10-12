@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (MUST NOT be committed — contain secrets)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,5 +41,29 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*
+# ─── Security: Sensitive Data Files ─────────────────────────────────────
+# Database files (contain customer PII)
+prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
+prisma/*.db
+*.db
+*.db-shm
+*.db-wal
+
+# Dealer data files (contain PII: names, phone numbers, addresses)
+Dealers_Phone_Numbers.*
+TVS_Dealers_Phone_Directory_Complete.*
+TVS_Dealers_Phone_List.*
+dealers.xlsx
+Dealers
+
+# Password and credential files
+Password
+
+# Generated handover documents (may contain credentials/architecture details)
+TVS_Super_Cup_IT_Technical_Handover_Guide.docx
+
+# Export results (may contain customer data)
+SuperCup Results/
+

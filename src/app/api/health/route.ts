@@ -1,24 +1,47 @@
+/**
+ * GET /api/health
+ *
+ * Health check endpoint.
+ *
+ * Security Controls:
+ * - Public access: Returns only status ('ok' or 'error')
+ * - Admin access: Returns full diagnostics (file paths, DB details)
+ * - Prevents information disclosure to unauthenticated users
+ */
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const tmpPath = path.join(os.tmpdir() || '/tmp', 'supercup-serverless.db');
-  const tmpExists = fs.existsSync(tmpPath);
-  const tmpSize = tmpExists ? fs.statSync(tmpPath).size : 0;
-
-  const cwdDb = path.join(process.cwd(), 'prisma/dev.db');
-  const cwdExists = fs.existsSync(cwdDb);
-  const cwdSize = cwdExists ? fs.statSync(cwdDb).size : 0;
-
   try {
     const campaign = await getCurrentSuperCupCampaign();
     const dealerCount = await prisma.dealer.count();
+    const admin = await isAdmin();
+
+    // Public health check: minimal information only
+    if (!admin) {
+      return NextResponse.json({
+        status: 'ok',
+        database: { connected: true },
+        campaignActive: Boolean(campaign),
+      });
+    }
+
+    // Admin health check: full diagnostics
+    const tmpPath = path.join(os.tmpdir() || '/tmp', 'supercup-serverless.db');
+    const tmpExists = fs.existsSync(tmpPath);
+    const tmpSize = tmpExists ? fs.statSync(tmpPath).size : 0;
+
+    const cwdDb = path.join(process.cwd(), 'prisma/dev.db');
+    const cwdExists = fs.existsSync(cwdDb);
+    const cwdSize = cwdExists ? fs.statSync(cwdDb).size : 0;
 
     return NextResponse.json({
       status: 'ok',
@@ -38,6 +61,20 @@ export async function GET() {
       },
     });
   } catch (error: any) {
+    const admin = await isAdmin().catch(() => false);
+
+    if (!admin) {
+      return NextResponse.json({ status: 'error' }, { status: 500 });
+    }
+
+    const tmpPath = path.join(os.tmpdir() || '/tmp', 'supercup-serverless.db');
+    const tmpExists = fs.existsSync(tmpPath);
+    const tmpSize = tmpExists ? fs.statSync(tmpPath).size : 0;
+
+    const cwdDb = path.join(process.cwd(), 'prisma/dev.db');
+    const cwdExists = fs.existsSync(cwdDb);
+    const cwdSize = cwdExists ? fs.statSync(cwdDb).size : 0;
+
     return NextResponse.json(
       {
         status: 'error',
@@ -53,3 +90,4 @@ export async function GET() {
     );
   }
 }
+

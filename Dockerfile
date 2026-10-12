@@ -18,7 +18,9 @@ COPY . .
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Build Next.js
+# Build Next.js with standalone output for GCP Cloud Run / container hosting
+ENV DOCKER_BUILD=1
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production image, copy all the files and run next

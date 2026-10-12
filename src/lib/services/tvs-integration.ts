@@ -167,8 +167,8 @@ export function parseTVSVehicleTimestamp(dateInput: any): Date {
 // ─── Real TVS Certified Implementation ──────────────────────────────────────
 
 export class RealTVSAuctionProvider implements TVSAuctionProvider {
-  private baseUrl = 'https://tvscertified.in:8036';
-  private baseUrlMaster = 'https://tvscertified.in:8030';
+  private baseUrl = process.env.TVS_API_BASE_URL || 'https://tvscertified.in:8036';
+  private baseUrlMaster = process.env.TVS_MASTER_API_BASE_URL || 'https://tvscertified.in:8030';
   private mockFallback = new MockTVSAuctionProvider();
   private cachedServiceToken: string | null = null;
   private tokenExpiry: number = 0;
@@ -183,8 +183,13 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
   private settledVehicleIds: Set<string | number> = new Set();
 
   constructor() {
-    // Disable TLS reject for self-signed certificates in dev environments if needed
-    if (typeof process !== 'undefined' && process.env) {
+    // Only allow TLS certificate bypass if explicitly requested in non-production
+    if (
+      typeof process !== 'undefined' &&
+      process.env &&
+      process.env.NODE_ENV !== 'production' &&
+      process.env.TVS_TLS_INSECURE === 'true'
+    ) {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     }
     // Pre-populate with 1,608 verified TVS dealer identity mappings instantly
@@ -227,10 +232,12 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
       return this.cachedServiceToken;
     }
     try {
+      const serviceUsername = process.env.TVS_SERVICE_USERNAME || 'bhavaniprasad999@gmail.com';
+      const servicePassword = process.env.TVS_SERVICE_PASSWORD || 'KU9JhpWDCz';
       const res = await fetch(`${this.baseUrl}/authenticate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'bhavaniprasad999@gmail.com', password: 'KU9JhpWDCz' }),
+        body: JSON.stringify({ username: serviceUsername, password: servicePassword }),
         signal: AbortSignal.timeout(8000),
       });
       if (res.ok) {

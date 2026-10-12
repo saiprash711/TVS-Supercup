@@ -6,10 +6,6 @@
     "src/app/api/**/*": {
       "maxDuration": 60
     }
-  },
-  "env": {
-    "NODE_TLS_REJECT_UNAUTHORIZED": "0",
-    "ADMIN_PASSWORD": "supercup2026",
-    "INTERNAL_API_KEY": "tvs-internal-key"
   }
 }
+

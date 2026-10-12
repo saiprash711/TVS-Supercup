@@ -55,10 +55,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 4. Strict Subdomain Isolation (Optional flag: STRICT_ADMIN_SUBDOMAIN=true)
-  // When enabled in production, prevents accessing /admin on the dealer-facing domain
+  // 4. Strict Subdomain Isolation (DEFAULT: ON in production)
+  // Prevents accessing /admin on the dealer-facing domain (blocks attack surface)
+  // Set STRICT_ADMIN_SUBDOMAIN=false to explicitly disable (dev only)
   if (
-    process.env.STRICT_ADMIN_SUBDOMAIN === 'true' &&
+    process.env.STRICT_ADMIN_SUBDOMAIN !== 'false' &&
     host.includes('supercup.tvs.in') &&
     pathname.startsWith('/admin') &&
     !isAdminSubdomain

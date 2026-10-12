@@ -223,7 +223,12 @@ export default function HistoricalAuctionsTab() {
       clearTimeout(statusTimer2);
 
       if (!res.ok) {
-        throw new Error(`Master extraction failed with HTTP ${res.status}`);
+        let errMsg = `Master extraction failed with HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        throw new Error(errMsg);
       }
 
       setMasterExportStatus('COMPILING');
