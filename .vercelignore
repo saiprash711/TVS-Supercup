@@ -11,7 +11,6 @@ prisma/dev.db-wal
 prisma/dev.db-shm
 
 # Development scripts
-scripts/
 start.bat
 start_live_sync.bat
 
