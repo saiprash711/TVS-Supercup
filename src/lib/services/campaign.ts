@@ -10,6 +10,15 @@ import { prisma } from '@/lib/db';
 export async function getCurrentSuperCupCampaign(now = new Date()) {
   const commonWhere = { type: 'SUPER_CUP', status: 'ACTIVE' } as const;
 
+  // 1. Prioritize official live Super Cup 2026–27 campaign starting 15 October 2026
+  const liveSuperCup = await prisma.campaign.findFirst({
+    where: {
+      ...commonWhere,
+      slug: 'supercup-2026-27',
+    },
+  });
+  if (liveSuperCup) return liveSuperCup;
+
   const current = await prisma.campaign.findFirst({
     where: {
       ...commonWhere,

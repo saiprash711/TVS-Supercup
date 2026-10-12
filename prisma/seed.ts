@@ -11,8 +11,16 @@ function maskName(name: string): string {
 async function main() {
   console.log('🏏 Initializing TVS Dealer Super Cup 2026–27...\n');
 
-  // 1. Pre-Launch Test Campaign (01 Oct & 08 Oct 2026)
-  console.log('🧪 Initializing Pre-Launch Test Campaign (01-10-2026 and 08-10-2026)...');
+  // 1. Archive previous campaigns
+  await prisma.campaign.updateMany({
+    where: {
+      slug: { in: ['supercup-sept-oct-2026', 'september-2026', 'supercup-prelaunch-test-2026'] },
+      status: 'ACTIVE',
+    },
+    data: { status: 'COMPLETED' },
+  });
+
+  // Pre-Launch Test Campaign archived
   const testCampaign = await prisma.campaign.upsert({
     where: { slug: 'supercup-prelaunch-test-2026' },
     update: {
@@ -20,7 +28,7 @@ async function main() {
       startDate: new Date('2026-09-27T18:30:00.000Z'),
       endDate: new Date('2026-10-14T18:29:59.999Z'),
       type: 'SUPER_CUP',
-      status: 'ACTIVE',
+      status: 'COMPLETED',
     },
     create: {
       name: 'TVS Super Cup — Pre-Launch Test',
@@ -28,7 +36,7 @@ async function main() {
       startDate: new Date('2026-09-27T18:30:00.000Z'),
       endDate: new Date('2026-10-14T18:29:59.999Z'),
       type: 'SUPER_CUP',
-      status: 'ACTIVE',
+      status: 'COMPLETED',
     },
   });
 

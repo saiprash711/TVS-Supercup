@@ -30,6 +30,14 @@ const matches = [
 ];
 
 async function main() {
+  await prisma.campaign.updateMany({
+    where: {
+      slug: { in: ['supercup-sept-oct-2026', 'september-2026', 'supercup-prelaunch-test-2026'] },
+      status: 'ACTIVE',
+    },
+    data: { status: 'COMPLETED' },
+  });
+
   const existingCampaign = await prisma.campaign.findUnique({
     where: { slug: CAMPAIGN_SLUG },
     select: { id: true },
