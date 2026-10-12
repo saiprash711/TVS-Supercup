@@ -20,6 +20,7 @@ import {
   Gavel,
   Gift
 } from 'lucide-react';
+import { useDealerLanguage } from '../context/DealerLanguageContext';
 
 interface TermsAndConditionsModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export default function TermsAndConditionsModal({
   onClose,
   defaultTab = 'all'
 }: TermsAndConditionsModalProps) {
+  const { t, isTamil } = useDealerLanguage();
   const [activeTab, setActiveTab] = useState<'all' | 'buyers' | 'sellers' | 'prizes'>(defaultTab);
 
   useEffect(() => {
@@ -77,17 +79,25 @@ export default function TermsAndConditionsModal({
           <div className="rules-modal-header" style={{ marginBottom: '20px' }}>
             <div className="rules-modal-eyebrow">
               <Scale className="w-3.5 h-3.5 text-sky-400" />
-              <span>OFFICIAL TOURNAMENT REGULATIONS</span>
+              <span>{t('termsModal.eyebrow', 'OFFICIAL TOURNAMENT REGULATIONS')}</span>
             </div>
 
             <h2 id="terms-modal-title" className="rules-modal-title" style={{ fontSize: '1.75rem' }}>
-              Terms & Conditions
+              {t('termsModal.title', 'Terms & Conditions')}
             </h2>
 
             <p className="rules-modal-subtitle" style={{ fontSize: '0.88rem' }}>
-              Official rules, scoring policies, and prize distribution guidelines for the{' '}
-              <strong className="text-white">TVS Certified Dealer Super Cup 2026–27</strong>.
-              All participating dealerships are governed by these regulations.
+              {isTamil ? (
+                <>
+                  டிவிஎஸ் சான்றளிக்கப்பட்ட டீலர் சூப்பர்கப் 2026–27 க்கான அதிகாரப்பூர்வ விதிகள், மதிப்பெண் கொள்கைகள் மற்றும் பரிசு விநியோக வழிகாட்டுதல்கள். பங்கேற்கும் அனைத்து டீலர்ஷிப்களும் இந்த விதிமுறைகளுக்கு உட்பட்டவை.
+                </>
+              ) : (
+                <>
+                  Official rules, scoring policies, and prize distribution guidelines for the{' '}
+                  <strong className="text-white">TVS Certified Dealer Super Cup 2026–27</strong>.
+                  All participating dealerships are governed by these regulations.
+                </>
+              )}
             </p>
 
             {/* Tab Switcher */}
@@ -97,28 +107,28 @@ export default function TermsAndConditionsModal({
                 onClick={() => setActiveTab('all')}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Overview & Eligibility</span>
+                <span>{t('termsModal.tabAll', 'Overview & Eligibility')}</span>
               </button>
               <button
                 className={`rules-tab-btn ${activeTab === 'buyers' ? 'active' : ''}`}
                 onClick={() => setActiveTab('buyers')}
               >
                 <ShoppingCart className="w-3.5 h-3.5 text-blue-400" />
-                <span>Buyer League Rules</span>
+                <span>{t('termsModal.tabBuyers', 'Buyer League Rules')}</span>
               </button>
               <button
                 className={`rules-tab-btn ${activeTab === 'sellers' ? 'active' : ''}`}
                 onClick={() => setActiveTab('sellers')}
               >
                 <Store className="w-3.5 h-3.5 text-sky-400" />
-                <span>Seller League Rules</span>
+                <span>{t('termsModal.tabSellers', 'Seller League Rules')}</span>
               </button>
               <button
                 className={`rules-tab-btn ${activeTab === 'prizes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('prizes')}
               >
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                <span>Prize Split & Ties</span>
+                <span>{t('termsModal.tabPrizes', 'Prize Split & Ties')}</span>
               </button>
             </div>
           </div>

@@ -59,6 +59,7 @@ import {
 } from 'lucide-react';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
+import HistoricalAuctionsTab from './components/HistoricalAuctionsTab';
 
 interface AdminStats {
   totalDealers: number;
@@ -261,7 +262,7 @@ interface VehicleQueueStats {
   percentComplete: number;
 }
 
-type Tab = 'overview' | 'leaderboard' | 'liveMonitor' | 'dealers' | 'rules' | 'matches' | 'audit';
+type Tab = 'overview' | 'leaderboard' | 'liveMonitor' | 'dealers' | 'rules' | 'matches' | 'audit' | 'historicalAuctions';
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -1381,6 +1382,25 @@ export default function AdminPage() {
                 <Download className="w-4 h-4" />
                 <span>Export CSV</span>
               </button>
+
+              <button
+                className={`btn btn-sm ${activeTab === 'historicalAuctions' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => {
+                  setActiveTab('historicalAuctions');
+                  setSelectedDealer(null);
+                }}
+                title="List daily & weekly historical auctions across TN, KL, and AP/TS and pull data"
+                style={{
+                  borderColor: 'rgba(168, 85, 247, 0.4)',
+                  color: activeTab === 'historicalAuctions' ? '#ffffff' : '#c084fc',
+                  background: activeTab === 'historicalAuctions' ? 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)' : 'rgba(168, 85, 247, 0.1)',
+                  gap: '6px',
+                  fontWeight: 600,
+                }}
+              >
+                <History className="w-4 h-4 text-purple-400" />
+                <span>Historical Auctions</span>
+              </button>
             </div>
           </div>
 
@@ -1533,6 +1553,7 @@ export default function AdminPage() {
               { key: 'rules', icon: <Settings className="w-4 h-4" />, label: 'Scoring Rules Engine' },
               { key: 'matches', icon: <Calendar className="w-4 h-4" />, label: 'Match Schedule' },
               { key: 'audit', icon: <FileText className="w-4 h-4" />, label: 'Audit Trail' },
+              { key: 'historicalAuctions', icon: <History className="w-4 h-4 text-purple-400" />, label: 'Historical Auctions' },
             ] as const).map(item => (
               <button
                 key={item.key}
@@ -4886,6 +4907,11 @@ export default function AdminPage() {
                       </table>
                     </div>
                   </div>
+                )}
+
+                {/* ── 8. Historical Auctions Data Extraction Tab ─────────────────── */}
+                {activeTab === 'historicalAuctions' && (
+                  <HistoricalAuctionsTab />
                 )}
               </>
             )}

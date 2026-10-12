@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Sparkles,
 } from 'lucide-react';
+import { useDealerLanguage } from '../context/DealerLanguageContext';
 
 interface ScrollVideoHeroProps {
   dealerName?: string;
@@ -29,8 +30,12 @@ export default function ScrollVideoHero({
   points = '4,820',
   city = 'Chennai Hub',
   nextAuctionLabel = 'Thursday at 2:00 PM IST',
-  tagline = 'A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW',
+  tagline,
 }: ScrollVideoHeroProps) {
+  const { t, isTamil } = useDealerLanguage();
+
+  const activeTagline = tagline || t('hero.tagline', 'A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW');
+
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -54,17 +59,17 @@ export default function ScrollVideoHero({
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <div className="cockpit-status-pill">
                 <span className="pulsing-live-dot" />
-                <span>TELEMETRY ACTIVE</span>
+                <span>{t('hero.telemetryActive', 'TELEMETRY ACTIVE')}</span>
               </div>
               <div className="cockpit-season-badge">
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                <span>SUPER CUP 2026–27</span>
+                <span>{t('hero.seasonBadge', 'SUPER CUP 2026–27')}</span>
               </div>
             </div>
 
             <div className="cockpit-network-pill">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>TVS Certified Network • {city}</span>
+              <span>{t('hero.networkHub', `TVS Certified Network • ${city}`, { city })}</span>
             </div>
           </div>
 
@@ -72,13 +77,13 @@ export default function ScrollVideoHero({
           <div className="cockpit-header-content">
             <div className="cockpit-eyebrow">
               <Flame className="w-3.5 h-3.5 text-[#364ea2]" />
-              <span>EXECUTIVE COMMAND COCKPIT</span>
+              <span>{t('hero.cockpitEyebrow', 'EXECUTIVE COMMAND COCKPIT')}</span>
             </div>
             <h1 className="cockpit-title">
-              Welcome to the Arena, <span className="hero-title-accent">{dealerName}</span>
+              {t('hero.welcomeArena', 'Welcome to the Arena,')} <span className="hero-title-accent">{dealerName}</span>
             </h1>
             <p className="cockpit-subtitle">
-              Compete across high-velocity 2:00 PM auctions, climb the national leaderboard, and secure your place on the season champion&apos;s podium.
+              {t('hero.subtitle', "Compete across high-velocity 2:00 PM auctions, climb the national leaderboard, and secure your place on the season champion's podium.")}
             </p>
           </div>
 
@@ -90,13 +95,13 @@ export default function ScrollVideoHero({
                 <div className="cockpit-icon-badge gold">
                   <Trophy className="w-5 h-5" />
                 </div>
-                <span className="cockpit-card-tag">STANDINGS</span>
+                <span className="cockpit-card-tag">{t('hero.standingsTag', 'STANDINGS')}</span>
               </div>
               <div className="cockpit-card-metric gold">#{rank}</div>
-              <div className="cockpit-card-sub">Official National Ranking</div>
+              <div className="cockpit-card-sub">{t('hero.nationalRank', 'Official National Ranking')}</div>
               <div className="cockpit-card-badge gold">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Podium Contender</span>
+                <span>{t('hero.podiumContender', 'Podium Contender')}</span>
               </div>
             </div>
 
@@ -106,15 +111,15 @@ export default function ScrollVideoHero({
                 <div className="cockpit-icon-badge emerald">
                   <TrendingUp className="w-5 h-5" />
                 </div>
-                <span className="cockpit-card-tag">ACCUMULATED SCORE</span>
+                <span className="cockpit-card-tag">{t('hero.accumulatedScore', 'ACCUMULATED SCORE')}</span>
               </div>
               <div className="cockpit-card-metric emerald">
-                {points} <span style={{ fontSize: '0.9rem', fontWeight: 600, opacity: 0.85 }}>PTS</span>
+                {points} <span style={{ fontSize: '0.9rem', fontWeight: 600, opacity: 0.85 }}>{t('hero.pts', 'PTS')}</span>
               </div>
-              <div className="cockpit-card-sub">Audited Transaction Points</div>
+              <div className="cockpit-card-sub">{t('hero.auditedPoints', 'Audited Transaction Points')}</div>
               <div className="cockpit-card-badge emerald">
                 <Zap className="w-3.5 h-3.5" />
-                <span>+350 pts this week</span>
+                <span>{t('hero.weeklyPoints', '+350 pts this week')}</span>
               </div>
             </div>
 
@@ -124,15 +129,15 @@ export default function ScrollVideoHero({
                 <div className="cockpit-icon-badge blue">
                   <Radio className="w-5 h-5 animate-pulse" />
                 </div>
-                <span className="cockpit-card-tag">NEXT 2 PM WINDOW</span>
+                <span className="cockpit-card-tag">{t('hero.nextWindow', 'NEXT 2 PM WINDOW')}</span>
               </div>
               <div className="cockpit-card-metric" style={{ fontSize: '1.25rem', lineHeight: '1.3' }}>
                 {nextAuctionLabel}
               </div>
-              <div className="cockpit-card-sub">Live 2 PM Bidding Floor</div>
+              <div className="cockpit-card-sub">{t('hero.biddingFloor', 'Live 2 PM Bidding Floor')}</div>
               <div className="cockpit-card-badge blue">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Attendance +1 PT</span>
+                <span>{t('hero.attendanceBadge', 'Attendance +1 PT')}</span>
               </div>
             </div>
 
@@ -142,13 +147,13 @@ export default function ScrollVideoHero({
                 <div className="cockpit-icon-badge purple">
                   <Award className="w-5 h-5" />
                 </div>
-                <span className="cockpit-card-tag">SEASON PRIZE POOL</span>
+                <span className="cockpit-card-tag">{t('hero.seasonPrize', 'SEASON PRIZE POOL')}</span>
               </div>
               <div className="cockpit-card-metric">₹50,000</div>
-              <div className="cockpit-card-sub">Entire Season (1st: ₹25K • 2nd: ₹15K • 3rd: ₹10K)</div>
+              <div className="cockpit-card-sub">{t('hero.seasonPrizeSub', 'Entire Season (1st: ₹25K • 2nd: ₹15K • 3rd: ₹10K)')}</div>
               <div className="cockpit-card-badge purple">
                 <Trophy className="w-3.5 h-3.5" />
-                <span>Full Season Podium</span>
+                <span>{t('hero.cashRewards', 'Cash Rewards')}</span>
               </div>
             </div>
           </div>
@@ -157,7 +162,7 @@ export default function ScrollVideoHero({
           <div className="cockpit-footer-bar">
             <div className="cockpit-ticker">
               <Zap className="w-4 h-4 text-emerald-400" />
-              <span>{tagline}</span>
+              <span>{activeTagline}</span>
             </div>
 
             <div className="cockpit-quick-links">
@@ -166,7 +171,7 @@ export default function ScrollVideoHero({
                 className="cockpit-anchor-btn"
                 onClick={() => scrollTo('prize-showcase')}
               >
-                <span>Prize Showcase</span>
+                <span>{isTamil ? 'பரிசு அட்டவணை' : 'Prize Showcase'}</span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
               <button
@@ -174,7 +179,7 @@ export default function ScrollVideoHero({
                 className="cockpit-anchor-btn"
                 onClick={() => scrollTo('national-standings')}
               >
-                <span>Standings & Radar</span>
+                <span>{isTamil ? 'தரவரிசை & ரேடார்' : 'Standings & Radar'}</span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
               <button
@@ -182,7 +187,7 @@ export default function ScrollVideoHero({
                 className="cockpit-anchor-btn"
                 onClick={() => scrollTo('match-schedule')}
               >
-                <span>Match Schedule</span>
+                <span>{isTamil ? 'போட்டி அட்டவணை' : 'Match Schedule'}</span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
               <button
@@ -190,7 +195,7 @@ export default function ScrollVideoHero({
                 className="cockpit-anchor-btn"
                 onClick={() => scrollTo('auction-telemetry')}
               >
-                <span>Live Feed</span>
+                <span>{isTamil ? 'நேரடி ஊட்டம்' : 'Live Feed'}</span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
             </div>

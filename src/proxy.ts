@@ -48,8 +48,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If unauthenticated user attempts to visit /dashboard, redirect to /
-  if (pathname.startsWith('/dashboard') && !hasDealerSession) {
+  // If unauthenticated user attempts to visit /dashboard or /dealer, redirect to /
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/dealer')) && !hasDealerSession) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);

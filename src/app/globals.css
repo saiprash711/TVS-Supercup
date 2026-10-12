@@ -5059,6 +5059,291 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   🎯 TVS Dealer Championship Position Spotlight & Motivational Banner
+   ───────────────────────────────────────────────────────────────────────────── */
+.dealer-position-spotlight-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-lg, 16px);
+  background: linear-gradient(135deg, rgba(54, 78, 162, 0.12) 0%, rgba(16, 185, 129, 0.08) 50%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1px solid rgba(54, 78, 162, 0.35);
+  box-shadow: 0 12px 32px rgba(54, 78, 162, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .dealer-position-spotlight-card {
+  background: linear-gradient(135deg, rgba(54, 78, 162, 0.22) 0%, rgba(16, 185, 129, 0.12) 50%, rgba(245, 158, 11, 0.12) 100%);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.dealer-position-spotlight-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #364ea2 0%, #10b981 50%, #f59e0b 100%);
+}
+
+.spotlight-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.spotlight-badge-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: rgba(54, 78, 162, 0.15);
+  border: 1px solid rgba(54, 78, 162, 0.3);
+  color: var(--tvs-blue, #364ea2);
+}
+
+.spotlight-badge-icon.champion {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.spotlight-badge-icon.contender {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.spotlight-text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spotlight-eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spotlight-eyebrow {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.spotlight-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulseRadarGlow 2s infinite ease-in-out;
+}
+
+.spotlight-status-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #10b981;
+  letter-spacing: 0.04em;
+}
+
+.spotlight-dealer-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.spotlight-message {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 2px 0 0;
+  max-width: 580px;
+}
+
+.spotlight-metrics-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.spotlight-metric-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  min-width: 100px;
+  text-align: center;
+}
+
+[data-theme="light"] .spotlight-metric-chip {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.metric-chip-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.metric-chip-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+}
+
+.spotlight-metric-chip.highlight-target {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.22) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.18);
+}
+
+.spotlight-metric-chip.highlight-target .metric-chip-label {
+  color: #d97706;
+}
+
+[data-theme="dark"] .spotlight-metric-chip.highlight-target .metric-chip-label {
+  color: #fbbf24;
+}
+
+.spotlight-metric-chip.highlight-target .highlight-value {
+  color: #d97706;
+}
+
+[data-theme="dark"] .spotlight-metric-chip.highlight-target .highlight-value {
+  color: #f59e0b;
+}
+
+.metric-chip-sub {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #d97706;
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .metric-chip-sub {
+  color: #fbbf24;
+}
+
+/* Current Dealer Row Separator & Pinned Row */
+.current-dealer-separator-row td {
+  padding: 12px 16px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.current-dealer-separator-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.current-dealer-separator-wrap .separator-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-subtle) 30%, var(--border-subtle) 70%, transparent);
+}
+
+.current-dealer-separator-wrap .separator-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.leaderboard-row.pinned-dealer-row {
+  border-top: 2px solid rgba(16, 185, 129, 0.4) !important;
+  border-bottom: 2px solid rgba(16, 185, 129, 0.4) !important;
+}
+
+.pinned-position-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(54, 78, 162, 0.15);
+  color: var(--tvs-blue);
+  border: 1px solid rgba(54, 78, 162, 0.3);
+}
+
+[data-theme="dark"] .pinned-position-pill {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.bid-more-subtext {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #d97706;
+}
+
+[data-theme="dark"] .bid-more-subtext {
+  color: #fbbf24;
+}
+
+.bid-more-subtext .flame-icon {
+  font-size: 0.82rem;
+  animation: bounceFlame 1.5s infinite;
+}
+
+@keyframes bounceFlame {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.rank-cell-content.rank-user-pinned {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    🏆 High-End Super Cup Points Rules Handbook & Modal Architecture
    ───────────────────────────────────────────────────────────────────────────── */
 
@@ -5808,6 +6093,140 @@ body {
   background: #2b3e85;
 }
 
+/* ─── Dealer Route Language Toggle Component ───────────────────────────── */
+.lang-toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+}
 
+.lang-toggle-skeleton {
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(128, 128, 128, 0.1);
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.1));
+}
 
+.lang-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 2px 3px 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-subtle, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-hairline, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
 
+.lang-toggle-button:hover {
+  border-color: rgba(54, 78, 162, 0.6);
+  box-shadow: 0 0 12px rgba(54, 78, 162, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-0.5px);
+}
+
+.lang-toggle-button:focus-visible {
+  outline: 2px solid var(--accent-blue, #364ea2);
+  outline-offset: 2px;
+}
+
+[data-theme="light"] .lang-toggle-button {
+  background: #f1f5f9;
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .lang-toggle-button:hover {
+  border-color: #364ea2;
+  box-shadow: 0 2px 8px rgba(54, 78, 162, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.lang-globe-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #38bdf8;
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
+}
+
+[data-theme="light"] .lang-globe-icon-wrap {
+  color: #364ea2;
+}
+
+.lang-toggle-button:hover .lang-globe-icon-wrap {
+  transform: rotate(18deg) scale(1.08);
+}
+
+.lang-segmented-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px;
+  border-radius: var(--radius-full, 9999px);
+  width: 76px;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .lang-segmented-track {
+  background: #e2e8f0;
+}
+
+.lang-active-pill {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 34px;
+  height: 18px;
+  border-radius: var(--radius-full, 9999px);
+  background: linear-gradient(135deg, #364ea2, #0087e0);
+  box-shadow: 0 1px 4px rgba(0, 135, 224, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  z-index: 1;
+}
+
+[data-theme="light"] .lang-active-pill {
+  background: #364ea2;
+  box-shadow: 0 1px 4px rgba(54, 78, 162, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.lang-option {
+  position: relative;
+  z-index: 2;
+  width: 36px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  transition: color 0.18s ease;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+
+.lang-option:hover {
+  color: var(--text-primary, #ffffff);
+}
+
+.lang-option.selected {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+[data-theme="light"] .lang-option {
+  color: #64748b;
+}
+
+[data-theme="light"] .lang-option:hover {
+  color: #0f172a;
+}
+
+[data-theme="light"] .lang-option.selected {
+  color: #ffffff;
+}

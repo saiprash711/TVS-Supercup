@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import SwitchMode from '../components/watermelon/switch-mode';
+import LanguageToggle from '../components/LanguageToggle';
 import TickerMarquee from '../components/TickerMarquee';
+import { DealerLanguageProvider, useDealerLanguage } from '../context/DealerLanguageContext';
 import {
   Trophy,
   ShieldCheck,
@@ -24,9 +26,6 @@ import {
   X,
   ShoppingCart,
   Tag,
-  Copy,
-  Check,
-  FileText,
   Scale,
 } from 'lucide-react';
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
@@ -54,6 +53,7 @@ interface LeaderboardEntry {
   bidsCount?: number;
   salesCount?: number;
   listingsCount?: number;
+  dealerId?: number;
 }
 
 interface CampaignInfo {
@@ -64,7 +64,8 @@ interface CampaignInfo {
   endDate: string;
 }
 
-export default function LeaderboardPage() {
+function LeaderboardContent() {
+  const { t, isTamil } = useDealerLanguage();
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
   const [buyersLeaderboard, setBuyersLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [sellersLeaderboard, setSellersLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -82,13 +83,26 @@ export default function LeaderboardPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [showMaskedPreview, setShowMaskedPreview] = useState(false);
-  const [currentDealerId, setCurrentDealerId] = useState<number | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Search & Pagination States
+  // Authenticated Dealer Profile & Position Telemetry
+  const [currentDealerInfo, setCurrentDealerInfo] = useState<{
+    dealerId: number;
+    displayName: string;
+    maskedName: string;
+    city?: string;
+    externalDealerId?: string;
+  } | null>(null);
+  const [dealerPosition, setDealerPosition] = useState<{
+    rank: number;
+    points: number;
+    buyer?: { rank: number; points: number } | null;
+    seller?: { rank: number; points: number } | null;
+  } | null>(null);
+
+  // Search & Pagination States - Default page size is 5 (Top 5 on Page 1)
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(5);
   const [jumpPageInput, setJumpPageInput] = useState('');
 
   const fetchLeaderboard = useCallback(async (forcedMaskedPreview?: boolean) => {
@@ -98,105 +112,71 @@ export default function LeaderboardPage() {
       const res = await fetch(url);
       const data = await res.json();
       if (data) {
-        if (Array.isArray(data.buyers)) setBuyersLeaderboard(data.buyers);
-        if (Array.isArray(data.sellers)) setSellersLeaderboard(data.sellers);
-        if (Array.isArray(data.overall)) setOverallLeaderboard(data.overall);
-        else if (Array.isArray(data.leaderboard)) setOverallLeaderboard(data.leaderboard);
-
-        if (data.counts) {
-          setCounts(data.counts);
-        } else {
-          setCounts({
-            buyers: data.buyers?.length || 0,
-            sellers: data.sellers?.length || 0,
-            overall: data.overall?.length || data.leaderboard?.length || 0,
-          });
+        setBuyersLeaderboard(data.buyers || []);
+        setSellersLeaderboard(data.sellers || []);
+        setOverallLeaderboard(data.overall || []);
+        setCounts({
+          buyers: data.counts?.buyers || data.buyers?.length || 0,
+          sellers: data.counts?.sellers || data.sellers?.length || 0,
+          overall: data.counts?.overall || data.overall?.length || 0,
+        });
+        if (data.campaign) {
+          setCampaign(data.campaign);
         }
-
-        if (typeof data.isAdmin === 'boolean') {
-          setIsAdminUser(data.isAdmin);
+        setIsAuthenticated(Boolean(data.authenticated || data.currentDealerId || data.currentDealer));
+        setIsAdminUser(Boolean(data.isAdmin));
+        if (data.currentDealer) {
+          setCurrentDealerInfo(data.currentDealer);
         }
-        if (data.currentDealerId) {
-          setCurrentDealerId(data.currentDealerId);
+        if (data.dealerPosition) {
+          setDealerPosition(data.dealerPosition);
         }
-
-        setCampaign(data.campaign);
         setLastUpdated(new Date());
       }
-    } catch (error) {
-      console.error('Failed to load leaderboard:', error);
+    } catch (err) {
+      console.error('Failed to fetch leaderboard data:', err);
     } finally {
       setLoading(false);
     }
   }, [showMaskedPreview]);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      await fetchLeaderboard();
-      if (!mounted) return;
-      try {
-        const [authRes, adminRes] = await Promise.all([
-          fetch('/api/auth/login'),
-          fetch('/api/admin/auth'),
-        ]);
-        const authData = await authRes.json();
-        const adminData = await adminRes.json();
-        if (mounted) {
-          setIsAuthenticated(Boolean(authData.authenticated));
-          if (adminData.authenticated) {
-            setIsAdminUser(true);
-          }
-        }
-      } catch {}
-    })();
-
+    fetchLeaderboard();
     const interval = setInterval(() => {
       fetchLeaderboard();
     }, 30000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [fetchLeaderboard]);
 
   const toggleMaskedPreview = () => {
-    const nextVal = !showMaskedPreview;
-    setShowMaskedPreview(nextVal);
-    fetchLeaderboard(nextVal);
+    const nextPreviewState = !showMaskedPreview;
+    setShowMaskedPreview(nextPreviewState);
+    fetchLeaderboard(nextPreviewState);
   };
 
-  const copyCustomerId = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  const activeLeaderboard = useMemo(() => {
+    if (activeTab === 'buyers') return buyersLeaderboard;
+    if (activeTab === 'sellers') return sellersLeaderboard;
+    return overallLeaderboard;
+  }, [activeTab, buyersLeaderboard, sellersLeaderboard, overallLeaderboard]);
 
   const getDisplayName = useCallback((entry: LeaderboardEntry) => {
     if (isAdminUser && !showMaskedPreview) {
       return entry.realName || entry.dealerName || entry.dealer;
     }
     if (entry.isCurrentDealer) {
-      return entry.realName || entry.dealerName || entry.dealer;
+      return entry.dealerName || entry.realName || entry.dealer;
     }
     return entry.maskedName || entry.dealer;
   }, [isAdminUser, showMaskedPreview]);
 
-  const activeLeaderboard = useMemo(() => {
-    if (activeTab === 'sellers') return sellersLeaderboard;
-    return buyersLeaderboard;
-  }, [activeTab, buyersLeaderboard, sellersLeaderboard]);
-
-  // Filtered leaderboard based on search query (matches name, Customer ID, city, rank)
+  // Client-side search filtering
   const filteredLeaderboard = useMemo(() => {
     if (!searchQuery.trim()) return activeLeaderboard;
-    const q = searchQuery.trim().toLowerCase();
-    const rankNum = q.startsWith('#') ? parseInt(q.slice(1), 10) : parseInt(q, 10);
+    const q = searchQuery.toLowerCase().trim();
+    const rankNum = parseInt(q, 10);
 
     return activeLeaderboard.filter((entry) => {
-      // Check rank match if exact number
       if (!isNaN(rankNum) && entry.rank === rankNum) {
         return true;
       }
@@ -256,12 +236,70 @@ export default function LeaderboardPage() {
     }
   };
 
+  // Resolve current authenticated dealer's entry in active league
+  const currentDealerEntry = useMemo(() => {
+    // 1. In-list entry flagged as current dealer
+    const inList = activeLeaderboard.find(
+      (e) => e.isCurrentDealer || (currentDealerInfo && e.dealerId === currentDealerInfo.dealerId)
+    );
+    if (inList) return inList;
+
+    // 2. If authenticated dealer has 0 points or was filtered out of active list
+    if (currentDealerInfo) {
+      const pos = activeTab === 'buyers' ? dealerPosition?.buyer : dealerPosition?.seller;
+      return {
+        rank: pos?.rank || (activeLeaderboard.length > 0 ? activeLeaderboard.length + 1 : 1),
+        dealer: currentDealerInfo.displayName || currentDealerInfo.maskedName || 'Your Dealership',
+        dealerName: currentDealerInfo.displayName || currentDealerInfo.maskedName,
+        customerId: currentDealerInfo.externalDealerId || '',
+        points: pos?.points || 0,
+        isCurrentDealer: true,
+        city: currentDealerInfo.city,
+        category: 'Used Car Dealer',
+      } as LeaderboardEntry;
+    }
+
+    return null;
+  }, [activeLeaderboard, currentDealerInfo, dealerPosition, activeTab]);
+
+  // Points target calculation for securing 1st place
+  const top1Dealer = activeLeaderboard.length > 0 ? activeLeaderboard[0] : null;
+  const top1Points = top1Dealer ? top1Dealer.points : 0;
+  const myPoints = currentDealerEntry ? currentDealerEntry.points : 0;
+  const myRank = currentDealerEntry ? currentDealerEntry.rank : null;
+  const isMyFirstPlace = myRank === 1;
+
+  // To secure 1st place, dealer needs to surpass current leader: (top1Points - myPoints + 1)
+  const pointsNeededFor1st = isMyFirstPlace ? 0 : Math.max(1, (top1Points - myPoints) + 1);
+
+  // Check if current dealer is already present in current page entries
+  const isCurrentDealerInPage = useMemo(() => {
+    if (!currentDealerEntry) return false;
+    return paginatedEntries.some(
+      (e) =>
+        e.isCurrentDealer ||
+        (currentDealerEntry.dealerId && e.dealerId === currentDealerEntry.dealerId) ||
+        (currentDealerEntry.rank && e.rank === currentDealerEntry.rank)
+    );
+  }, [currentDealerEntry, paginatedEntries]);
+
   if (loading) {
     return (
       <div className="page-container">
-        <div className="loading-container" style={{ minHeight: '100vh' }}>
+        <nav className="navbar">
+          <div className="navbar-inner">
+            <div className="navbar-brand">
+              <span className="navbar-logo">{t('leaderboard.brand', 'TVS Super Cup')}</span>
+            </div>
+            <div className="navbar-user">
+              <LanguageToggle />
+              <SwitchMode width={58} height={28} />
+            </div>
+          </div>
+        </nav>
+        <div className="loading-container" style={{ minHeight: '80vh' }}>
           <div className="loading-spinner"></div>
-          <span>Loading leaderboard...</span>
+          <span>{t('leaderboard.loadingText', 'Loading leaderboard...')}</span>
         </div>
       </div>
     );
@@ -273,13 +311,13 @@ export default function LeaderboardPage() {
       <nav className="navbar">
         <div className="navbar-inner">
           <div className="navbar-brand">
-            <span className="navbar-logo">TVS Super Cup</span>
-            <span className="navbar-badge">{campaign?.isTestMode ? 'TEST MODE' : 'LIVE'}</span>
+            <span className="navbar-logo">{t('leaderboard.brand', 'TVS Super Cup')}</span>
+            <span className="navbar-badge">{campaign?.isTestMode ? t('leaderboard.testMode', 'TEST MODE') : t('leaderboard.live', 'LIVE')}</span>
           </div>
           <ul className="navbar-nav">
-            <li><span className="navbar-link active">Leaderboard</span></li>
+            <li><span className="navbar-link active">{t('leaderboard.navStandings', 'Leaderboard')}</span></li>
             {isAuthenticated && (
-              <li><Link href="/dashboard" className="navbar-link">My Dashboard</Link></li>
+              <li><Link href="/dashboard" className="navbar-link">{t('leaderboard.navDashboard', 'My Dashboard')}</Link></li>
             )}
             <li>
               <button
@@ -289,16 +327,17 @@ export default function LeaderboardPage() {
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
               >
                 <Scale className="w-3.5 h-3.5" />
-                <span>Terms & Rules</span>
+                <span>{t('leaderboard.navTerms', 'Terms & Rules')}</span>
               </button>
             </li>
           </ul>
           <div className="navbar-user">
+            <LanguageToggle />
             <SwitchMode width={58} height={28} />
             {isAuthenticated ? (
-              <Link href="/dashboard" className="btn btn-primary btn-sm">My Dashboard</Link>
+              <Link href="/dashboard" className="btn btn-primary btn-sm">{t('leaderboard.navDashboard', 'My Dashboard')}</Link>
             ) : (
-              <Link href="/" className="btn btn-primary btn-sm">Sign In</Link>
+              <Link href="/" className="btn btn-primary btn-sm">{t('leaderboard.signIn', 'Sign In')}</Link>
             )}
           </div>
         </div>
@@ -319,15 +358,15 @@ export default function LeaderboardPage() {
               </div>
               <div>
                 <div className="admin-banner-heading">
-                  <span>Admin Mission Control View</span>
+                  <span>{t('leaderboard.adminViewTitle', 'Admin Mission Control View')}</span>
                   <span className="admin-status-badge">
-                    {showMaskedPreview ? '🔒 MASKED PREVIEW' : '👁️ UNMASKED (FULL VISIBILITY)'}
+                    {showMaskedPreview ? t('leaderboard.adminMaskedBadge', '🔒 MASKED PREVIEW') : t('leaderboard.adminUnmaskedBadge', '👁️ UNMASKED (FULL VISIBILITY)')}
                   </span>
                 </div>
                 <p className="admin-banner-sub">
                   {showMaskedPreview
-                    ? 'Viewing leaderboard as participating dealers see it (competitor names masked, TVS Customer IDs visible).'
-                    : 'Full legal dealership names, TVS Customer IDs, and performance telemetry are visible to Admin.'}
+                    ? t('leaderboard.adminMaskedSub', 'Viewing leaderboard as participating dealers see it (competitor names masked).')
+                    : t('leaderboard.adminUnmaskedSub', 'Full legal dealership names, TVS Customer IDs, and performance telemetry are visible to Admin.')}
                 </p>
               </div>
             </div>
@@ -341,17 +380,17 @@ export default function LeaderboardPage() {
                 {showMaskedPreview ? (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Switch to Unmasked View</span>
+                    <span>{t('leaderboard.switchUnmasked', 'Switch to Unmasked View')}</span>
                   </>
                 ) : (
                   <>
                     <Users className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Preview Dealer Masked View</span>
+                    <span>{t('leaderboard.previewMasked', 'Preview Dealer Masked View')}</span>
                   </>
                 )}
               </button>
               <Link href="/admin" className="btn btn-primary btn-sm">
-                Mission Control
+                {t('leaderboard.missionControlBtn', 'Mission Control')}
               </Link>
             </div>
           </aside>
@@ -373,23 +412,23 @@ export default function LeaderboardPage() {
               <div className="leaderboard-badge-group">
                 <span className="leaderboard-badge verified">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>TVS Certified Network</span>
+                  <span>{t('leaderboard.heroVerified', 'TVS Certified Network')}</span>
                 </span>
                 <span className="leaderboard-badge season">
                   <span className="pulsing-live-dot" />
                   <Radio className="w-3.5 h-3.5" />
-                  <span>Two Leaderboards • ₹1,00,000 Cash Pool</span>
+                  <span>{t('leaderboard.heroPrizePool', 'Two Leaderboards • ₹1,00,000 Cash Pool')}</span>
                 </span>
               </div>
 
               {/* Clean Executive Title */}
               <h1 className="leaderboard-hero-title">
-                DEALER <span className="hero-title-accent">SUPER CUP</span>
+                {t('leaderboard.heroTitle', 'DEALER')} <span className="hero-title-accent">{t('leaderboard.heroTitleAccent', 'SUPER CUP')}</span>
               </h1>
 
               {/* Informative Subtitle */}
               <p className="leaderboard-hero-subtitle">
-                Official national leaderboard for verified TVS dealerships across India. Compete in weekly high-velocity auctions, climb separate Buyer and Seller standings, and track every dealer by verified TVS Customer ID.
+                {t('leaderboard.heroSubtitle', 'Official national leaderboard for verified TVS dealerships across India. Compete in weekly high-velocity auctions and climb separate Buyer and Seller standings.')}
               </p>
 
               {/* High-Fidelity Telemetry Chips Bar */}
@@ -398,10 +437,10 @@ export default function LeaderboardPage() {
                   <span className="telemetry-chip-icon text-sky-500">
                     <Calendar className="w-4 h-4" />
                   </span>
-                  <span className="telemetry-chip-label">Season:</span>
+                  <span className="telemetry-chip-label">{t('leaderboard.telemetrySeason', 'Season:')}</span>
                   <span className="telemetry-chip-val">
                     {campaign
-                      ? `${new Date(campaign.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} – ${new Date(campaign.endDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
+                      ? `${new Date(campaign.startDate).toLocaleDateString(isTamil ? 'ta-IN' : 'en-IN', { month: 'short', year: 'numeric' })} – ${new Date(campaign.endDate).toLocaleDateString(isTamil ? 'ta-IN' : 'en-IN', { month: 'short', year: 'numeric' })}`
                       : 'Season 2026–27'}
                   </span>
                 </div>
@@ -411,10 +450,10 @@ export default function LeaderboardPage() {
                     <Users className="w-4 h-4" />
                   </span>
                   <span className="telemetry-chip-label">
-                    {activeTab === 'buyers' ? 'Buyers:' : activeTab === 'sellers' ? 'Sellers:' : 'Total:'}
+                    {activeTab === 'buyers' ? t('leaderboard.telemetryBuyers', 'Buyers:') : activeTab === 'sellers' ? t('leaderboard.telemetrySellers', 'Sellers:') : t('leaderboard.telemetryTotal', 'Total:')}
                   </span>
                   <span className="telemetry-chip-val">
-                    {activeLeaderboard.length.toLocaleString('en-IN')} Active
+                    {activeLeaderboard.length.toLocaleString('en-IN')} {t('leaderboard.telemetryActive', 'Active')}
                   </span>
                 </div>
 
@@ -422,9 +461,9 @@ export default function LeaderboardPage() {
                   <span className="telemetry-chip-icon text-amber-500">
                     <Award className="w-4 h-4" />
                   </span>
-                  <span className="telemetry-chip-label">Podium:</span>
+                  <span className="telemetry-chip-label">{t('leaderboard.telemetryPodium', 'Podium:')}</span>
                   <span className="telemetry-chip-val">
-                    ₹50,000 League Pool
+                    {t('leaderboard.telemetryPoolVal', '₹50,000 League Pool')}
                   </span>
                 </div>
 
@@ -432,8 +471,8 @@ export default function LeaderboardPage() {
                   <span className="telemetry-chip-icon text-indigo-500">
                     <Sparkles className="w-4 h-4" />
                   </span>
-                  <span className="telemetry-chip-label">Scoring:</span>
-                  <span className="telemetry-chip-val">Verified TVS Telemetry</span>
+                  <span className="telemetry-chip-label">{t('leaderboard.telemetryScoring', 'Scoring:')}</span>
+                  <span className="telemetry-chip-val">{t('leaderboard.telemetryScoringVal', 'Verified TVS Telemetry')}</span>
                 </div>
               </div>
             </div>
@@ -454,7 +493,7 @@ export default function LeaderboardPage() {
               }}
             >
               <ShoppingCart className="w-4 h-4" />
-              <span>Buyer Leaderboard</span>
+              <span>{t('leaderboard.tabBuyer', 'Buyer Leaderboard')}</span>
               <span className="tab-badge">{counts.buyers || buyersLeaderboard.length}</span>
             </button>
 
@@ -469,7 +508,7 @@ export default function LeaderboardPage() {
               }}
             >
               <Tag className="w-4 h-4" />
-              <span>Seller Leaderboard</span>
+              <span>{t('leaderboard.tabSeller', 'Seller Leaderboard')}</span>
               <span className="tab-badge">{counts.sellers || sellersLeaderboard.length}</span>
             </button>
           </div>
@@ -483,8 +522,8 @@ export default function LeaderboardPage() {
                 <Crown className="w-3.5 h-3.5" />
                 <span>
                   {activeTab === 'buyers'
-                    ? 'Top 3 Buyers Podium • ₹50,000 Cash Pool'
-                    : 'Top 3 Sellers Podium • ₹50,000 Cash Pool'}
+                    ? t('leaderboard.podiumHeaderBuyers', 'Top 3 Buyers Podium • ₹50,000 Cash Pool')
+                    : t('leaderboard.podiumHeaderSellers', 'Top 3 Sellers Podium • ₹50,000 Cash Pool')}
                 </span>
               </div>
             </div>
@@ -512,50 +551,23 @@ export default function LeaderboardPage() {
 
                     <span className="podium-standing-tag">
                       {activeTab === 'buyers'
-                        ? (isChampion ? 'Top Buyer • #1' : isRunnerUp ? 'Podium 2nd Buyer • #2' : 'Podium 3rd Buyer • #3')
-                        : (isChampion ? 'Top Seller • #1' : isRunnerUp ? 'Podium 2nd Seller • #2' : 'Podium 3rd Seller • #3')}
+                        ? (isChampion ? t('leaderboard.topBuyer1', 'Top Buyer • #1') : isRunnerUp ? t('leaderboard.podiumBuyer2', 'Podium 2nd Buyer • #2') : t('leaderboard.podiumBuyer3', 'Podium 3rd Buyer • #3'))
+                        : (isChampion ? t('leaderboard.topSeller1', 'Top Seller • #1') : isRunnerUp ? t('leaderboard.podiumSeller2', 'Podium 2nd Seller • #2') : t('leaderboard.podiumSeller3', 'Podium 3rd Seller • #3'))}
                     </span>
 
-                    <h3 className="podium-dealer-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 className="podium-dealer-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
                       <span>{getDisplayName(entry)}</span>
                       {entry.isCurrentDealer && (
-                        <span className="you-pill">YOU</span>
+                        <span className="you-pill">{t('leaderboard.you', 'YOU')}</span>
                       )}
                     </h3>
-
-                    {/* TVS Customer ID Badge */}
-                    <div className="podium-customer-badge" title={`TVS Customer ID: ${entry.customerId}`}>
-                      <span>ID:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{entry.customerId}</span>
-                      <button
-                        type="button"
-                        className="copy-id-btn"
-                        onClick={(e) => copyCustomerId(entry.customerId, e)}
-                        title="Copy Customer ID"
-                      >
-                        {copiedId === entry.customerId ? (
-                          <Check className="w-3 h-3 text-emerald-500" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* League Specific Performance Telemetry */}
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                      {activeTab === 'buyers' ? (
-                        <span>{entry.buysCount || 0} Lots Won • {entry.bidsCount || 0} Cars Bid</span>
-                      ) : (
-                        <span>{entry.salesCount || 0} Lots Sold • {entry.listingsCount || 0} Listed</span>
-                      )}
-                    </div>
 
                     <div className="podium-score-wrap">
                       <span className="podium-points-value">
                         {entry.points.toLocaleString('en-IN')}
                       </span>
                       <span className="podium-points-label">
-                        {activeTab === 'buyers' ? 'Buyer Points' : 'Seller Points'}
+                        {activeTab === 'buyers' ? t('leaderboard.buyerPointsLabel', 'Buyer Points') : t('leaderboard.sellerPointsLabel', 'Seller Points')}
                       </span>
                     </div>
                   </div>
@@ -573,13 +585,16 @@ export default function LeaderboardPage() {
                 <TrendingUp className="w-5 h-5 text-[#364ea2] dark:text-[#38bdf8]" />
                 <span>
                   {activeTab === 'buyers'
-                    ? 'Official Buyer Rankings'
-                    : 'Official Seller Rankings'}
+                    ? t('leaderboard.rankingsTitleBuyers', 'Official Buyer Rankings')
+                    : t('leaderboard.rankingsTitleSellers', 'Official Seller Rankings')}
                 </span>
               </h2>
               <p className="card-subtitle">
-                {lastUpdated ? `Live synced at ${lastUpdated.toLocaleTimeString('en-IN')}` : 'Live syncing active'}
-                {' '}• Automated 30-second refresh • TVS Customer ID Verified
+                {lastUpdated
+                  ? t('leaderboard.liveSyncedAt', 'Live synced at {time}', { time: lastUpdated.toLocaleTimeString(isTamil ? 'ta-IN' : 'en-IN') })
+                  : t('leaderboard.liveSyncingActive', 'Live syncing active')}
+                {' '}
+                {t('leaderboard.refreshNotice', '• Automated 30-second refresh • Verified Standings')}
               </p>
             </div>
             <button
@@ -588,7 +603,7 @@ export default function LeaderboardPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh Standings</span>
+              <span>{t('leaderboard.refreshBtn', 'Refresh Standings')}</span>
             </button>
           </div>
 
@@ -600,7 +615,7 @@ export default function LeaderboardPage() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search dealership name, Customer ID (e.g. CUST10001255), city or rank #..."
+                placeholder={t('leaderboard.searchPlaceholder', 'Search dealership name or rank #...')}
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -633,7 +648,7 @@ export default function LeaderboardPage() {
             {/* Rows Per Page Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label htmlFor="pageSize" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                Rows per page:
+                {t('leaderboard.rowsPerPage', 'Rows per page:')}
               </label>
               <select
                 id="pageSize"
@@ -654,11 +669,12 @@ export default function LeaderboardPage() {
                   border: '1px solid var(--border-subtle)',
                 }}
               >
-                <option value={10}>10 rows</option>
-                <option value={25}>25 rows</option>
-                <option value={50}>50 rows</option>
-                <option value={100}>100 rows</option>
-                <option value={0}>All Dealerships</option>
+                <option value={5}>{t('leaderboard.rows5', '5 rows (Top 5)')}</option>
+                <option value={10}>{t('leaderboard.rows10', '10 rows')}</option>
+                <option value={25}>{t('leaderboard.rows25', '25 rows')}</option>
+                <option value={50}>{t('leaderboard.rows50', '50 rows')}</option>
+                <option value={100}>{t('leaderboard.rows100', '100 rows')}</option>
+                <option value={0}>{t('leaderboard.rowsAll', 'All Dealerships')}</option>
               </select>
             </div>
 
@@ -666,15 +682,79 @@ export default function LeaderboardPage() {
             <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               {searchQuery ? (
                 <span>
-                  Found <strong>{filteredLeaderboard.length}</strong> matching dealerships
+                  {t('leaderboard.foundMatching', 'Found {count} matching dealerships', { count: filteredLeaderboard.length })}
                 </span>
               ) : (
                 <span>
-                  Showing <strong>{startRecord}–{endRecord}</strong> of <strong>{activeLeaderboard.length.toLocaleString('en-IN')}</strong> dealerships
+                  {t('leaderboard.showingRange', 'Showing {start}–{end} of {total} dealerships', {
+                    start: startRecord,
+                    end: endRecord,
+                    total: activeLeaderboard.length.toLocaleString('en-IN'),
+                  })}
                 </span>
               )}
             </div>
           </div>
+
+          {/* Dealer Championship Position Spotlight & Motivational Callout Banner */}
+          {currentDealerEntry && (
+            <div className="dealer-position-spotlight-card" role="region" aria-label="Dealer Position Spotlight">
+              <div className="spotlight-left">
+                <div className={`spotlight-badge-icon ${isMyFirstPlace ? 'champion' : 'contender'}`}>
+                  {isMyFirstPlace ? (
+                    <Crown className="w-6 h-6 text-amber-400" />
+                  ) : (
+                    <TrendingUp className="w-6 h-6 text-sky-400" />
+                  )}
+                </div>
+                <div className="spotlight-text-content">
+                  <div className="spotlight-eyebrow-row">
+                    <span className="spotlight-eyebrow">{t('leaderboard.myPositionEyebrow', 'MY CHAMPIONSHIP STANDING')}</span>
+                    <span className="spotlight-active-dot" />
+                    <span className="spotlight-status-label">{t('leaderboard.verifiedPosition', 'VERIFIED POSITION')}</span>
+                  </div>
+                  <h3 className="spotlight-dealer-title">
+                    <span>{getDisplayName(currentDealerEntry)}</span>
+                    <span className="you-pill">{t('leaderboard.you', 'YOU')}</span>
+                  </h3>
+                  <p className="spotlight-message">
+                    {isMyFirstPlace ? (
+                      t('leaderboard.championMsg', 'You are currently in 1st place! Keep bidding to defend your championship crown!')
+                    ) : (
+                      t('leaderboard.bidMoreToWinMsg', 'Bid more to win! You need {points} more points to secure 1st place (Leader has {top1} pts). Compete in upcoming live auctions to climb the standings!', {
+                        points: pointsNeededFor1st,
+                        top1: top1Points,
+                      })
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="spotlight-metrics-group">
+                <div className="spotlight-metric-chip">
+                  <span className="metric-chip-label">{t('leaderboard.metricCurrentRank', 'CURRENT RANK')}</span>
+                  <span className="metric-chip-value">#{currentDealerEntry.rank}</span>
+                </div>
+
+                <div className="spotlight-metric-chip">
+                  <span className="metric-chip-label">
+                    {activeTab === 'buyers' ? t('leaderboard.metricBuyerPoints', 'BUYER POINTS') : t('leaderboard.metricSellerPoints', 'SELLER POINTS')}
+                  </span>
+                  <span className="metric-chip-value text-sky-400">{myPoints.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div className={`spotlight-metric-chip highlight-target ${isMyFirstPlace ? 'champion' : ''}`}>
+                  <span className="metric-chip-label">{t('leaderboard.metricTo1stPlace', 'TO SECURE 1ST PLACE')}</span>
+                  <span className="metric-chip-value highlight-value">
+                    {isMyFirstPlace ? 'CHAMPION' : `+${pointsNeededFor1st} PTS`}
+                  </span>
+                  <span className="metric-chip-sub">
+                    {isMyFirstPlace ? t('leaderboard.leadSecured', 'Lead Secured') : t('leaderboard.bidMoreBadge', 'Bid more to win!')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Table Container */}
           {paginatedEntries.length > 0 ? (
@@ -682,15 +762,10 @@ export default function LeaderboardPage() {
               <table className="leaderboard-table">
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'center', width: '74px' }}>Rank</th>
-                    <th style={{ width: '170px' }}>Customer ID</th>
-                    <th>Dealership Name</th>
-                    <th style={{ width: '130px' }}>City</th>
-                    <th style={{ width: '170px' }}>
-                      {activeTab === 'buyers' ? 'Buyer Stats' : 'Seller Stats'}
-                    </th>
-                    <th style={{ textAlign: 'right', width: '130px' }}>
-                      {activeTab === 'buyers' ? 'Buyer Points' : 'Seller Points'}
+                    <th style={{ textAlign: 'center', width: '80px' }}>{t('leaderboard.thRank', 'Rank')}</th>
+                    <th>{t('leaderboard.thDealership', 'Dealership Name')}</th>
+                    <th style={{ textAlign: 'right', width: '160px' }}>
+                      {activeTab === 'buyers' ? t('leaderboard.thBuyerPoints', 'Buyer Points') : t('leaderboard.thSellerPoints', 'Seller Points')}
                     </th>
                   </tr>
                 </thead>
@@ -712,25 +787,6 @@ export default function LeaderboardPage() {
                           </span>
                         </td>
 
-                        {/* Verified TVS Customer ID */}
-                        <td>
-                          <span className="customer-id-pill" title={`TVS Customer ID: ${entry.customerId}`}>
-                            <span>{entry.customerId}</span>
-                            <button
-                              type="button"
-                              className="copy-id-btn"
-                              onClick={(e) => copyCustomerId(entry.customerId, e)}
-                              title="Copy Customer ID"
-                            >
-                              {copiedId === entry.customerId ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </span>
-                        </td>
-
                         {/* Dealership Name & Category */}
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -739,40 +795,34 @@ export default function LeaderboardPage() {
                                 {getDisplayName(entry)}
                               </span>
                               {entry.isCurrentDealer && (
-                                <span className="you-pill">YOU</span>
+                                <span className="you-pill">{t('leaderboard.you', 'YOU')}</span>
                               )}
                               {entry.rank <= 3 && (
                                 <span className={`podium-standing-tag ${isTop1 ? 'rank-1' : isTop2 ? 'rank-2' : 'rank-3'}`} style={{ margin: 0, padding: '1px 7px', fontSize: '0.62rem' }}>
-                                  {isTop1 ? 'CHAMPION' : isTop2 ? '2ND PODIUM' : '3RD PODIUM'}
+                                  {isTop1 ? t('leaderboard.badgeChampion', 'CHAMPION') : isTop2 ? t('leaderboard.badge2nd', '2ND PODIUM') : t('leaderboard.badge3rd', '3RD PODIUM')}
                                 </span>
                               )}
                             </div>
+                            {entry.isCurrentDealer && (
+                              <div className="bid-more-subtext">
+                                {isMyFirstPlace ? (
+                                  <span style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>
+                                    👑 {t('leaderboard.championLeadingMsgShort', 'Rank #1 • Defend your championship lead!')}
+                                  </span>
+                                ) : (
+                                  <span>
+                                    <span className="flame-icon">🔥</span>
+                                    {t('leaderboard.bidMoreCalloutInline', 'Need {points} pts to secure 1st place • Bid more to win!', { points: pointsNeededFor1st })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {entry.category && (
                               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                                 {entry.category}
                               </span>
                             )}
                           </div>
-                        </td>
-
-                        {/* City */}
-                        <td>
-                          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                            {entry.city || 'Tamil Nadu'}
-                          </span>
-                        </td>
-
-                        {/* Activity Performance */}
-                        <td>
-                          {activeTab === 'buyers' ? (
-                            <span className="activity-telemetry-badge">
-                              <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>{entry.buysCount || 0}</span> Won • {entry.bidsCount || 0} Cars Bid
-                            </span>
-                          ) : (
-                            <span className="activity-telemetry-badge">
-                              <span style={{ color: 'var(--accent-amber)', fontWeight: 700 }}>{entry.salesCount || 0}</span> Sold • {entry.listingsCount || 0} Listed
-                            </span>
-                          )}
                         </td>
 
                         {/* Points */}
@@ -782,13 +832,81 @@ export default function LeaderboardPage() {
                               {entry.points.toLocaleString('en-IN')}
                             </span>
                             <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              {activeTab === 'buyers' ? 'Buyer Pts' : 'Seller Pts'}
+                              {activeTab === 'buyers' ? t('leaderboard.buyerPtsSub', 'Buyer Pts') : t('leaderboard.sellerPtsSub', 'Seller Pts')}
                             </span>
                           </div>
                         </td>
                       </tr>
                     );
                   })}
+
+                  {/* Logged-in Dealer Position Pinned to Page 1 if not in top 5 */}
+                  {currentPage === 1 && currentDealerEntry && !isCurrentDealerInPage && (
+                    <>
+                      <tr className="current-dealer-separator-row" key="dealer-position-separator">
+                        <td colSpan={3}>
+                          <div className="current-dealer-separator-wrap">
+                            <span className="separator-line" />
+                            <span className="separator-tag">
+                              <Crown className="w-3.5 h-3.5 text-amber-500" />
+                              <span>{t('leaderboard.yourStandingDivider', 'YOUR CURRENT POSITION')}</span>
+                            </span>
+                            <span className="separator-line" />
+                          </div>
+                        </td>
+                      </tr>
+
+                      <tr
+                        key={`pinned-self-${currentDealerEntry.rank}-${currentDealerEntry.dealer}`}
+                        className="leaderboard-row current-dealer-row pinned-dealer-row"
+                      >
+                        {/* Rank */}
+                        <td style={{ textAlign: 'center' }}>
+                          <span className="rank-cell-content rank-user-pinned">
+                            {currentDealerEntry.rank}
+                          </span>
+                        </td>
+
+                        {/* Dealership Name & Motivational Callout */}
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {getDisplayName(currentDealerEntry)}
+                              </span>
+                              <span className="you-pill">{t('leaderboard.you', 'YOU')}</span>
+                              <span className="pinned-position-pill">
+                                {t('leaderboard.yourPosition', 'Your Position')}
+                              </span>
+                            </div>
+                            <div className="bid-more-subtext">
+                              <span className="flame-icon">🔥</span>
+                              <span>
+                                {t('leaderboard.bidMoreCalloutInline', 'Need {points} pts to secure 1st place • Bid more to win!', { points: pointsNeededFor1st })}
+                              </span>
+                            </div>
+                            {currentDealerEntry.category && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {currentDealerEntry.category}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Points */}
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span className="points-pill current-dealer-points-pill">
+                              {currentDealerEntry.points.toLocaleString('en-IN')}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              {activeTab === 'buyers' ? t('leaderboard.buyerPtsSub', 'Buyer Pts') : t('leaderboard.sellerPtsSub', 'Seller Pts')}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -815,12 +933,12 @@ export default function LeaderboardPage() {
                 <Search className="w-6 h-6" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
-                {searchQuery ? 'No matching dealerships found' : 'Standings Initializing'}
+                {searchQuery ? t('leaderboard.noMatchingTitle', 'No matching dealerships found') : t('leaderboard.standingsInitTitle', 'Standings Initializing')}
               </h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '440px', margin: '0 auto 20px', lineHeight: 1.5 }}>
                 {searchQuery
-                  ? `No dealerships matched "${searchQuery}". Please check your search term, Customer ID, or dealer rank number.`
-                  : 'Leaderboard points calculate automatically following verified auction transactions and dealer actions.'}
+                  ? t('leaderboard.noMatchingMsg', 'No dealerships matched "{query}". Please check your search term or dealer rank number.', { query: searchQuery })
+                  : t('leaderboard.standingsInitMsg', 'Leaderboard points calculate automatically following verified auction transactions and dealer actions.')}
               </p>
               {searchQuery && (
                 <button
@@ -830,7 +948,7 @@ export default function LeaderboardPage() {
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
                   <X className="w-3.5 h-3.5" />
-                  <span>Clear Search Filter</span>
+                  <span>{t('leaderboard.clearSearchBtn', 'Clear Search Filter')}</span>
                 </button>
               )}
             </div>
@@ -850,9 +968,13 @@ export default function LeaderboardPage() {
             }}>
               {/* Pagination Info */}
               <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                Showing <strong>{startRecord}</strong> to <strong>{endRecord}</strong> of{' '}
-                <strong>{filteredLeaderboard.length.toLocaleString('en-IN')}</strong> dealerships • Page{' '}
-                <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                {t('leaderboard.paginationShowing', 'Showing {start} to {end} of {total} dealerships • Page {page} of {pages}', {
+                  start: startRecord,
+                  end: endRecord,
+                  total: filteredLeaderboard.length.toLocaleString('en-IN'),
+                  page: currentPage,
+                  pages: totalPages,
+                })}
               </div>
 
               {/* Page Number Buttons */}
@@ -941,7 +1063,7 @@ export default function LeaderboardPage() {
 
               {/* Jump to Page Box */}
               <form onSubmit={handleJumpPage} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Go to:</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('leaderboard.goToPage', 'Go to:')}</span>
                 <input
                   type="number"
                   min={1}
@@ -965,7 +1087,7 @@ export default function LeaderboardPage() {
                   className="btn btn-ghost btn-sm"
                   style={{ height: '32px', padding: '0 8px', fontSize: '0.78rem' }}
                 >
-                  Go
+                  {t('leaderboard.goBtn', 'Go')}
                 </button>
               </form>
             </div>
@@ -975,14 +1097,14 @@ export default function LeaderboardPage() {
         {/* Corporate Footer */}
         <footer style={{ textAlign: 'center', padding: '48px 0 24px', color: 'var(--text-muted)', fontSize: '0.8rem', borderTop: '1px solid var(--border-hairline)', marginTop: '48px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', marginBottom: '8px' }}>
-            <span>TVS Certified Network</span>
+            <span>{t('footer.network', 'TVS Certified Network')}</span>
             <span>•</span>
-            <span>Dealer Super Cup 2026–27</span>
+            <span>{t('footer.cup', 'Dealer Super Cup 2026')}</span>
             <span>•</span>
-            <span>Live Standings</span>
+            <span>{t('leaderboard.live', 'LIVE')}</span>
           </div>
           <p style={{ marginTop: 'var(--space-xs)', color: 'var(--text-dim)', fontSize: '0.75rem' }}>
-            High-velocity dealer auctions every Thursday at 2:00 PM • Verified points synced in real-time
+            {t('leaderboard.footerAuctions', 'High-velocity dealer auctions every Thursday at 2:00 PM • Verified points synced in real-time')}
           </p>
           <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <button
@@ -1002,7 +1124,7 @@ export default function LeaderboardPage() {
               }}
             >
               <Scale className="w-3.5 h-3.5" />
-              <span>Official Terms & Conditions (Buyer & Seller Leagues)</span>
+              <span>{t('leaderboard.footerTermsBtn', 'Official Terms & Conditions (Buyer & Seller Leagues)')}</span>
             </button>
             <span style={{ color: 'var(--border-subtle)' }}>•</span>
             <Link
@@ -1013,7 +1135,7 @@ export default function LeaderboardPage() {
                 textDecoration: 'underline',
               }}
             >
-              Standalone Terms Page
+              {t('leaderboard.footerTermsPage', 'Standalone Terms Page')}
             </Link>
           </div>
         </footer>
@@ -1026,5 +1148,13 @@ export default function LeaderboardPage() {
         defaultTab={activeTab}
       />
     </div>
+  );
+}
+
+export default function LeaderboardPage() {
+  return (
+    <DealerLanguageProvider>
+      <LeaderboardContent />
+    </DealerLanguageProvider>
   );
 }

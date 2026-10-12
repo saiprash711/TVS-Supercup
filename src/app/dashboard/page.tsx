@@ -9,10 +9,7 @@ import {
   ShoppingCart, 
   DollarSign, 
   Gavel, 
-  Search, 
-  Star, 
   Calendar, 
-  ShieldCheck, 
   CheckCircle2, 
   LogOut, 
   Radio, 
@@ -25,16 +22,17 @@ import {
   Zap,
   ChevronRight,
   Trophy,
-  Info,
   Crown,
   Scale
 } from 'lucide-react';
 import ScrollVideoHero from '../components/ScrollVideoHero';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
+import LanguageToggle from '../components/LanguageToggle';
 import PrizeShowcase from '../components/PrizeShowcase';
 import SuperCupPointsRulesModal from '../components/SuperCupPointsRulesModal';
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
+import { DealerLanguageProvider, useDealerLanguage } from '../context/DealerLanguageContext';
 
 interface DashboardData {
   dealer: { displayName?: string; maskedName: string; city: string };
@@ -95,8 +93,9 @@ interface DashboardData {
   campaign: { name: string; slug: string; isTestMode: boolean; startDate: string; endDate: string };
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
+  const { t, isTamil } = useDealerLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showRulesModal, setShowRulesModal] = useState(false);
@@ -145,16 +144,16 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  // Use the configured campaign schedule rather than assuming every Thursday.
-  const getNextAuctionDateLabel = (matches?: DashboardData['matchTracker']) => {
+  // Format auction schedule label respecting active language
+  const getNextAuctionDateLabel = (matches?: DashboardData['matchTracker'], isTa?: boolean) => {
     const now = new Date();
     const nextMatch = matches
       ?.filter(match => match.status === 'LIVE' || new Date(match.date).getTime() >= now.getTime())
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
 
     if (nextMatch) {
-      if (nextMatch.status === 'LIVE') return 'Live now';
-      return new Date(nextMatch.date).toLocaleString('en-IN', {
+      if (nextMatch.status === 'LIVE') return isTa ? 'இப்போது நேரலையில்' : 'Live now';
+      return new Date(nextMatch.date).toLocaleString(isTa ? 'ta-IN' : 'en-IN', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -180,9 +179,11 @@ export default function DashboardPage() {
     const isToday = now.toDateString() === auctionDate.toDateString();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const isTomorrow = tomorrow.toDateString() === auctionDate.toDateString();
-    if (isToday) return 'Today at 2:00 PM IST';
-    if (isTomorrow) return 'Tomorrow at 2:00 PM IST';
-    return auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ' at 2:00 PM IST';
+    if (isToday) return isTa ? 'இன்று மதியம் 2:00 மணி IST' : 'Today at 2:00 PM IST';
+    if (isTomorrow) return isTa ? 'நாளை மதியம் 2:00 மணி IST' : 'Tomorrow at 2:00 PM IST';
+    return isTa
+      ? auctionDate.toLocaleDateString('ta-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ' மதியம் 2:00 மணி IST'
+      : auctionDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ' at 2:00 PM IST';
   };
 
   const handleLogout = async () => {
@@ -197,10 +198,21 @@ export default function DashboardPage() {
         <div className="floating-orb orb-2"></div>
         <div className="floating-orb orb-3"></div>
         <div className="grid-overlay"></div>
-        <div className="loading-container" style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+        <nav className="navbar" style={{ position: 'relative', zIndex: 2 }}>
+          <div className="navbar-inner">
+            <div className="navbar-brand">
+              <span className="navbar-logo"><span>TVS</span> SUPERCUP</span>
+            </div>
+            <div className="navbar-user">
+              <LanguageToggle />
+              <SwitchMode width={58} height={28} />
+            </div>
+          </div>
+        </nav>
+        <div className="loading-container" style={{ minHeight: '80vh', position: 'relative', zIndex: 1 }}>
           <div className="loading-spinner"></div>
           <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
-            CONNECTING TO TVS TELEMETRY GATEWAY...
+            {t('navbar.connectingGateway', 'CONNECTING TO TVS TELEMETRY GATEWAY...')}
           </span>
         </div>
       </div>
@@ -228,7 +240,9 @@ export default function DashboardPage() {
               <span className="navbar-logo">
                 <span>TVS</span> SUPERCUP
               </span>
-              <span className="navbar-badge">{isTestMode ? 'TEST MODE' : '2026–27'}</span>
+              <span className="navbar-badge">
+                {isTestMode ? t('navbar.testMode', 'TEST MODE') : '2026–27'}
+              </span>
             </div>
           </Link>
 
@@ -236,13 +250,13 @@ export default function DashboardPage() {
             <li>
               <Link href="/leaderboard" className="navbar-link">
                 <Award className="w-4 h-4 text-amber-500" />
-                <span>Leaderboard</span>
+                <span>{t('navbar.leaderboard', 'Leaderboard')}</span>
               </Link>
             </li>
             <li>
               <span className="navbar-link active">
                 <Layers className="w-4 h-4 text-[#364ea2]" />
-                <span>My Dashboard</span>
+                <span>{t('navbar.myDashboard', 'My Dashboard')}</span>
               </span>
             </li>
             <li>
@@ -253,7 +267,7 @@ export default function DashboardPage() {
               >
                 <span className="rules-badge-pulse-indicator" />
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                <span>Point Rules</span>
+                <span>{t('navbar.pointRules', 'Point Rules')}</span>
               </button>
             </li>
             <li>
@@ -264,12 +278,14 @@ export default function DashboardPage() {
                 title="View Official Terms & Conditions for Buyers and Sellers"
               >
                 <Scale className="w-3.5 h-3.5" />
-                <span>Terms & Rules</span>
+                <span>{t('navbar.termsRules', 'Terms & Rules')}</span>
               </button>
             </li>
           </ul>
 
           <div className="navbar-user">
+            {/* Language Toggle: English / Tamil for Dealer Route */}
+            <LanguageToggle />
             <SwitchMode width={58} height={28} />
             <div className="navbar-user-pill">
               <div className="navbar-avatar">
@@ -283,7 +299,7 @@ export default function DashboardPage() {
               title="Logout of session"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">{t('navbar.logout', 'Logout')}</span>
             </button>
           </div>
         </div>
@@ -293,39 +309,39 @@ export default function DashboardPage() {
       <TickerMarquee
         customItems={[
           {
-            label: isTestMode ? 'PRE-LAUNCH TEST WINDOW' : 'CHAMPIONSHIP STATUS',
-            value: isTestMode ? 'TEST AUCTIONS 1 OCT & 8 OCT • LIVE CUP STARTS 15 OCT' : 'SUPER CUP 2026–27 ACTIVE',
-            badge: isTestMode ? 'TEST MODE' : 'LIVE CUP',
+            label: isTestMode ? t('ticker.preLaunch', 'PRE-LAUNCH TEST WINDOW') : t('ticker.champStatus', 'CHAMPIONSHIP STATUS'),
+            value: isTestMode ? t('ticker.preLaunchVal', 'TEST AUCTIONS 1 OCT & 8 OCT • LIVE CUP STARTS 15 OCT') : t('ticker.champActive', 'SUPER CUP 2026–27 ACTIVE'),
+            badge: isTestMode ? t('ticker.testModeBadge', 'TEST MODE') : t('ticker.liveCup', 'LIVE CUP'),
             type: 'live',
           },
           {
-            label: 'NEXT AUCTION WINDOW',
-            value: getNextAuctionDateLabel(matchTracker),
-            badge: 'COUNTDOWN',
+            label: t('ticker.nextAuction', 'NEXT AUCTION WINDOW'),
+            value: getNextAuctionDateLabel(matchTracker, isTamil),
+            badge: t('ticker.countdown', 'COUNTDOWN'),
             type: 'live',
           },
           {
-            label: 'SEASON GRAND PRIZE POOL',
-            value: '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)',
-            badge: 'PODIUM',
+            label: t('ticker.seasonGrandPrize', 'SEASON GRAND PRIZE POOL'),
+            value: t('ticker.grandPrizeVal', '₹1,00,000 FOR ENTIRE SEASON (₹50K BUYERS + ₹50K SELLERS)'),
+            badge: t('ticker.podium', 'PODIUM'),
             type: 'accent',
           },
           {
-            label: 'SELLING ALLOCATIONS',
-            value: 'VEHICLE LISTING = +5 PTS • COMMISSION SETTLEMENT = +5 PTS',
-            badge: 'SELLING',
+            label: t('ticker.sellingAlloc', 'SELLING ALLOCATIONS'),
+            value: t('ticker.sellingAllocVal', 'VEHICLE LISTING = +5 PTS • COMMISSION SETTLEMENT = +5 PTS'),
+            badge: t('ticker.sellingBadge', 'SELLING'),
             type: 'positive',
           },
           {
-            label: 'BUYING ALLOCATIONS',
-            value: 'MATCH ATTENDANCE = +1 PT • BIDS = +1 PT (PER-CAR BASIS) • BONUS = +20 PTS',
-            badge: 'BUYING',
+            label: t('ticker.buyingAlloc', 'BUYING ALLOCATIONS'),
+            value: t('ticker.buyingAllocVal', 'MATCH ATTENDANCE = +1 PT • BIDS = +1 PT (PER-CAR BASIS) • BONUS = +20 PTS'),
+            badge: t('ticker.buyingBadge', 'BUYING'),
             type: 'positive',
           },
           {
-            label: 'TVS CERTIFIED NETWORK',
-            value: 'TRANSPARENT DIGITAL AUCTIONS • AUDITED COMPLIANCE',
-            badge: 'VERIFIED',
+            label: t('ticker.tvsNetwork', 'TVS CERTIFIED NETWORK'),
+            value: t('ticker.tvsNetworkVal', 'TRANSPARENT DIGITAL AUCTIONS • AUDITED COMPLIANCE'),
+            badge: t('ticker.verifiedBadge', 'VERIFIED'),
             type: 'neutral',
           },
         ]}
@@ -348,13 +364,17 @@ export default function DashboardPage() {
                 <Radio className="w-5 h-5 animate-pulse" />
               </div>
               <div>
-                <strong style={{ display: 'block', letterSpacing: '.08em', fontSize: '.84rem', color: '#b45309' }}>PRE-LAUNCH TEST MODE</strong>
+                <strong style={{ display: 'block', letterSpacing: '.08em', fontSize: '.84rem', color: '#b45309' }}>
+                  {t('testBanner.title', 'PRE-LAUNCH TEST MODE')}
+                </strong>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '.88rem' }}>
-                  Testing auctions: 1 Oct and 8 Oct. Test scores are isolated and will not carry into the live Super Cup.
+                  {t('testBanner.desc', 'Testing auctions: 1 Oct and 8 Oct. Test scores are isolated and will not carry into the live Super Cup.')}
                 </span>
               </div>
             </div>
-            <span className="badge badge-warning">LIVE CAMPAIGN STARTS 15 OCT</span>
+            <span className="badge badge-warning">
+              {t('testBanner.badge', 'LIVE CAMPAIGN STARTS 15 OCT')}
+            </span>
           </section>
         )}
 
@@ -366,11 +386,13 @@ export default function DashboardPage() {
             </div>
             <div>
               <div className="rules-showcase-title">
-                <span>Official Scoring Rules & League Structure</span>
-                <span className="badge badge-success" style={{ fontSize: '0.68rem', padding: '2px 8px', letterSpacing: '0.04em' }}>ACTIVE ALLOCATIONS</span>
+                <span>{t('rulesBanner.title', 'Official Scoring Rules & League Structure')}</span>
+                <span className="badge badge-success" style={{ fontSize: '0.68rem', padding: '2px 8px', letterSpacing: '0.04em' }}>
+                  {t('rulesBanner.activeAllocations', 'ACTIVE ALLOCATIONS')}
+                </span>
               </div>
               <div className="rules-showcase-desc">
-                Listings (+5 pts) • Commissions (+5 pts) • Unique Car Bids (+1 pt) • Match Attendance (+1 pt) • All-Matches Bonus (+20 pts). Separate Buyer & Seller Leagues.
+                {t('rulesBanner.desc', 'Listings (+5 pts) • Commissions (+5 pts) • Unique Car Bids (+1 pt) • Match Attendance (+1 pt) • All-Matches Bonus (+20 pts). Separate Buyer & Seller Leagues.')}
               </div>
             </div>
           </div>
@@ -380,7 +402,7 @@ export default function DashboardPage() {
               onClick={() => setShowRulesModal(true)}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Point Rules</span>
+              <span>{t('rulesBanner.btnRules', 'Point Rules')}</span>
             </button>
             <button 
               className="rules-showcase-btn"
@@ -388,7 +410,7 @@ export default function DashboardPage() {
               style={{ background: 'rgba(54, 78, 162, 0.25)', borderColor: 'rgba(54, 78, 162, 0.5)' }}
             >
               <Scale className="w-3.5 h-3.5 text-blue-400" />
-              <span>Terms & Rules</span>
+              <span>{t('rulesBanner.btnTerms', 'Terms & Rules')}</span>
             </button>
           </div>
         </div>
@@ -397,10 +419,9 @@ export default function DashboardPage() {
         <ScrollVideoHero
           dealerName={dealerName}
           rank={position?.buyerPosition?.rank || position?.rank || '-'}
-          points={`${breakdown?.buyerPoints || 0} Buyer / ${breakdown?.sellerPoints || 0} Seller`}
+          points={`${breakdown?.buyerPoints || 0} ${t('hero.buyer', 'Buyer')} / ${breakdown?.sellerPoints || 0} ${t('hero.seller', 'Seller')}`}
           city={dealer.city || 'TVS Certified Hub'}
-          nextAuctionLabel={getNextAuctionDateLabel(matchTracker)}
-          tagline="A STRONGER DEALER COMMUNITY • DRIVING A BRIGHTER TOMORROW"
+          nextAuctionLabel={getNextAuctionDateLabel(matchTracker, isTamil)}
         />
 
         <div id="prize-showcase">
@@ -416,7 +437,7 @@ export default function DashboardPage() {
               
               <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-blue)' }}>
                 <ShoppingCart className="w-4 h-4" />
-                BUYER LEAGUE STANDINGS (₹50,000 PRIZE POOL)
+                {t('standings.buyerTitle', 'BUYER LEAGUE STANDINGS (₹50,000 PRIZE POOL)')}
               </div>
 
               <div className="score-rank">
@@ -427,25 +448,37 @@ export default function DashboardPage() {
               <div className="score-points" style={{ color: 'var(--accent-blue)' }}>
                 {(breakdown?.buyerPoints ?? 0).toLocaleString('en-IN')}
               </div>
-              <div className="score-points-label">Buyer League Verified Points</div>
+              <div className="score-points-label">{t('standings.buyerPointsLabel', 'Buyer League Verified Points')}</div>
 
               {/* Gap Indicators for Buyer League */}
               <div className="gap-indicators">
                 {position?.buyerPosition?.above ? (
                   <div className="gap-indicator behind">
                     <ArrowUp className="w-3.5 h-3.5" />
-                    <span>{position.buyerPosition.above.gap} PTS BEHIND #{position.buyerPosition.above.rank} ({position.buyerPosition.above.dealer})</span>
+                    <span>
+                      {t('standings.behind', '{gap} PTS BEHIND #{rank} ({dealer})', {
+                        gap: position.buyerPosition.above.gap,
+                        rank: position.buyerPosition.above.rank,
+                        dealer: position.buyerPosition.above.dealer,
+                      })}
+                    </span>
                   </div>
                 ) : position?.buyerPosition && position.buyerPosition.rank === 1 ? (
                   <div className="gap-indicator" style={{ color: 'var(--accent-amber)', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
                     <Crown className="w-3.5 h-3.5" />
-                    <span>LEAGUE LEADER • RANK #1</span>
+                    <span>{t('standings.leagueLeader', 'LEAGUE LEADER • RANK #1')}</span>
                   </div>
                 ) : null}
                 {position?.buyerPosition?.below && (
                   <div className="gap-indicator ahead">
                     <ArrowDown className="w-3.5 h-3.5" />
-                    <span>{position.buyerPosition.below.gap} PTS AHEAD OF #{position.buyerPosition.below.rank} ({position.buyerPosition.below.dealer})</span>
+                    <span>
+                      {t('standings.ahead', '{gap} PTS AHEAD OF #{rank} ({dealer})', {
+                        gap: position.buyerPosition.below.gap,
+                        rank: position.buyerPosition.below.rank,
+                        dealer: position.buyerPosition.below.dealer,
+                      })}
+                    </span>
                   </div>
                 )}
               </div>
@@ -459,7 +492,7 @@ export default function DashboardPage() {
               
               <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)' }}>
                 <Layers className="w-4 h-4" />
-                SELLER LEAGUE STANDINGS (₹50,000 PRIZE POOL)
+                {t('standings.sellerTitle', 'SELLER LEAGUE STANDINGS (₹50,000 PRIZE POOL)')}
               </div>
 
               <div className="score-rank">
@@ -470,25 +503,37 @@ export default function DashboardPage() {
               <div className="score-points" style={{ color: 'var(--accent-cyan)' }}>
                 {(breakdown?.sellerPoints ?? 0).toLocaleString('en-IN')}
               </div>
-              <div className="score-points-label">Seller League Verified Points</div>
+              <div className="score-points-label">{t('standings.sellerPointsLabel', 'Seller League Verified Points')}</div>
 
               {/* Gap Indicators for Seller League */}
               <div className="gap-indicators">
                 {position?.sellerPosition?.above ? (
                   <div className="gap-indicator behind">
                     <ArrowUp className="w-3.5 h-3.5" />
-                    <span>{position.sellerPosition.above.gap} PTS BEHIND #{position.sellerPosition.above.rank} ({position.sellerPosition.above.dealer})</span>
+                    <span>
+                      {t('standings.behind', '{gap} PTS BEHIND #{rank} ({dealer})', {
+                        gap: position.sellerPosition.above.gap,
+                        rank: position.sellerPosition.above.rank,
+                        dealer: position.sellerPosition.above.dealer,
+                      })}
+                    </span>
                   </div>
                 ) : position?.sellerPosition && position.sellerPosition.rank === 1 ? (
                   <div className="gap-indicator" style={{ color: 'var(--accent-amber)', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
                     <Crown className="w-3.5 h-3.5" />
-                    <span>LEAGUE LEADER • RANK #1</span>
+                    <span>{t('standings.leagueLeader', 'LEAGUE LEADER • RANK #1')}</span>
                   </div>
                 ) : null}
                 {position?.sellerPosition?.below && (
                   <div className="gap-indicator ahead">
                     <ArrowDown className="w-3.5 h-3.5" />
-                    <span>{position.sellerPosition.below.gap} PTS AHEAD OF #{position.sellerPosition.below.rank} ({position.sellerPosition.below.dealer})</span>
+                    <span>
+                      {t('standings.ahead', '{gap} PTS AHEAD OF #{rank} ({dealer})', {
+                        gap: position.sellerPosition.below.gap,
+                        rank: position.sellerPosition.below.rank,
+                        dealer: position.sellerPosition.below.dealer,
+                      })}
+                    </span>
                   </div>
                 )}
               </div>
@@ -504,11 +549,11 @@ export default function DashboardPage() {
               <div>
                 <h2 className="card-title">
                   <TrendingUp className="w-5 h-5 text-emerald-400" />
-                  Activity Breakdown
+                  {t('breakdown.title', 'Activity Breakdown')}
                 </h2>
-                <p className="card-subtitle">Verified point accruals by transaction type</p>
+                <p className="card-subtitle">{t('breakdown.subtitle', 'Verified point accruals by transaction type')}</p>
               </div>
-              <span className="badge badge-success">Audit Verified</span>
+              <span className="badge badge-success">{t('breakdown.auditVerified', 'Audit Verified')}</span>
             </div>
 
             <table className="breakdown-table">
@@ -516,60 +561,62 @@ export default function DashboardPage() {
                 {/* ── SELLING ALLOCATIONS ── */}
                 <tr className="breakdown-section-header">
                   <td colSpan={3} style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-cyan)', padding: '10px 14px 6px', background: 'rgba(56, 189, 248, 0.06)' }}>
-                    Selling Allocations
+                    {t('breakdown.sellingSection', 'Selling Allocations')}
                   </td>
                 </tr>
                 <tr>
                   <td>
                     <Layers className="w-4 h-4 text-sky-400 mr-2" />
-                    Listing (5 pts)
+                    {t('breakdown.listing', 'Listing (5 pts)')}
                   </td>
-                  <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 5} pts</td>
+                  <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 5} {t('breakdown.pts', 'pts')}</td>
                   <td>+{breakdown.sellingListing?.points ?? 0}</td>
                 </tr>
                 {(breakdown.sellingConversion?.perUnit ?? 0) > 0 && (
                   <tr>
                     <td>
                       <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
-                      Conversion ({breakdown.sellingConversion?.perUnit} pts)
+                      {t('breakdown.sellingConversion', `Conversion (${breakdown.sellingConversion?.perUnit} pts)`, { perUnit: breakdown.sellingConversion?.perUnit ?? 5 })}
                     </td>
-                    <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit} pts</td>
+                    <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit} {t('breakdown.pts', 'pts')}</td>
                     <td>+{breakdown.sellingConversion?.points ?? breakdown.sellTransactions.points}</td>
                   </tr>
                 )}
                 <tr>
                   <td>
                     <CheckCircle2 className="w-4 h-4 text-amber-400 mr-2" />
-                    Commission (5 pts)
+                    {t('breakdown.commission', 'Commission (5 pts)')}
                   </td>
-                  <td>{breakdown.sellingCommission?.count ?? 0} × {breakdown.sellingCommission?.perUnit ?? 5} pts</td>
+                  <td>{breakdown.sellingCommission?.count ?? 0} × {breakdown.sellingCommission?.perUnit ?? 5} {t('breakdown.pts', 'pts')}</td>
                   <td>+{breakdown.sellingCommission?.points ?? 0}</td>
                 </tr>
 
                 {/* ── BUYING ALLOCATIONS ── */}
                 <tr className="breakdown-section-header">
                   <td colSpan={3} style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-blue)', padding: '12px 14px 6px', background: 'rgba(59, 130, 246, 0.06)' }}>
-                    Buying Allocations
+                    {t('breakdown.buyingSection', 'Buying Allocations')}
                   </td>
                 </tr>
                 <tr>
                   <td>
                     <Radio className="w-4 h-4 text-amber-400 mr-2" />
-                    Participation (1 pt)
+                    {t('breakdown.participation', 'Participation (1 pt)')}
                   </td>
-                  <td>{breakdown.buyingParticipation?.count ?? breakdown.matchParticipation.count} × {breakdown.buyingParticipation?.perUnit ?? breakdown.matchParticipation.perUnit} pts</td>
+                  <td>{breakdown.buyingParticipation?.count ?? breakdown.matchParticipation.count} × {breakdown.buyingParticipation?.perUnit ?? breakdown.matchParticipation.perUnit} {t('breakdown.pts', 'pts')}</td>
                   <td>+{breakdown.buyingParticipation?.points ?? breakdown.matchParticipation.points}</td>
                 </tr>
                 <tr>
                   <td>
                     <Gavel className="w-4 h-4 text-blue-400 mr-2" />
-                    Auction Bids (Per-Car Basis)
+                    {t('breakdown.bids', 'Auction Bids (Per-Car Basis)')}
                   </td>
                   <td>
-                    <span>{breakdown.buyingBids?.count ?? (breakdown.bidsPlaced?.count ?? 0)} unique cars bid on × {breakdown.buyingBids?.perUnit ?? (breakdown.bidsPlaced?.perUnit ?? 1)} pt</span>
+                    <span>
+                      {breakdown.buyingBids?.count ?? (breakdown.bidsPlaced?.count ?? 0)} {t('breakdown.uniqueCars', 'unique cars bid on')} × {breakdown.buyingBids?.perUnit ?? (breakdown.bidsPlaced?.perUnit ?? 1)} {t('breakdown.pt', 'pt')}
+                    </span>
                     {breakdown.buyingBids?.totalBids && breakdown.buyingBids.totalBids > (breakdown.buyingBids.count ?? 0) ? (
                       <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        ({breakdown.buyingBids.totalBids} total bids placed across auction)
+                        ({breakdown.buyingBids.totalBids} {t('breakdown.totalBidsPlaced', 'total bids placed across auction')})
                       </span>
                     ) : null}
                   </td>
@@ -578,13 +625,17 @@ export default function DashboardPage() {
                 <tr>
                   <td>
                     <Sparkles className="w-4 h-4 text-amber-400 mr-2" />
-                    All-Matches Attendance Bonus
+                    {t('breakdown.allMatchesBonus', 'All-Matches Attendance Bonus')}
                   </td>
                   <td>
                     {(breakdown.allMatchesBonus?.points ?? 0) > 0 ? (
-                      <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>AWARDED (+20 PTS)</span>
+                      <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                        {t('breakdown.awarded', 'AWARDED (+20 PTS)')}
+                      </span>
                     ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Participate in all 4 matches (+20 pts)</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {t('breakdown.allMatchesHint', 'Participate in all 4 matches (+20 pts)')}
+                      </span>
                     )}
                   </td>
                   <td>+{(breakdown.allMatchesBonus?.points ?? 0)}</td>
@@ -593,20 +644,24 @@ export default function DashboardPage() {
                   <tr>
                     <td>
                       <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
-                      Conversion ({breakdown.buyingConversion?.perUnit} pts)
+                      {t('breakdown.buyingConversion', `Conversion (${breakdown.buyingConversion?.perUnit} pts)`, { perUnit: breakdown.buyingConversion?.perUnit ?? 5 })}
                     </td>
-                    <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit} pts</td>
+                    <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit} {t('breakdown.pts', 'pts')}</td>
                     <td>+{breakdown.buyingConversion?.points ?? breakdown.buyTransactions.points}</td>
                   </tr>
                 )}
 
                 <tr className="breakdown-total" style={{ borderTop: '2px solid var(--border-subtle)' }}>
-                  <td colSpan={2} style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>BUYER LEAGUE SCORE</td>
-                  <td style={{ color: 'var(--accent-blue)', fontWeight: 800 }}>{(breakdown.buyerPoints ?? 0)} PTS</td>
+                  <td colSpan={2} style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>
+                    {t('breakdown.buyerLeagueScore', 'BUYER LEAGUE SCORE')}
+                  </td>
+                  <td style={{ color: 'var(--accent-blue)', fontWeight: 800 }}>{(breakdown.buyerPoints ?? 0)} {t('breakdown.pts', 'PTS')}</td>
                 </tr>
                 <tr className="breakdown-total" style={{ borderTop: '1px dashed var(--border-subtle)' }}>
-                  <td colSpan={2} style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>SELLER LEAGUE SCORE</td>
-                  <td style={{ color: 'var(--accent-cyan)', fontWeight: 800 }}>{(breakdown.sellerPoints ?? 0)} PTS</td>
+                  <td colSpan={2} style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>
+                    {t('breakdown.sellerLeagueScore', 'SELLER LEAGUE SCORE')}
+                  </td>
+                  <td style={{ color: 'var(--accent-cyan)', fontWeight: 800 }}>{(breakdown.sellerPoints ?? 0)} {t('breakdown.pts', 'PTS')}</td>
                 </tr>
               </tbody>
             </table>
@@ -618,11 +673,11 @@ export default function DashboardPage() {
               <div>
                 <h2 className="card-title">
                   <Award className="w-5 h-5 text-amber-400" />
-                  Leaderboard Neighbor Radar
+                  {t('radar.title', 'Leaderboard Neighbor Radar')}
                 </h2>
-                <p className="card-subtitle">Real-time dealer delta analysis</p>
+                <p className="card-subtitle">{t('radar.subtitle', 'Real-time dealer delta analysis')}</p>
               </div>
-              <span className="badge badge-info">Rankings Live</span>
+              <span className="badge badge-info">{t('radar.rankingsLive', 'Rankings Live')}</span>
             </div>
 
             <div className="position-comparison">
@@ -633,11 +688,13 @@ export default function DashboardPage() {
                       <span className="position-rank">#{position.above.rank}</span>
                       <span className="position-name">{position.above.dealer}</span>
                     </div>
-                    <span className="position-points">{position.above.points} pts</span>
+                    <span className="position-points">{position.above.points} {t('breakdown.pts', 'pts')}</span>
                   </div>
                   <div className="position-gap">
                     <ArrowUp className="w-3.5 h-3.5 text-rose-500" />
-                    <span>Deficit: {position.above.gap} points to overtake</span>
+                    <span>
+                      {t('radar.deficit', 'Deficit: {gap} points to overtake', { gap: position.above.gap })}
+                    </span>
                     <ArrowUp className="w-3.5 h-3.5 text-rose-500" />
                   </div>
                 </>
@@ -647,12 +704,12 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span className="position-rank">#{position?.rank}</span>
                   <span className="position-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>YOU ({dealerName})</span>
-                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>ACTIVE</span>
+                    <span>{t('radar.you', `YOU (${dealerName})`, { dealerName })}</span>
+                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>{t('radar.active', 'ACTIVE')}</span>
                   </span>
                 </div>
                 <span className="position-points" style={{ fontSize: '1.1rem' }}>
-                  {position?.points} pts
+                  {position?.points} {t('breakdown.pts', 'pts')}
                 </span>
               </div>
 
@@ -660,7 +717,9 @@ export default function DashboardPage() {
                 <>
                   <div className="position-gap">
                     <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Lead: {position.below.gap} points cushion</span>
+                    <span>
+                      {t('radar.lead', 'Lead: {gap} points cushion', { gap: position.below.gap })}
+                    </span>
                     <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                   <div className="position-item">
@@ -668,7 +727,7 @@ export default function DashboardPage() {
                       <span className="position-rank">#{position.below.rank}</span>
                       <span className="position-name">{position.below.dealer}</span>
                     </div>
-                    <span className="position-points">{position.below.points} pts</span>
+                    <span className="position-points">{position.below.points} {t('breakdown.pts', 'pts')}</span>
                   </div>
                 </>
               )}
@@ -677,27 +736,34 @@ export default function DashboardPage() {
             <div style={{ marginTop: '20px', padding: '12px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-hairline)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Climb higher by winning auction lots this Thursday.
+                  {t('radar.tip', 'Climb higher by winning auction lots this Thursday.')}
                 </span>
                 <Link href="/leaderboard" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 600 }}>
-                  Full Board <ChevronRight className="w-3.5 h-3.5" />
+                  {t('radar.fullBoard', 'Full Board')} <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Match Day Tracker Roadmap */}
+        {/* Match Day Schedule & Attendance Tracker */}
         <div id="match-schedule" className="card" style={{ marginTop: '24px' }}>
           <div className="card-header">
             <div>
               <h2 className="card-title">
                 <Calendar className="w-5 h-5 text-sky-400" />
-                Match Day Schedule & Attendance Tracker
+                {t('match.title', 'Match Day Schedule & Attendance Tracker')}
               </h2>
-              <p className="card-subtitle">Every Thursday at 2:00 PM IST • Participate in all {matchCount} {isTestMode ? 'test auctions' : 'matches'} for a +20 PTS bonus</p>
+              <p className="card-subtitle">
+                {t('match.subtitle', `Every Thursday at 2:00 PM IST • Participate in all ${matchCount} ${isTestMode ? 'test auctions' : 'matches'} for a +20 PTS bonus`, {
+                  count: matchCount,
+                  series: isTestMode ? t('match.testSeries', 'test auctions') : t('match.cupSeries', 'matches'),
+                })}
+              </p>
             </div>
-            <span className="badge badge-primary">{isTestMode ? '2-Auction Test Series' : 'Super Cup 4-Series'}</span>
+            <span className="badge badge-primary">
+              {isTestMode ? t('match.testSeries', '2-Auction Test Series') : t('match.cupSeries', 'Super Cup 4-Series')}
+            </span>
           </div>
 
           <div className="match-tracker">
@@ -706,8 +772,10 @@ export default function DashboardPage() {
                 key={match.matchNumber} 
                 className={`match-item ${match.participated ? 'participated' : ''} ${match.status === 'UPCOMING' ? 'upcoming' : ''}`}
               >
-                <div className="match-number">Match #{match.matchNumber}</div>
-                <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: '2px' }}>Auction #{match.auctionId}</div>
+                <div className="match-number">{t('match.matchLabel', `Match #${match.matchNumber}`, { num: match.matchNumber })}</div>
+                <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {t('match.auctionLabel', `Auction #${match.auctionId}`, { id: match.auctionId })}
+                </div>
                 <div className="match-icon">
                   {match.participated ? (
                     <CheckCircle2 className="w-7 h-7 text-emerald-400" />
@@ -720,15 +788,17 @@ export default function DashboardPage() {
                   )}
                 </div>
                 <div className="match-date">
-                  {new Date(match.date).toLocaleDateString('en-IN', {
+                  {new Date(match.date).toLocaleDateString(isTamil ? 'ta-IN' : 'en-IN', {
                     day: 'numeric',
                     month: 'short',
                     weekday: 'short'
                   })}
                 </div>
                 <div className={`match-status ${match.status.toLowerCase()}`}>
-                  {match.status === 'COMPLETED' && match.participated ? 'PLAYED (+1)' :
-                   match.status === 'COMPLETED' && !match.participated ? 'MISSED' :
+                  {match.status === 'COMPLETED' && match.participated ? t('match.played', 'PLAYED (+1)') :
+                   match.status === 'COMPLETED' && !match.participated ? t('match.missed', 'MISSED') :
+                   match.status === 'UPCOMING' ? t('match.upcoming', 'UPCOMING') :
+                   match.status === 'LIVE' ? t('match.live', 'LIVE') :
                    match.status}
                 </div>
               </div>
@@ -742,15 +812,17 @@ export default function DashboardPage() {
             <div>
               <h2 className="card-title">
                 <Zap className="w-5 h-5 text-emerald-400" />
-                My Live Auction Telemetry Feed
+                {t('telemetry.title', 'My Live Auction Telemetry Feed')}
               </h2>
               <p className="card-subtitle">
-                Real-time activity captured from {getNextAuctionDateLabel(matchTracker)}
+                {t('telemetry.subtitle', `Real-time activity captured from ${getNextAuctionDateLabel(matchTracker, isTamil)}`, {
+                  nextAuction: getNextAuctionDateLabel(matchTracker, isTamil),
+                })}
               </p>
             </div>
             <span className="badge badge-success" style={{ boxShadow: '0 0 12px rgba(6, 214, 160, 0.25)' }}>
               <span className="stream-indicator" style={{ marginRight: '4px' }} />
-              Live Gateway Sync
+              {t('telemetry.syncBadge', 'Live Gateway Sync')}
             </span>
           </div>
 
@@ -759,11 +831,11 @@ export default function DashboardPage() {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>Timestamp</th>
-                    <th>Activity Type</th>
-                    <th>Vehicle & Bidding Telemetry</th>
-                    <th>Score Awarded</th>
-                    <th>Verification</th>
+                    <th>{t('telemetry.thTimestamp', 'Timestamp')}</th>
+                    <th>{t('telemetry.thActivityType', 'Activity Type')}</th>
+                    <th>{t('telemetry.thVehicle', 'Vehicle & Bidding Telemetry')}</th>
+                    <th>{t('telemetry.thScore', 'Score Awarded')}</th>
+                    <th>{t('telemetry.thVerification', 'Verification')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -782,14 +854,14 @@ export default function DashboardPage() {
                           act.activityType === 'BID_PLACED' ? 'badge-primary' :
                           'badge-warning'
                         }`}>
-                          {act.activityType === 'BUY' ? '🏆 WON LOT (CONVERSION)' :
-                           act.activityType === 'SELL' ? '💰 SOLD (CONVERSION)' :
-                           act.activityType === 'SELL_LISTING' ? '📋 VEHICLE LISTED' :
-                           act.activityType === 'SELL_COMMISSION' ? '💵 COMMISSION SETTLED' :
-                           act.activityType === 'BID_PLACED' ? '🔨 BID PLACED' :
-                           act.activityType === 'MATCH_PARTICIPATION' ? '🏏 2PM ROOM' :
-                           act.activityType === 'VEHICLE_INSPECTED' ? '🔍 INSPECTION' :
-                           act.activityType === 'WATCHLIST_ADD' ? '⭐ WATCHLIST' :
+                          {act.activityType === 'BUY' ? t('telemetry.won', '🏆 WON LOT (CONVERSION)') :
+                           act.activityType === 'SELL' ? t('telemetry.sold', '💰 SOLD (CONVERSION)') :
+                           act.activityType === 'SELL_LISTING' ? t('telemetry.listed', '📋 VEHICLE LISTED') :
+                           act.activityType === 'SELL_COMMISSION' ? t('telemetry.commissionSettled', '💵 COMMISSION SETTLED') :
+                           act.activityType === 'BID_PLACED' ? t('telemetry.bidPlaced', '🔨 BID PLACED') :
+                           act.activityType === 'MATCH_PARTICIPATION' ? t('telemetry.room2pm', '🏏 2PM ROOM') :
+                           act.activityType === 'VEHICLE_INSPECTED' ? t('telemetry.inspection', '🔍 INSPECTION') :
+                           act.activityType === 'WATCHLIST_ADD' ? t('telemetry.watchlist', '⭐ WATCHLIST') :
                            act.activityType.replace(/_/g, ' ')}
                         </span>
                       </td>
@@ -803,30 +875,32 @@ export default function DashboardPage() {
                           ) : null}
                           {act.metadata?.bidAmount ? (
                             <span style={{ color: 'var(--accent-blue)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                              • Bid: ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}
+                              • {t('telemetry.bid', 'Bid')}: ₹{Number(act.metadata.bidAmount).toLocaleString('en-IN')}
                             </span>
                           ) : null}
                           {act.metadata?.winningBid ? (
                             <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                              • Won: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}
+                              • {t('telemetry.wonVal', 'Won')}: ₹{Number(act.metadata.winningBid).toLocaleString('en-IN')}
                             </span>
                           ) : null}
                           {act.metadata?.depositAmount ? (
-                            <span style={{ color: 'var(--text-muted)' }}>• Deposit: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              • {t('telemetry.deposit', 'Deposit')}: ₹{Number(act.metadata.depositAmount).toLocaleString('en-IN')}
+                            </span>
                           ) : null}
                           {Boolean(act.metadata?.isLeadingBid) ? (
                             <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(108, 193, 79, 0.15)', color: 'var(--accent-cyan)', fontSize: '0.72rem', fontWeight: 700, border: '1px solid rgba(108, 193, 79, 0.3)' }}>
-                              🏆 Leading Bid
+                              {t('telemetry.leadingBid', '🏆 Leading Bid')}
                             </span>
                           ) : null}
                           {act.metadata?.bidRank && Number(act.metadata.bidRank) > 1 ? (
                             <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                              Outbid (#{String(act.metadata.bidRank)})
+                              {t('telemetry.outbid', `Outbid (#${String(act.metadata.bidRank)})`, { rank: String(act.metadata.bidRank) })}
                             </span>
                           ) : null}
                           {Boolean(act.metadata?.isPreBid) ? (
                             <span style={{ padding: '1px 8px', borderRadius: '4px', background: 'rgba(0, 135, 224, 0.12)', color: 'var(--accent-blue)', fontSize: '0.72rem', border: '1px solid rgba(0, 135, 224, 0.3)' }}>
-                              ⚡ Pre-Bid
+                              {t('telemetry.preBid', '⚡ Pre-Bid')}
                             </span>
                           ) : null}
                           {act.metadata?.fuelType ? (
@@ -840,11 +914,11 @@ export default function DashboardPage() {
                         </div>
                       </td>
                       <td style={{ fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                        +{act.points} PTS
+                        +{act.points} {t('breakdown.pts', 'PTS')}
                       </td>
                       <td>
                         <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Immutable
+                          <CheckCircle2 className="w-3.5 h-3.5" /> {t('telemetry.immutable', 'Immutable')}
                         </span>
                       </td>
                     </tr>
@@ -856,10 +930,10 @@ export default function DashboardPage() {
             <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(54, 78, 162, 0.03)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)' }}>
               <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📡</div>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                No Live Auction Events Recorded In Current Window
+                {t('telemetry.emptyTitle', 'No Live Auction Events Recorded In Current Window')}
               </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
-                Next live session: <strong style={{ color: 'var(--text-primary)' }}>{getNextAuctionDateLabel(matchTracker)}</strong>. Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!
+                {t('telemetry.emptyDesc', 'Next live session:')} <strong style={{ color: 'var(--text-primary)' }}>{getNextAuctionDateLabel(matchTracker, isTamil)}</strong>. {t('telemetry.emptyCallout', 'Place bids, win lots, or attend the 2:00 PM digital room to earn verified points instantly!')}
               </p>
             </div>
           )}
@@ -871,9 +945,9 @@ export default function DashboardPage() {
             <div>
               <h2 className="card-title">
                 <Sparkles className="w-5 h-5 text-amber-400" />
-                Scoring Protocol & Point Allocations
+                {t('protocol.title', 'Scoring Protocol & Point Allocations')}
               </h2>
-              <p className="card-subtitle">Verified point earning structure for the TVS Super Cup</p>
+              <p className="card-subtitle">{t('protocol.subtitle', 'Verified point earning structure for the TVS Super Cup')}</p>
             </div>
             <button 
               className="btn btn-ghost btn-sm"
@@ -881,7 +955,7 @@ export default function DashboardPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', border: '1px solid var(--border-hairline)', borderRadius: '9999px', padding: '6px 14px' }}
             >
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Full Rules Handbook</span>
+              <span>{t('protocol.fullHandbook', 'Full Rules Handbook')}</span>
             </button>
           </div>
 
@@ -889,37 +963,37 @@ export default function DashboardPage() {
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">📋</div>
               <div className="stat-value blue">+5</div>
-              <div className="stat-label">Vehicle Listing (SELL)</div>
+              <div className="stat-label">{t('protocol.listing', 'Vehicle Listing (SELL)')}</div>
             </div>
 
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">💳</div>
               <div className="stat-value lime">+5</div>
-              <div className="stat-label">Commission Settlement (SELL)</div>
+              <div className="stat-label">{t('protocol.commission', 'Commission Settlement (SELL)')}</div>
             </div>
 
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">🔨</div>
               <div className="stat-value blue">+1</div>
-              <div className="stat-label">Unique Car Bid (BUY - Per Car)</div>
+              <div className="stat-label">{t('protocol.bid', 'Unique Car Bid (BUY - Per Car)')}</div>
             </div>
 
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">⏱️</div>
               <div className="stat-value gold">+1</div>
-              <div className="stat-label">Match Room Attendance (BUY)</div>
+              <div className="stat-label">{t('protocol.attendance', 'Match Room Attendance (BUY)')}</div>
             </div>
 
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">🌟</div>
               <div className="stat-value gold">+20</div>
-              <div className="stat-label">All-Matches Bonus (BUY)</div>
+              <div className="stat-label">{t('protocol.bonus', 'All-Matches Bonus (BUY)')}</div>
             </div>
 
             <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setShowRulesModal(true)}>
               <div className="stat-icon">🏆</div>
               <div className="stat-value gold">₹1.0L</div>
-              <div className="stat-label">Season Prize (₹50k Buy / ₹50k Sell)</div>
+              <div className="stat-label">{t('protocol.seasonPrize', 'Season Prize (₹50k Buy / ₹50k Sell)')}</div>
             </div>
           </div>
         </div>
@@ -927,18 +1001,18 @@ export default function DashboardPage() {
         {/* World-Class Corporate Footer */}
         <footer style={{ textAlign: 'center', padding: '48px 0 24px', borderTop: '1px solid var(--border-hairline)', marginTop: '48px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
-            <span>TVS Certified Network</span>
+            <span>{t('footer.network', 'TVS Certified Network')}</span>
             <span>•</span>
-            <span>Dealer Super Cup 2026</span>
+            <span>{t('footer.cup', 'Dealer Super Cup 2026')}</span>
             <span>•</span>
-            <span>People • Platform • Progress</span>
+            <span>{t('footer.motto', 'People • Platform • Progress')}</span>
           </div>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
-            Official TVS Certified Dealership Portal. All points and ranks are subject to automated verification.
+            {t('footer.disclaimer', 'Official TVS Certified Dealership Portal. All points and ranks are subject to automated verification.')}
           </p>
           <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <Link href="/leaderboard" style={{ color: 'var(--accent-blue)', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none' }}>
-              View Public Leaderboard →
+              {t('footer.viewLeaderboard', 'View Public Leaderboard →')}
             </Link>
             <span style={{ color: 'var(--border-subtle)' }}>•</span>
             <button
@@ -958,7 +1032,7 @@ export default function DashboardPage() {
               }}
             >
               <Scale className="w-3.5 h-3.5" />
-              <span>Official Terms & Conditions (Buyer & Seller Leagues)</span>
+              <span>{t('footer.termsModal', 'Official Terms & Conditions (Buyer & Seller Leagues)')}</span>
             </button>
             <span style={{ color: 'var(--border-subtle)' }}>•</span>
             <Link
@@ -969,7 +1043,7 @@ export default function DashboardPage() {
                 textDecoration: 'underline',
               }}
             >
-              Standalone Terms Page
+              {t('footer.standaloneTerms', 'Standalone Terms Page')}
             </Link>
           </div>
         </footer>
@@ -988,5 +1062,13 @@ export default function DashboardPage() {
         onClose={() => setShowTermsModal(false)}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <DealerLanguageProvider>
+      <DashboardContent />
+    </DealerLanguageProvider>
   );
 }

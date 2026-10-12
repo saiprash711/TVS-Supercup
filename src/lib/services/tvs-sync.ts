@@ -351,6 +351,7 @@ export async function syncAuctionActivities(
     for (const d of dealers) {
       dealerMap.set(d.externalDealerId, d.id);
       dealerMap.set(d.displayName, d.id);
+      dealerMap.set(d.displayName.trim().toLowerCase(), d.id);
       if (d.externalDealerId.startsWith('USR-')) {
         dealerMap.set(d.externalDealerId.replace('USR-', ''), d.id);
       }
@@ -421,8 +422,8 @@ export async function syncAuctionActivities(
 
       if (isSellingActivity) {
         const rawSellerName = meta.sellerName || meta.customerName;
-        const sName = typeof rawSellerName === 'string' ? rawSellerName : undefined;
-        dealerId = (sName ? dealerMap.get(sName) : undefined) ||
+        const sName = typeof rawSellerName === 'string' ? rawSellerName.trim() : undefined;
+        dealerId = (sName ? (dealerMap.get(sName) || dealerMap.get(sName.toLowerCase())) : undefined) ||
           dealerMap.get(act.dealerId) ||
           (meta.sellerCustomerId ? dealerMap.get(String(meta.sellerCustomerId)) : undefined) ||
           (meta.sellerCustomerCode ? dealerMap.get(String(meta.sellerCustomerCode)) : undefined);

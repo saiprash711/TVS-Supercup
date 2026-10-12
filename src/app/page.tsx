@@ -19,6 +19,8 @@ import {
   X
 } from 'lucide-react';
 import SwitchMode from './components/watermelon/switch-mode';
+import LanguageToggle from './components/LanguageToggle';
+import { DealerLanguageProvider, useDealerLanguage } from './context/DealerLanguageContext';
 
 function BackgroundLayers({ mousePos }: { mousePos: { x: number; y: number } }) {
   return (
@@ -69,8 +71,9 @@ function BackgroundLayers({ mousePos }: { mousePos: { x: number; y: number } }) 
   );
 }
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const { t } = useDealerLanguage();
   const [dealerId, setDealerId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -113,11 +116,11 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dealerId.trim()) {
-      setErrorMessage('Please enter your Dealer ID, Mobile, or Email.');
+      setErrorMessage(t('login.errEmptyId', 'Please enter your Dealer ID, Mobile, or Email.'));
       return;
     }
     if (!password) {
-      setErrorMessage('Please enter your account password.');
+      setErrorMessage(t('login.errEmptyPwd', 'Please enter your account password.'));
       return;
     }
 
@@ -147,11 +150,11 @@ export default function LoginPage() {
         } catch {}
         router.push('/dashboard');
       } else {
-        setErrorMessage(data.error || 'Authentication failed. Please verify your credentials.');
+        setErrorMessage(data.error || t('login.errAuthFail', 'Authentication failed. Please verify your credentials.'));
       }
     } catch (err) {
       console.error('Login error:', err);
-      setErrorMessage('Unable to connect to authentication service. Please check your network connection.');
+      setErrorMessage(t('login.errNetwork', 'Unable to connect to authentication service. Please check your network connection.'));
     } finally {
       setLoading(false);
     }
@@ -161,9 +164,13 @@ export default function LoginPage() {
     return (
       <div className="login-container">
         <BackgroundLayers mousePos={mousePos} />
+        <div className="login-theme-pill">
+          <LanguageToggle />
+          <SwitchMode width={52} height={26} />
+        </div>
         <div className="loading-container" style={{ position: 'relative', zIndex: 1 }}>
           <div className="loading-spinner"></div>
-          <span>Verifying secure session...</span>
+          <span>{t('login.verifyingSession', 'Verifying secure session...')}</span>
         </div>
       </div>
     );
@@ -174,8 +181,9 @@ export default function LoginPage() {
       {/* ─── World-Class Ambient Background System ─── */}
       <BackgroundLayers mousePos={mousePos} />
 
-      {/* Floating Theme Switcher */}
+      {/* Floating Theme & Language Switcher */}
       <div className="login-theme-pill">
+        <LanguageToggle />
         <SwitchMode width={52} height={26} />
       </div>
 
@@ -186,15 +194,15 @@ export default function LoginPage() {
           <div className="showcase-badge">
             <span className="live-pulse-dot" />
             <Radio size={13} />
-            <span>Live 2026–27 Championship</span>
+            <span>{t('login.badge', 'Live 2026–27 Championship')}</span>
           </div>
 
           <h1 className="showcase-title">
-            TVS Dealer <span className="hero-title-accent">Super Cup</span>
+            {t('login.titlePrefix', 'TVS Dealer')} <span className="hero-title-accent">{t('login.titleHighlight', 'Super Cup')}</span>
           </h1>
 
           <p className="showcase-description">
-            The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the national leaderboard, and win podium cash awards.
+            {t('login.desc', 'The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the national leaderboard, and win podium cash awards.')}
           </p>
 
           {/* Championship Highlights Grid */}
@@ -203,9 +211,9 @@ export default function LoginPage() {
               <div className="showcase-card-icon gold">
                 <Trophy size={20} />
               </div>
-              <div className="showcase-card-title">₹50,000 Cash Podium</div>
+              <div className="showcase-card-title">{t('login.podiumCard', '₹50,000 Cash Podium')}</div>
               <div className="showcase-card-sub">
-                Awarded to top performing buyer and seller dealerships.
+                {t('login.podiumSub', 'Awarded to top performing buyer and seller dealerships.')}
               </div>
             </div>
 
@@ -213,9 +221,9 @@ export default function LoginPage() {
               <div className="showcase-card-icon cyan">
                 <Radio size={20} />
               </div>
-              <div className="showcase-card-title">Real-Time Scoring</div>
+              <div className="showcase-card-title">{t('login.realtimeCard', 'Real-Time Scoring')}</div>
               <div className="showcase-card-sub">
-                Instant telemetry and automated points calculation synced to every auction.
+                {t('login.realtimeSub', 'Instant telemetry and automated points calculation synced to every auction.')}
               </div>
             </div>
 
@@ -224,9 +232,9 @@ export default function LoginPage() {
                 <ShieldCheck size={22} />
               </div>
               <div>
-                <div className="showcase-card-title">TVS Certified Network</div>
+                <div className="showcase-card-title">{t('login.networkCard', 'TVS Certified Network')}</div>
                 <div className="showcase-card-sub">
-                  Official corporate portal with single sign-on security and verifiable competition standards.
+                  {t('login.networkSub', 'Official corporate portal with single sign-on security and verifiable competition standards.')}
                 </div>
               </div>
             </div>
@@ -234,9 +242,9 @@ export default function LoginPage() {
 
           {/* Guest Link / Quick Leaderboard Jump */}
           <div className="showcase-footer-pill">
-            <span>Want to inspect active rankings?</span>
+            <span>{t('login.inspectPrompt', 'Want to inspect active rankings?')}</span>
             <Link href="/leaderboard" className="showcase-footer-link">
-              <span>View Public Leaderboard</span>
+              <span>{t('login.viewLeaderboard', 'View Public Leaderboard')}</span>
               <ArrowRight size={14} />
             </Link>
           </div>
@@ -250,11 +258,11 @@ export default function LoginPage() {
               <div className="login-auth-header">
                 <div className="login-brand-tag">
                   <ShieldCheck size={14} />
-                  <span>Authorized Dealer Portal</span>
+                  <span>{t('login.portalTag', 'Authorized Dealer Portal')}</span>
                 </div>
-                <h2 className="login-auth-title">Dealer Sign In</h2>
+                <h2 className="login-auth-title">{t('login.cardHeading', 'Dealer Sign In')}</h2>
                 <p className="login-auth-subtitle">
-                  Enter your credentials to access your live dashboard and competition telemetry.
+                  {t('login.cardSub', 'Enter your credentials to access your live dashboard and competition telemetry.')}
                 </p>
               </div>
 
@@ -271,7 +279,7 @@ export default function LoginPage() {
                 {/* Identifier Input */}
                 <div className="form-group">
                   <label className="form-label" htmlFor="dealerId">
-                    <span>Dealer ID, Mobile, or Email</span>
+                    <span>{t('login.idLabel', 'Dealer ID, Mobile, or Email')}</span>
                   </label>
                   <div className="input-with-icon">
                     <span className="input-icon-left">
@@ -281,7 +289,7 @@ export default function LoginPage() {
                       id="dealerId"
                       type="text"
                       className="form-input"
-                      placeholder="e.g. murali@tvs.in or 8328416428"
+                      placeholder={t('login.idPlaceholder', 'e.g. murali@tvs.in or 8328416428')}
                       value={dealerId}
                       onChange={(e) => {
                         setDealerId(e.target.value);
@@ -297,7 +305,7 @@ export default function LoginPage() {
                 {/* Password Input */}
                 <div className="form-group">
                   <label className="form-label" htmlFor="password">
-                    <span>Password</span>
+                    <span>{t('login.pwdLabel', 'Password')}</span>
                   </label>
                   <div className="input-with-icon">
                     <span className="input-icon-left">
@@ -307,7 +315,7 @@ export default function LoginPage() {
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       className="form-input"
-                      placeholder="Enter your account password"
+                      placeholder={t('login.pwdPlaceholder', 'Enter your account password')}
                       value={password}
                       onChange={(e) => {
                         setPassword(e.target.value);
@@ -337,14 +345,14 @@ export default function LoginPage() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       style={{ accentColor: 'var(--tvs-blue)', width: '16px', height: '16px', cursor: 'pointer' }}
                     />
-                    <span>Remember me</span>
+                    <span>{t('login.rememberMe', 'Remember me')}</span>
                   </label>
                   <button
                     type="button"
                     className="login-forgot-link"
                     onClick={() => setShowForgotModal(true)}
                   >
-                    Forgot password?
+                    {t('login.forgotPwd', 'Forgot password?')}
                   </button>
                 </div>
 
@@ -358,11 +366,11 @@ export default function LoginPage() {
                   {loading ? (
                     <>
                       <div className="loading-spinner" style={{ width: '18px', height: '18px', borderWidth: '2px', margin: 0 }}></div>
-                      <span>Verifying credentials...</span>
+                      <span>{t('login.connectingBtn', 'Verifying credentials...')}</span>
                     </>
                   ) : (
                     <>
-                      <span>Sign In to Dashboard</span>
+                      <span>{t('login.submitBtn', 'Sign In to Dashboard')}</span>
                       <span className="btn-arrow-circle">
                         <ArrowRight size={15} />
                       </span>
@@ -375,7 +383,7 @@ export default function LoginPage() {
               <div className="login-card-divider">
                 <div className="login-trust-seal">
                   <ShieldCheck size={14} style={{ color: '#6cc14f' }} />
-                  <span>TVS Certified Network</span>
+                  <span>{t('login.trustSeal', 'TVS Certified Network')}</span>
                 </div>
               </div>
             </div>
@@ -393,8 +401,8 @@ export default function LoginPage() {
                   <HelpCircle size={20} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Account Assistance</h3>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>TVS Certified Dealer Support</p>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('login.assistTitle', 'Account Assistance')}</h3>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{t('login.assistSub', 'TVS Certified Dealer Support')}</p>
                 </div>
               </div>
               <button
@@ -408,7 +416,7 @@ export default function LoginPage() {
 
             <div style={{ padding: '24px 28px' }}>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.6', marginBottom: '20px' }}>
-                Your Super Cup login uses your official <strong>TVS Certified Auction Portal</strong> credentials. If your password has expired or you need a reset, please contact the helpdesk:
+                {t('login.assistDesc', 'Your Super Cup login uses your official TVS Certified Auction Portal credentials. If your password has expired or you need a reset, please contact the helpdesk:')}
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
@@ -429,7 +437,7 @@ export default function LoginPage() {
                 >
                   <Phone size={18} style={{ color: 'var(--tvs-blue)' }} />
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Phone Help Desk</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('login.phoneHelpDesk', 'Phone Help Desk')}</div>
                     <div style={{ fontWeight: 600, fontSize: '0.92rem' }}>+91 8925900478</div>
                   </div>
                 </a>
@@ -451,7 +459,7 @@ export default function LoginPage() {
                 >
                   <Mail size={18} style={{ color: 'var(--accent-cyan)' }} />
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Support Email</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('login.supportEmail', 'Support Email')}</div>
                     <div style={{ fontWeight: 600, fontSize: '0.92rem' }}>tc100@tvs.in</div>
                   </div>
                 </a>
@@ -462,12 +470,20 @@ export default function LoginPage() {
                 style={{ width: '100%', height: '42px', borderRadius: '10px', fontWeight: 600 }}
                 onClick={() => setShowForgotModal(false)}
               >
-                Close
+                {t('login.closeBtn', 'Close')}
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <DealerLanguageProvider>
+      <LoginContent />
+    </DealerLanguageProvider>
   );
 }

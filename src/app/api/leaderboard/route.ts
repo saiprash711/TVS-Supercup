@@ -14,7 +14,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getSegmentedLeaderboard } from '@/lib/services/ranking-engine';
+import { getSegmentedLeaderboard, getPositionContext } from '@/lib/services/ranking-engine';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 import { isAdmin, getCurrentDealer } from '@/lib/auth';
 
@@ -54,6 +54,11 @@ export async function GET(request: Request) {
       activeLeaderboard = segmented.buyers;
     }
 
+    // Get authenticated dealer's position context
+    const dealerPosition = currentDealer
+      ? await getPositionContext(currentDealer.dealerId, campaign.id)
+      : null;
+
     return NextResponse.json({
       campaign: {
         name: campaign.name,
@@ -68,8 +73,17 @@ export async function GET(request: Request) {
       overall: segmented.overall,
       counts: segmented.counts,
       isAdmin: admin,
+      authenticated: Boolean(currentDealer || admin),
       unmasked: shouldUnmask,
       currentDealerId: currentDealer?.dealerId,
+      currentDealer: currentDealer ? {
+        dealerId: currentDealer.dealerId,
+        displayName: currentDealer.displayName,
+        maskedName: currentDealer.maskedName,
+        city: currentDealer.city,
+        externalDealerId: currentDealer.externalDealerId,
+      } : null,
+      dealerPosition,
     });
   } catch (error) {
     console.error('Leaderboard error:', error);

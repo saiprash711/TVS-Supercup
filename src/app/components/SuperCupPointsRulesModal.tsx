@@ -19,6 +19,7 @@ import {
   FileText
 } from 'lucide-react';
 import TermsAndConditionsModal from './TermsAndConditionsModal';
+import { useDealerLanguage } from '../context/DealerLanguageContext';
 
 interface SuperCupPointsRulesModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export default function SuperCupPointsRulesModal({
   onClose,
   dealerName,
 }: SuperCupPointsRulesModalProps) {
+  const { t, isTamil } = useDealerLanguage();
   const [activeTab, setActiveTab] = useState<'all' | 'selling' | 'buying'>('all');
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -87,17 +89,27 @@ export default function SuperCupPointsRulesModal({
             <div className="rules-modal-eyebrow">
               <span className="pulsing-radar-dot" />
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>OFFICIAL SUPERCUP 2026–27 HANDBOOK</span>
+              <span>{t('modal.rulesHandbook', 'OFFICIAL SUPERCUP 2026–27 HANDBOOK')}</span>
             </div>
 
             <h2 id="rules-modal-title" className="rules-modal-title">
-              How Points are Calculated
+              {t('modal.howPointsCalculated', 'How Points are Calculated')}
             </h2>
 
             <p className="rules-modal-subtitle">
-              Welcome {dealerName ? <strong className="text-white">{dealerName}</strong> : 'Dealer'}! 
-              Points are tracked <strong>automatically in real-time</strong> from TVS Certified live platform telemetry. 
-              Here is exactly how you earn verified points and climb the championship leaderboard.
+              {isTamil ? (
+                <>
+                  வரவேற்கிறோம் {dealerName ? <strong className="text-white">{dealerName}</strong> : 'டீலர்'}! 
+                  டிவிஎஸ் சான்றளிக்கப்பட்ட நேரடி தளம் மூலம் புள்ளிகள் <strong>தானாகவே நிகழ்நேரத்தில்</strong> கண்காணிக்கப்படுகின்றன. 
+                  நீங்கள் எவ்வாறு சரிபார்க்கப்பட்ட புள்ளிகளைப் பெற்று சாம்பியன்ஷிப் முன்னிலை அட்டவணையில் முன்னேறலாம் என்பது இங்கே விவரிக்கப்பட்டுள்ளது.
+                </>
+              ) : (
+                <>
+                  Welcome {dealerName ? <strong className="text-white">{dealerName}</strong> : 'Dealer'}! 
+                  Points are tracked <strong>automatically in real-time</strong> from TVS Certified live platform telemetry. 
+                  Here is exactly how you earn verified points and climb the championship leaderboard.
+                </>
+              )}
             </p>
 
             {/* Interactive Filter Pills */}
@@ -107,21 +119,21 @@ export default function SuperCupPointsRulesModal({
                 onClick={() => setActiveTab('all')}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>All Point Rules</span>
+                <span>{t('modal.tabAll', 'All Point Rules')}</span>
               </button>
               <button
                 className={`rules-tab-btn ${activeTab === 'selling' ? 'active' : ''}`}
                 onClick={() => setActiveTab('selling')}
               >
                 <Layers className="w-3.5 h-3.5 text-sky-400" />
-                <span>Selling Allocations (+5 PTS)</span>
+                <span>{t('modal.tabSelling', 'Selling Allocations (+5 PTS)')}</span>
               </button>
               <button
                 className={`rules-tab-btn ${activeTab === 'buying' ? 'active' : ''}`}
                 onClick={() => setActiveTab('buying')}
               >
                 <Gavel className="w-3.5 h-3.5 text-amber-400" />
-                <span>Buying Allocations (+1 PT)</span>
+                <span>{t('modal.tabBuying', 'Buying Allocations (+1 PT)')}</span>
               </button>
             </div>
           </div>
@@ -369,10 +381,18 @@ export default function SuperCupPointsRulesModal({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontWeight: 800, fontSize: '0.85rem' }}>
                 <Scale className="w-4 h-4" />
-                <span>Equal Points Prize Distribution (Tie-Breaker Rule)</span>
+                <span>{t('modal.tieBreakerTitle', 'Equal Points Prize Distribution (Tie-Breaker Rule)')}</span>
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                If two or more buyers or sellers score the exact same points on the podium, the combined prize purse for those positions is <strong>split equally</strong> (e.g. 2-way tie for 1st splits ₹40,000 = ₹20,000 each).
+                {isTamil ? (
+                  <>
+                    இரண்டு அல்லது அதற்கு மேற்பட்ட வாங்குபவர்கள் அல்லது விற்பனையாளர்கள் போடியத்தில் ஒரே புள்ளிகளைப் பெற்றால், அந்த இடங்களுக்கான மொத்த பரிசு சமமாகப் <strong>பிரிக்கப்படும்</strong> (எ.கா. 1வது இடத்திற்கு சமநிலை ஏற்பட்டால் ₹40,000 தலா ₹20,000 ஆகப் பிரிக்கப்படும்).
+                  </>
+                ) : (
+                  <>
+                    If two or more buyers or sellers score the exact same points on the podium, the combined prize purse for those positions is <strong>split equally</strong> (e.g. 2-way tie for 1st splits ₹40,000 = ₹20,000 each).
+                  </>
+                )}
               </p>
             </div>
             <button
@@ -382,7 +402,7 @@ export default function SuperCupPointsRulesModal({
               onClick={() => setShowTerms(true)}
             >
               <FileText className="w-3.5 h-3.5 mr-1" />
-              <span>Full Terms & Conditions</span>
+              <span>{isTamil ? 'முழு விதிமுறைகள்' : 'Full Terms & Conditions'}</span>
             </button>
           </div>
 
@@ -395,14 +415,14 @@ export default function SuperCupPointsRulesModal({
                 onChange={(e) => setDontShowAgain(e.target.checked)}
                 className="rules-checkbox"
               />
-              <span>Don't show this popup automatically on login</span>
+              <span>{t('modal.dontShowAgain', "Don't show this popup automatically on login")}</span>
             </label>
 
             <button 
               className="rules-modal-cta-btn group"
               onClick={handleDismiss}
             >
-              <span>Understood, Let's Compete!</span>
+              <span>{t('modal.understoodBtn', "Understood, Let's Compete!")}</span>
               <div className="nested-btn-icon">
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </div>

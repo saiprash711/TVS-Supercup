@@ -75,6 +75,9 @@ export async function loginDealer(
     return { success: false, error: 'Dealer ID, Username, or Registered Mobile is required' };
   }
 
+  const cleanPhone = trimmed.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').replace(/^0(?=\d{10}$)/, '');
+  const is10DigitPhone = /^\d{10}$/.test(cleanPhone);
+
   const provider = getTVSProvider();
   let dealer = null;
   let liveToken: string | undefined;
@@ -104,13 +107,20 @@ export async function loginDealer(
       const userPhone = typeof authResult.userData?.mobile === 'string'
         ? authResult.userData.mobile.trim()
         : (typeof authResult.userData?.mobile === 'number' ? String(authResult.userData.mobile) : null);
-      const searchPhone = (userPhone && /^\d{10}$/.test(userPhone))
-        ? userPhone
-        : (/^\d{10}$/.test(trimmed) ? trimmed : null);
+      const cleanUserPhone = userPhone ? userPhone.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').replace(/^0(?=\d{10}$)/, '') : null;
+      const searchPhone = (cleanUserPhone && /^\d{10}$/.test(cleanUserPhone))
+        ? cleanUserPhone
+        : (is10DigitPhone ? cleanPhone : null);
 
       if (!dealer && searchPhone) {
         dealer = await prisma.dealer.findFirst({
-          where: { phone: searchPhone },
+          where: {
+            OR: [
+              { phone: searchPhone },
+              { phone: `0${searchPhone}` },
+              { phone: `91${searchPhone}` },
+            ],
+          },
         });
       }
 
@@ -118,6 +128,29 @@ export async function loginDealer(
       if (!dealer && authResult.dealerName) {
         dealer = await prisma.dealer.findFirst({
           where: { displayName: authResult.dealerName },
+        });
+        if (!dealer) {
+          const allActive = await prisma.dealer.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, displayName: true },
+          });
+          const match = allActive.find(d => d.displayName.trim().toLowerCase() === authResult.dealerName!.trim().toLowerCase());
+          if (match) {
+            dealer = await prisma.dealer.findUnique({ where: { id: match.id } });
+          }
+        }
+      }
+
+      // 5. If dealer exists, ensure their displayName & details are updated to authoritative TVS Certified name
+      if (dealer && authResult.dealerName && authResult.dealerName !== dealer.displayName) {
+        dealer = await prisma.dealer.update({
+          where: { id: dealer.id },
+          data: {
+            displayName: authResult.dealerName,
+            maskedName: maskDealerName(authResult.dealerName),
+            city: authResult.city || dealer.city,
+            phone: searchPhone || dealer.phone,
+          },
         });
       }
 
@@ -174,18 +207,36 @@ export async function loginDealer(
         }
       }
 
-      // 3. Match by exact displayName
+      // 3. Match by registered 10-digit phone (supporting with or without leading 0 / +91)
+      if (!localDealer && is10DigitPhone) {
+        localDealer = await prisma.dealer.findFirst({
+          where: {
+            OR: [
+              { phone: cleanPhone },
+              { phone: `0${cleanPhone}` },
+              { phone: `91${cleanPhone}` },
+            ],
+            password: password,
+            status: 'ACTIVE',
+          },
+        });
+      }
+
+      // 4. Match by exact or case-insensitive displayName
       if (!localDealer) {
         localDealer = await prisma.dealer.findFirst({
           where: { displayName: trimmed, password: password, status: 'ACTIVE' },
         });
-      }
-
-      // 4. Match by registered 10-digit phone
-      if (!localDealer && /^\d{10}$/.test(trimmed)) {
-        localDealer = await prisma.dealer.findFirst({
-          where: { phone: trimmed, password: password, status: 'ACTIVE' },
-        });
+        if (!localDealer) {
+          const allActive = await prisma.dealer.findMany({
+            where: { password: password, status: 'ACTIVE' },
+            select: { id: true, displayName: true },
+          });
+          const match = allActive.find(d => d.displayName.trim().toLowerCase() === trimmed.toLowerCase());
+          if (match) {
+            localDealer = await prisma.dealer.findUnique({ where: { id: match.id } });
+          }
+        }
       }
 
       if (localDealer) {
@@ -219,6 +270,27 @@ export async function loginDealer(
       if (!dealer && authResult.dealerName) {
         dealer = await prisma.dealer.findFirst({
           where: { displayName: authResult.dealerName },
+        });
+        if (!dealer) {
+          const allActive = await prisma.dealer.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, displayName: true },
+          });
+          const match = allActive.find(d => d.displayName.trim().toLowerCase() === authResult.dealerName!.trim().toLowerCase());
+          if (match) {
+            dealer = await prisma.dealer.findUnique({ where: { id: match.id } });
+          }
+        }
+      }
+
+      // Ensure authoritative name is in DB
+      if (dealer && authResult.dealerName && authResult.dealerName !== dealer.displayName) {
+        dealer = await prisma.dealer.update({
+          where: { id: dealer.id },
+          data: {
+            displayName: authResult.dealerName,
+            maskedName: maskDealerName(authResult.dealerName),
+          },
         });
       }
     }

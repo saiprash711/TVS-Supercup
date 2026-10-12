@@ -5,20 +5,29 @@ import { CalendarDays, Crown, IndianRupee, ShoppingCart, Sparkles, Store, Trophy
 import { motion, useReducedMotion } from 'motion/react';
 import styles from './PrizeShowcase.module.css';
 import TermsAndConditionsModal from './TermsAndConditionsModal';
+import { useDealerLanguage } from '../context/DealerLanguageContext';
 
-const podium = [
+const podiumEn = [
   { place: '1st', amount: '25,000', label: 'Champion', tone: 'gold' },
   { place: '2nd', amount: '15,000', label: 'Runner-up', tone: 'silver' },
   { place: '3rd', amount: '10,000', label: 'Third place', tone: 'bronze' },
 ] as const;
 
-function PrizeLeague({ title, eyebrow, type }: {
+const podiumTa = [
+  { place: '1வது', amount: '25,000', label: 'சாம்பியன்', tone: 'gold' },
+  { place: '2வது', amount: '15,000', label: 'இரண்டாம் இடம்', tone: 'silver' },
+  { place: '3வது', amount: '10,000', label: 'மூன்றாம் இடம்', tone: 'bronze' },
+] as const;
+
+function PrizeLeague({ title, eyebrow, type, isTamil }: {
   title: string;
   eyebrow: string;
   type: 'buyer' | 'seller';
+  isTamil?: boolean;
 }) {
   const Icon = type === 'buyer' ? ShoppingCart : Store;
   const reduceMotion = useReducedMotion();
+  const podium = isTamil ? podiumTa : podiumEn;
 
   return (
     <motion.article
@@ -38,7 +47,7 @@ function PrizeLeague({ title, eyebrow, type }: {
           <h3>{title}</h3>
         </div>
         <div className={styles.leagueTotal}>
-          <span>Prize pool</span>
+          <span>{isTamil ? 'பரிசுத் தொகை' : 'Prize pool'}</span>
           <strong>₹50K</strong>
         </div>
       </header>
@@ -58,7 +67,7 @@ function PrizeLeague({ title, eyebrow, type }: {
               {index === 0 ? <Crown size={17} aria-hidden="true" /> : <span>{index + 1}</span>}
             </div>
             <div className={styles.placeCopy}>
-              <strong>{prize.place} prize</strong>
+              <strong>{isTamil ? `${prize.place} பரிசு` : `${prize.place} prize`}</strong>
               <span>{prize.label}</span>
             </div>
             <div className={styles.amount}>
@@ -75,6 +84,7 @@ function PrizeLeague({ title, eyebrow, type }: {
 export default function PrizeShowcase() {
   const reduceMotion = useReducedMotion();
   const [showTerms, setShowTerms] = useState(false);
+  const { t, isTamil } = useDealerLanguage();
 
   return (
     <motion.section
@@ -92,13 +102,20 @@ export default function PrizeShowcase() {
         <div className={styles.titleBlock}>
           <span className={styles.kicker}>
             <Sparkles size={14} aria-hidden="true" />
-            Super Cup 2026–27 rewards
+            {isTamil ? 'சூப்பர்கப் 2026–27 பரிசுகள்' : 'Super Cup 2026–27 rewards'}
           </span>
-          <h2 id="prize-showcase-title">The road to <span>₹1,00,000</span></h2>
-          <p>Two leaderboards. Six winners. One season to make every transaction count.</p>
+          <h2 id="prize-showcase-title">
+            {isTamil ? 'இலக்கு ' : 'The road to '}
+            <span>₹1,00,000</span>
+          </h2>
+          <p>
+            {isTamil 
+              ? 'இரண்டு லீக் முன்னிலை அட்டவணைகள். ஆறு வெற்றியாளர்கள். ஒவ்வொரு பரிவர்த்தனையும் மதிப்புமிக்க ஒரு பருவம்.' 
+              : 'Two leaderboards. Six winners. One season to make every transaction count.'}
+          </p>
           <div className={styles.campaignDates} aria-label="Campaign period: 15 October 2026 to 14 January 2027">
             <CalendarDays size={17} strokeWidth={1.8} aria-hidden="true" />
-            <span>Campaign period</span>
+            <span>{isTamil ? 'பிரச்சாரக் காலம்' : 'Campaign period'}</span>
             <strong>15 OCT 2026</strong>
             <span className={styles.dateLine} aria-hidden="true" />
             <strong>14 JAN 2027</strong>
@@ -116,15 +133,25 @@ export default function PrizeShowcase() {
           <div className={styles.medallionRing} aria-hidden="true" />
           <div className={styles.medallionCore}>
             <Trophy size={24} strokeWidth={1.7} aria-hidden="true" />
-            <span>Total prize pool</span>
+            <span>{isTamil ? 'மொத்தப் பரிசு' : 'Total prize pool'}</span>
             <strong>₹1 LAKH</strong>
           </div>
         </motion.div>
       </header>
 
       <div className={styles.leagueGrid}>
-        <PrizeLeague title="Buyers’ podium" eyebrow="Win through buying" type="buyer" />
-        <PrizeLeague title="Sellers’ podium" eyebrow="Win through selling" type="seller" />
+        <PrizeLeague
+          title={isTamil ? 'வாங்குபவர் போடியம்' : 'Buyers’ podium'}
+          eyebrow={isTamil ? 'வாங்குதல் மூலம் வெற்றி' : 'Win through buying'}
+          type="buyer"
+          isTamil={isTamil}
+        />
+        <PrizeLeague
+          title={isTamil ? 'விற்பனையாளர் போடியம்' : 'Sellers’ podium'}
+          eyebrow={isTamil ? 'விற்பனை மூலம் வெற்றி' : 'Win through selling'}
+          type="seller"
+          isTamil={isTamil}
+        />
       </div>
 
       {/* Tie-Breaker & Equal Points Distribution Policy */}
@@ -144,7 +171,7 @@ export default function PrizeShowcase() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Scale size={18} style={{ color: '#facc15' }} />
             <strong style={{ fontSize: '0.92rem', color: '#f8fafc', letterSpacing: '-0.01em' }}>
-              Equal Points Prize Distribution Rule (Tie-Breaker Policy)
+              {isTamil ? 'சம புள்ளிகள் பரிசுப் பகிர்வு விதிமுறை (சமநிலை கொள்கை)' : 'Equal Points Prize Distribution Rule (Tie-Breaker Policy)'}
             </strong>
           </div>
           <button
@@ -166,45 +193,55 @@ export default function PrizeShowcase() {
             }}
           >
             <FileText size={13} />
-            <span>Full Terms & Conditions</span>
+            <span>{isTamil ? 'முழு விதிமுறைகள் & நிபந்தனைகள்' : 'Full Terms & Conditions'}</span>
             <ChevronRight size={13} />
           </button>
         </div>
 
         <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.6 }}>
-          If two or more buyers or sellers score the exact same points in a podium position, the combined prize purse for those tied positions is <strong style={{ color: '#f8fafc' }}>pooled and distributed equally</strong> among the tied dealerships:
+          {isTamil
+            ? 'இரண்டு அல்லது அதற்கு மேற்பட்ட வாங்குபவர்கள் அல்லது விற்பனையாளர்கள் போடியத்தில் ஒரே புள்ளிகளைப் பெற்றால், அந்த இடங்களுக்கான மொத்த பரிசுத் தொகை சமமாகப் பிரிக்கப்பட்டு வழங்கப்படும்:'
+            : 'If two or more buyers or sellers score the exact same points in a podium position, the combined prize purse for those tied positions is pooled and distributed equally among the tied dealerships:'}
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
           <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.72rem', color: '#facc15', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 1st</div>
+            <div style={{ fontSize: '0.72rem', color: '#facc15', fontWeight: 700, textTransform: 'uppercase' }}>
+              {isTamil ? '1வது இடத்திற்கு 2 பேர் சமநிலை' : '2-Way Tie for 1st'}
+            </div>
             <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
-              1st (₹25k) + 2nd (₹15k) = ₹40k pooled<br />
-              <strong style={{ color: '#4ade80' }}>₹20,000 each</strong> • Next gets ₹10,000
+              1st (₹25k) + 2nd (₹15k) = ₹40k<br />
+              <strong style={{ color: '#4ade80' }}>{isTamil ? 'தலா ₹20,000' : '₹20,000 each'}</strong> • {isTamil ? 'அடுத்தவர் ₹10,000' : 'Next gets ₹10,000'}
             </div>
           </div>
 
           <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 2nd</div>
+            <div style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase' }}>
+              {isTamil ? '2வது இடத்திற்கு 2 பேர் சமநிலை' : '2-Way Tie for 2nd'}
+            </div>
             <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
-              2nd (₹15k) + 3rd (₹10k) = ₹25k pooled<br />
-              <strong style={{ color: '#4ade80' }}>₹12,500 each</strong> • 1st gets ₹25,000
+              2nd (₹15k) + 3rd (₹10k) = ₹25k<br />
+              <strong style={{ color: '#4ade80' }}>{isTamil ? 'தலா ₹12,500' : '₹12,500 each'}</strong> • {isTamil ? '1வது இடம் ₹25,000' : '1st gets ₹25,000'}
             </div>
           </div>
 
           <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.72rem', color: '#fb923c', fontWeight: 700, textTransform: 'uppercase' }}>2-Way Tie for 3rd</div>
+            <div style={{ fontSize: '0.72rem', color: '#fb923c', fontWeight: 700, textTransform: 'uppercase' }}>
+              {isTamil ? '3வது இடத்திற்கு 2 பேர் சமநிலை' : '2-Way Tie for 3rd'}
+            </div>
             <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
-              3rd Place (₹10,000) split equally<br />
-              <strong style={{ color: '#4ade80' }}>₹5,000 each</strong> • 1st & 2nd full
+              {isTamil ? '3வது பரிசு (₹10,000) சமமாகப் பிரிக்கப்படுகிறது' : '3rd Place (₹10,000) split equally'}<br />
+              <strong style={{ color: '#4ade80' }}>{isTamil ? 'தலா ₹5,000' : '₹5,000 each'}</strong> • {isTamil ? '1 & 2 முழு தொகை' : '1st & 2nd full'}
             </div>
           </div>
 
           <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.72rem', color: '#e879f9', fontWeight: 700, textTransform: 'uppercase' }}>3-Way Tie for 1st</div>
+            <div style={{ fontSize: '0.72rem', color: '#e879f9', fontWeight: 700, textTransform: 'uppercase' }}>
+              {isTamil ? '1வது இடத்திற்கு 3 பேர் சமநிலை' : '3-Way Tie for 1st'}
+            </div>
             <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
-              All 3 prizes (₹50k total) pooled<br />
-              <strong style={{ color: '#4ade80' }}>₹16,666.67 each</strong>
+              {isTamil ? 'அனைத்து 3 பரிசுகளும் (₹50k) சேர்க்கப்படுகிறது' : 'All 3 prizes (₹50k total) pooled'}<br />
+              <strong style={{ color: '#4ade80' }}>{isTamil ? 'தலா ₹16,666.67' : '₹16,666.67 each'}</strong>
             </div>
           </div>
         </div>
@@ -212,11 +249,11 @@ export default function PrizeShowcase() {
 
       <footer className={styles.footerNote}>
         <span className={styles.liveDot} aria-hidden="true" />
-        <strong>₹50,000 for buyers</strong>
+        <strong>{isTamil ? 'வாங்குபவர்களுக்கு ₹50,000' : '₹50,000 for buyers'}</strong>
         <span className={styles.divider} aria-hidden="true" />
-        <strong>₹50,000 for sellers</strong>
+        <strong>{isTamil ? 'விற்பனையாளர்களுக்கு ₹50,000' : '₹50,000 for sellers'}</strong>
         <span className={styles.footerFill} />
-        <span>Separate league standings determine the winners • Total dealer points not combined</span>
+        <span>{isTamil ? 'தனித்தனி லீக் தரவரிசைகள் வெற்றியாளர்களைத் தீர்மானிக்கின்றன • மொத்த டீலர் புள்ளிகள் சேர்க்கப்படவில்லை' : 'Separate league standings determine the winners • Total dealer points not combined'}</span>
       </footer>
 
       <TermsAndConditionsModal
