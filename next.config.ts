@@ -21,6 +21,26 @@ const nextConfig: NextConfig = {
   // ─── Powered-By Header Removal (prevents server fingerprinting) ─────
   poweredByHeader: false,
 
+  async redirects() {
+    return [
+      {
+        source: '/dealer-portal',
+        destination: '/dealer',
+        permanent: true,
+      },
+      {
+        source: '/supercup',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/tvs-supercup',
+        destination: '/',
+        permanent: false,
+      },
+    ];
+  },
+
   async headers() {
     // CSP policy: allow self + inline styles (needed for Next.js), block everything else
     const cspDirectives = [

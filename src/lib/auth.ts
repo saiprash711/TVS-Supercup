@@ -374,6 +374,9 @@ export async function logoutDealer(): Promise<void> {
  * Admin authentication with server-side session tracking and revocation.
  */
 export async function loginAdmin(password: string): Promise<boolean> {
+  // Fail closed if admin portal is explicitly disabled in this deployment
+  if (process.env.ENABLE_ADMIN === 'false') return false;
+
   const envPassword = process.env.ADMIN_PASSWORD?.replace(/^["']|["']$/g, '').trim();
   const input = (password || '').trim();
 
@@ -425,6 +428,8 @@ export async function loginAdmin(password: string): Promise<boolean> {
  * Check if the current request is from an authenticated admin via server-side session.
  */
 export async function isAdmin(): Promise<boolean> {
+  if (process.env.ENABLE_ADMIN === 'false') return false;
+
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(ADMIN_COOKIE)?.value?.trim();
@@ -449,6 +454,14 @@ export async function isAdmin(): Promise<boolean> {
  * Centralized guard for admin endpoints.
  */
 export async function requireAdmin(): Promise<RequireAuthResult> {
+  if (process.env.ENABLE_ADMIN === 'false') {
+    return {
+      authorized: false,
+      error: 'Admin access is disabled in this environment. Admin operations must be run locally.',
+      status: 403,
+    };
+  }
+
   const admin = await isAdmin();
   if (!admin) {
     return {

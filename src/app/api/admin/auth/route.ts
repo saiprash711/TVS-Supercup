@@ -22,6 +22,10 @@ import {
 } from '@/lib/security';
 
 export async function POST(request: NextRequest) {
+  if (process.env.ENABLE_ADMIN === 'false') {
+    return NextResponse.json({ error: 'Admin portal is disabled in this environment' }, { status: 403 });
+  }
+
   const clientIp = getClientIp(request);
 
   // ── Rate Limiting (stricter for admin: 3 attempts / 15 min) ────────

@@ -23,6 +23,10 @@ export function proxy(request: NextRequest) {
     ''
   ).toLowerCase();
 
+  const isLocalhost =
+    host.includes('localhost') ||
+    host.includes('127.0.0.1');
+
   const isAdminSubdomain =
     host.startsWith('admin.') ||
     host.includes('supercup-admin') ||
@@ -41,7 +45,24 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  // 3. Dealer Domain Routing (e.g., https://supercup.tvs.in)
+  // 3. Admin Access Control (Local-only vs Deployed Vercel)
+  // When ENABLE_ADMIN is 'false', or in production without ENABLE_ADMIN='true',
+  // block all /admin access and redirect to dealer portal.
+  // This ensures admin can only be operated locally on your PC (localhost:3000)
+  // unless explicitly allowed in environment variables.
+  const isAdminGloballyDisabled = process.env.ENABLE_ADMIN === 'false';
+  const isExplicitAdminAllowed = process.env.ENABLE_ADMIN === 'true';
+  const allowAdmin = !isAdminGloballyDisabled && (isLocalhost || isExplicitAdminAllowed || isAdminSubdomain);
+
+  if (pathname.startsWith('/admin')) {
+    if (!allowAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // 4. Dealer Domain Routing (e.g., https://supercup.tvs.in or https://tvs-supercup.vercel.app)
   // If dealer already has an active session and visits login page (/), send to /dashboard
   if (pathname === '/' && hasDealerSession && !isAdminSubdomain) {
     const url = request.nextUrl.clone();
@@ -60,14 +81,16 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 4. Strict Subdomain Isolation (DEFAULT: ON in production)
+  // 5. Strict Subdomain Isolation (DEFAULT: ON in production)
   // Prevents accessing /admin on the dealer-facing domain (blocks attack surface)
   // Set STRICT_ADMIN_SUBDOMAIN=false to explicitly disable (dev only)
   if (
     process.env.STRICT_ADMIN_SUBDOMAIN !== 'false' &&
-    host.includes('supercup.tvs.in') &&
+    (host.includes('supercup.tvs.in') || host.includes('vercel.app')) &&
     pathname.startsWith('/admin') &&
-    !isAdminSubdomain
+    !isAdminSubdomain &&
+    !isLocalhost &&
+    !isExplicitAdminAllowed
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
