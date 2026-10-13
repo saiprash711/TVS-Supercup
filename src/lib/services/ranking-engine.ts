@@ -151,7 +151,7 @@ export interface LeaderboardEntry {
   maskedName: string;
   realName?: string;
   externalId?: string;
-  customerId: string;
+  customerId?: string;
   customerCode?: string;
   numericCustomerId?: number | null;
   city: string;
@@ -461,10 +461,10 @@ export async function getSegmentedLeaderboard(
       maskedName,
       realName: isEntryUnmasked ? realName : undefined,
       externalId: isEntryUnmasked ? dealer.externalDealerId : undefined,
-      customerId: custInfo.customerId,
-      customerCode: custInfo.customerCode,
-      numericCustomerId: custInfo.numericCustomerId,
-      city: custInfo.city || dealer.city || 'Tamil Nadu',
+      customerId: isEntryUnmasked ? custInfo.customerId : undefined,
+      customerCode: isEntryUnmasked ? custInfo.customerCode : undefined,
+      numericCustomerId: isEntryUnmasked ? custInfo.numericCustomerId : null,
+      city: isEntryUnmasked ? (custInfo.city || dealer.city || 'Tamil Nadu') : (dealer.city || 'Tamil Nadu'),
       role: finalRole,
       category: custInfo.category,
       totalPoints: totalPts,
@@ -573,13 +573,13 @@ export async function getPositionContext(dealerId: number, campaignId: number) {
     points: buyerEntry.points,
     above: buyerAbove ? {
       rank: buyerAbove.rank,
-      dealer: buyerAbove.dealer,
+      dealer: maskDealerName(buyerAbove.dealer),
       points: buyerAbove.points,
       gap: buyerAbove.points - buyerEntry.points,
     } : null,
     below: buyerBelow ? {
       rank: buyerBelow.rank,
-      dealer: buyerBelow.dealer,
+      dealer: maskDealerName(buyerBelow.dealer),
       points: buyerBelow.points,
       gap: buyerEntry.points - buyerBelow.points,
     } : null,
@@ -596,13 +596,13 @@ export async function getPositionContext(dealerId: number, campaignId: number) {
     points: sellerEntry.points,
     above: sellerAbove ? {
       rank: sellerAbove.rank,
-      dealer: sellerAbove.dealer,
+      dealer: maskDealerName(sellerAbove.dealer),
       points: sellerAbove.points,
       gap: sellerAbove.points - sellerEntry.points,
     } : null,
     below: sellerBelow ? {
       rank: sellerBelow.rank,
-      dealer: sellerBelow.dealer,
+      dealer: maskDealerName(sellerBelow.dealer),
       points: sellerBelow.points,
       gap: sellerEntry.points - sellerBelow.points,
     } : null,

@@ -111,17 +111,31 @@ export async function GET() {
         totalPoints: breakdown.totalPoints,
       },
       recentActivities: breakdown.activities.slice(0, 25).map(a => {
-        let meta = {};
+        let meta: Record<string, unknown> = {};
         try {
-          if (a.metadata) meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : a.metadata;
+          if (a.metadata) meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata as Record<string, unknown>);
         } catch {
           meta = {};
         }
+
+        // STRICT DEALER ANONYMITY: Strip any competitor identity fields from activity metadata
+        const sanitizedMeta = { ...meta };
+        delete sanitizedMeta.sellerName;
+        delete sanitizedMeta.sellerCustomerCode;
+        delete sanitizedMeta.sellerCustomerId;
+        delete sanitizedMeta.sellerPhone;
+        delete sanitizedMeta.sellerDealerId;
+        delete sanitizedMeta.customerName;
+        delete sanitizedMeta.buyerName;
+        delete sanitizedMeta.buyerDealerId;
+        delete sanitizedMeta.winnerName;
+        delete sanitizedMeta.winnerId;
+
         return {
           id: a.id,
           activityType: a.activityType,
           points: a.points,
-          metadata: meta,
+          metadata: sanitizedMeta,
           externalTransactionId: a.externalTransactionId,
           timestamp: a.timestamp,
         };

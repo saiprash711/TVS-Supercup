@@ -1247,7 +1247,7 @@ export default function AdminPage() {
 
             <div style={{ textAlign: 'center', marginTop: '20px' }}>
               <Link href="/" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>
-                ← Return to Public Dealer Portal
+                ← Return to Dealer Portal
               </Link>
             </div>
           </div>
@@ -2860,7 +2860,7 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <Link href="/leaderboard" target="_blank" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <span>Open Public Leaderboard</span>
+                              <span>Open Official Leaderboard</span>
                               <ExternalLink className="w-3 h-3" />
                             </Link>
                           </div>

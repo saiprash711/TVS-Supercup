@@ -29,6 +29,7 @@ import {
   Scale,
 } from 'lucide-react';
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
+import { maskDealerName } from '@/lib/services/masking';
 
 interface LeaderboardEntry {
   rank: number;
@@ -39,7 +40,7 @@ interface LeaderboardEntry {
   isUnmasked?: boolean;
   isCurrentDealer?: boolean;
   externalId?: string;
-  customerId: string;
+  customerId?: string;
   customerCode?: string;
   numericCustomerId?: number | null;
   city?: string;
@@ -167,7 +168,8 @@ function LeaderboardContent() {
     if (entry.isCurrentDealer) {
       return entry.dealerName || entry.realName || entry.dealer;
     }
-    return entry.maskedName || entry.dealer;
+    // Strict privacy: Competitor dealers are strictly masked
+    return maskDealerName(entry.maskedName || entry.dealerName || entry.dealer || 'Dealer');
   }, [isAdminUser, showMaskedPreview]);
 
   // Client-side search filtering
@@ -181,22 +183,26 @@ function LeaderboardContent() {
         return true;
       }
       const dispName = (getDisplayName(entry) || '').toLowerCase();
-      const rawDealer = (entry.realName || entry.dealer || '').toLowerCase();
-      const custId = (entry.customerId || '').toLowerCase();
-      const custCode = (entry.customerCode || '').toLowerCase();
       const city = (entry.city || '').toLowerCase();
       const category = (entry.category || '').toLowerCase();
 
+      // STRICT PRIVACY: Competitor private information is NEVER searchable by participating dealers
+      const canSearchPrivateDetails = isAdminUser && !showMaskedPreview;
+      const isSelf = Boolean(entry.isCurrentDealer);
+      const rawDealer = (canSearchPrivateDetails || isSelf) ? (entry.realName || entry.dealer || '').toLowerCase() : '';
+      const custId = (canSearchPrivateDetails || isSelf) ? (entry.customerId || '').toLowerCase() : '';
+      const custCode = (canSearchPrivateDetails || isSelf) ? (entry.customerCode || '').toLowerCase() : '';
+
       return (
         dispName.includes(q) ||
-        rawDealer.includes(q) ||
-        custId.includes(q) ||
-        custCode.includes(q) ||
+        (rawDealer && rawDealer.includes(q)) ||
+        (custId && custId.includes(q)) ||
+        (custCode && custCode.includes(q)) ||
         city.includes(q) ||
         category.includes(q)
       );
     });
-  }, [activeLeaderboard, searchQuery, getDisplayName]);
+  }, [activeLeaderboard, searchQuery, getDisplayName, isAdminUser, showMaskedPreview]);
 
   // Pagination calculations
   const effectivePageSize = pageSize === 0 ? filteredLeaderboard.length : pageSize;

@@ -39,8 +39,8 @@ function TermsContent() {
           </div>
           <ul className="navbar-nav">
             <li>
-              <Link href="/leaderboard" className="navbar-link">
-                {t('terms.navLeaderboard', 'Leaderboard')}
+              <Link href="/" className="navbar-link">
+                {t('terms.navHome', 'Home')}
               </Link>
             </li>
             <li>
@@ -55,9 +55,9 @@ function TermsContent() {
           <div className="navbar-user">
             <LanguageToggle />
             <SwitchMode width={58} height={28} />
-            <Link href="/leaderboard" className="btn btn-outline btn-sm">
+            <Link href="/" className="btn btn-outline btn-sm">
               <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              <span>{t('terms.backToStandings', 'Back to Standings')}</span>
+              <span>{t('terms.backToLogin', 'Dealer Sign In')}</span>
             </Link>
           </div>
         </div>
@@ -342,12 +342,12 @@ function TermsContent() {
         </div>
 
         {/* Back Actions */}
-        <div style={{ marginTop: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '16px' }}>
-          <Link href="/leaderboard" className="btn btn-primary btn-lg">
-            <span>{t('terms.navLeaderboard', 'Leaderboard')}</span>
+        <div style={{ marginTop: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <Link href="/" className="btn btn-primary btn-lg">
+            <span>{t('terms.backToLogin', 'Dealer Sign In')}</span>
           </Link>
           <Link href="/dashboard" className="btn btn-outline btn-lg">
-            <span>{t('terms.navDashboard', 'Dashboard')}</span>
+            <span>{t('terms.navDashboard', 'Dealer Dashboard')}</span>
           </Link>
         </div>
       </main>

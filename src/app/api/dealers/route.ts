@@ -4,25 +4,26 @@
  * Returns a list of dealers.
  * 
  * Security Controls:
- * - Authentication required: Admin sees full details, dealers see masked names only
- * - Unauthenticated requests are rejected (prevents customer data exposure)
- * - Phone numbers and passwords are NEVER returned
+ * - Restricted to Administrators ONLY.
+ * - Participating dealers are strictly forbidden from accessing the full dealer list,
+ *   preventing competitor intelligence, enumeration, or deanonymization attacks.
+ * - Phone numbers and passwords are NEVER returned under any circumstances.
  */
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isAdmin, getCurrentDealer } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
 
 export async function GET() {
   try {
     const admin = await isAdmin();
-    const currentDealer = await getCurrentDealer();
 
-    // Unauthenticated users cannot access the dealer directory
-    if (!admin && !currentDealer) {
+    // Directory is restricted to administrators only.
+    // Dealers cannot access or enumerate other dealers under any circumstances.
+    if (!admin) {
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
+        { error: 'Admin access required. Dealer directory is restricted.' },
+        { status: 403 }
       );
     }
 
@@ -39,25 +40,11 @@ export async function GET() {
       orderBy: { displayName: 'asc' },
     });
 
-    // Admin gets full details; dealers only see masked names (prevents competitor intelligence)
-    if (admin) {
-      return NextResponse.json({
-        dealers: dealers.map(d => ({
-          id: d.id,
-          externalId: d.externalDealerId,
-          displayName: d.displayName,
-          maskedName: d.maskedName,
-          city: d.city,
-        })),
-      });
-    }
-
-    // Authenticated dealer: only return masked names and IDs needed for the UI
     return NextResponse.json({
       dealers: dealers.map(d => ({
         id: d.id,
         externalId: d.externalDealerId,
-        displayName: d.maskedName, // Masked! Not the real name
+        displayName: d.displayName,
         maskedName: d.maskedName,
         city: d.city,
       })),
@@ -67,4 +54,3 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to load dealers' }, { status: 500 });
   }
 }
-

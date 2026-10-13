@@ -1212,8 +1212,16 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'அதிகாரப்பூர்வ விதிமுறைகள்',
   },
   'terms.backToStandings': {
-    en: 'Back to Standings',
-    ta: 'தரவரிசைக்குத் திரும்பு',
+    en: 'Dealer Sign In',
+    ta: 'டீலர் உள்நுழைவு',
+  },
+  'terms.backToLogin': {
+    en: 'Dealer Sign In',
+    ta: 'டீலர் உள்நுழைவு',
+  },
+  'terms.navHome': {
+    en: 'Home',
+    ta: 'முகப்பு',
   },
   'terms.navTerms': {
     en: 'Terms & Conditions',

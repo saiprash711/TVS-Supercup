@@ -33,6 +33,7 @@ import PrizeShowcase from '../components/PrizeShowcase';
 import SuperCupPointsRulesModal from '../components/SuperCupPointsRulesModal';
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
 import { DealerLanguageProvider, useDealerLanguage } from '../context/DealerLanguageContext';
+import { maskDealerName } from '@/lib/services/masking';
 
 interface DashboardData {
   dealer: { displayName?: string; maskedName: string; city: string };
@@ -686,7 +687,7 @@ function DashboardContent() {
                   <div className="position-item">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span className="position-rank">#{position.above.rank}</span>
-                      <span className="position-name">{position.above.dealer}</span>
+                      <span className="position-name">{maskDealerName(position.above.dealer)}</span>
                     </div>
                     <span className="position-points">{position.above.points} {t('breakdown.pts', 'pts')}</span>
                   </div>
@@ -725,7 +726,7 @@ function DashboardContent() {
                   <div className="position-item">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span className="position-rank">#{position.below.rank}</span>
-                      <span className="position-name">{position.below.dealer}</span>
+                      <span className="position-name">{maskDealerName(position.below.dealer)}</span>
                     </div>
                     <span className="position-points">{position.below.points} {t('breakdown.pts', 'pts')}</span>
                   </div>
@@ -1010,10 +1011,6 @@ function DashboardContent() {
             {t('footer.disclaimer', 'Official TVS Certified Dealership Portal. All points and ranks are subject to automated verification.')}
           </p>
           <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <Link href="/leaderboard" style={{ color: 'var(--accent-blue)', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none' }}>
-              {t('footer.viewLeaderboard', 'View Public Leaderboard →')}
-            </Link>
-            <span style={{ color: 'var(--border-subtle)' }}>•</span>
             <button
               type="button"
               onClick={() => setShowTermsModal(true)}
