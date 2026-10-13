@@ -69,7 +69,7 @@ export default function ScrollVideoHero({
 
             <div className="cockpit-network-pill">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>{t('hero.networkHub', `TVS Certified Network • ${city}`, { city })}</span>
+              <span>{t('hero.networkHub', 'TVS Certified Network')}</span>
             </div>
           </div>
 
@@ -83,13 +83,13 @@ export default function ScrollVideoHero({
               {t('hero.welcomeArena', 'Welcome to the Arena,')} <span className="hero-title-accent">{dealerName}</span>
             </h1>
             <p className="cockpit-subtitle">
-              {t('hero.subtitle', "Compete across high-velocity 2:00 PM auctions, climb the national leaderboard, and secure your place on the season champion's podium.")}
+              {t('hero.subtitle', "Compete across high-velocity 2:00 PM auctions, climb the leaderboard, and secure your place on the season champion's podium.")}
             </p>
           </div>
 
           {/* 4-Card Bento Telemetry Matrix */}
           <div className="cockpit-bento-grid">
-            {/* Card 1: National Rank */}
+            {/* Card 1: Official Rank */}
             <div className="cockpit-card gold">
               <div className="cockpit-card-top">
                 <div className="cockpit-icon-badge gold">
@@ -98,7 +98,7 @@ export default function ScrollVideoHero({
                 <span className="cockpit-card-tag">{t('hero.standingsTag', 'STANDINGS')}</span>
               </div>
               <div className="cockpit-card-metric gold">#{rank}</div>
-              <div className="cockpit-card-sub">{t('hero.nationalRank', 'Official National Ranking')}</div>
+              <div className="cockpit-card-sub">{t('hero.ranking', 'Official Ranking')}</div>
               <div className="cockpit-card-badge gold">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>{t('hero.podiumContender', 'Podium Contender')}</span>

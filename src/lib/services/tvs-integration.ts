@@ -341,7 +341,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
           const companyName = cust?.companyName;
           const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
           const name = companyName || fullName || user.user_name || user.name || trimmedUser;
-          const city = cust?.city || user.location_name || user.valuation_city || 'Hyderabad';
+          const city = cust?.city || user.location_name || user.valuation_city || 'Tamil Nadu';
 
           // Cache this valid token for downstream calls
           this.cachedServiceToken = item.token;

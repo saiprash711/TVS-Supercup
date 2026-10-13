@@ -217,6 +217,18 @@ export const dealerTranslations: TranslationDictionary = {
     en: 'Dual League Pool',
     ta: 'இரட்டை லீக் பரிசு குளம்',
   },
+  'hero.networkHub': {
+    en: 'TVS Certified Network',
+    ta: 'டிவிஎஸ் சான்றளிக்கப்பட்ட நெட்வொர்க்',
+  },
+  'hero.ranking': {
+    en: 'Official Ranking',
+    ta: 'அதிகாரப்பூர்வ தரவரிசை',
+  },
+  'hero.nationalRank': {
+    en: 'Official Ranking',
+    ta: 'அதிகாரப்பூர்வ தரவரிசை',
+  },
 
   // ── Prize Showcase ──
   'prize.seasonPool': {

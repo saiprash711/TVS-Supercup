@@ -79,7 +79,7 @@ async function seedTVSDealers() {
     const displayName = cust?.companyName || fullName || u.user_name || u.email || `Dealer ${externalDealerId}`;
     const maskedName = maskName(displayName);
     const phone = u.mobile ? String(u.mobile).trim() : (cust?.mobile_no ? String(cust.mobile_no).trim() : null);
-    const city = cust?.city || u.location_name || 'Hyderabad';
+    const city = cust?.city || u.location_name || 'Tamil Nadu';
 
     try {
       const existing = await prisma.dealer.findUnique({
