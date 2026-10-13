@@ -147,7 +147,7 @@ function LoginContent() {
         }
         try {
           sessionStorage.removeItem('tvs_supercup_rules_seen_session');
-        } catch {}
+        } catch { }
         router.push('/dashboard');
       } else {
         setErrorMessage(data.error || t('login.errAuthFail', 'Authentication failed. Please verify your credentials.'));
@@ -202,7 +202,7 @@ function LoginContent() {
           </h1>
 
           <p className="showcase-description">
-            {t('login.desc', 'The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the national leaderboard, and win podium cash awards.')}
+            {t('login.desc', 'The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the leaderboard, and win podium cash awards.')}
           </p>
 
           {/* Championship Highlights Grid */}
