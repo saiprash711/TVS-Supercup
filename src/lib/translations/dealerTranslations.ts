@@ -1086,8 +1086,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'இந்தியா முழுவதும் உள்ள சான்றளிக்கப்பட்ட டீலர்ஷிப்களுக்கான அதிகாரப்பூர்வ நேரடி சாம்பியன்ஷிப். சரிபார்க்கப்பட்ட ஒவ்வொரு ஏலப் பரிவர்த்தனையிலும் தரவரிசைப் புள்ளிகளைப் பெற்று, தேசிய முன்னிலை அட்டவணையில் போட்டியிட்டு, போடியம் ரொக்கப் பரிசுகளை வெல்லுங்கள்.',
   },
   'login.podiumCard': {
-    en: '₹50,000 Cash Podium',
-    ta: '₹50,000 போடியம் ரொக்கப் பரிசு',
+    en: 'Total of ₹1 Lakh Cash Podium',
+    ta: 'மொத்தம் ₹1 லட்சம் போடியம் ரொக்கப் பரிசு',
   },
   'login.podiumSub': {
     en: 'Awarded to top performing buyer and seller dealerships.',

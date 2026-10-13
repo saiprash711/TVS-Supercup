@@ -211,7 +211,7 @@ function LoginContent() {
               <div className="showcase-card-icon gold">
                 <Trophy size={20} />
               </div>
-              <div className="showcase-card-title">{t('login.podiumCard', '₹50,000 Cash Podium')}</div>
+              <div className="showcase-card-title">{t('login.podiumCard', 'Total of ₹1 Lakh Cash Podium')}</div>
               <div className="showcase-card-sub">
                 {t('login.podiumSub', 'Awarded to top performing buyer and seller dealerships.')}
               </div>
@@ -412,7 +412,7 @@ function LoginContent() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                 <a
-                  href="tel:+918925900478"
+                  href="tel:+917299508242"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
