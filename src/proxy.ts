@@ -86,7 +86,7 @@ export function proxy(request: NextRequest) {
   // Set STRICT_ADMIN_SUBDOMAIN=false to explicitly disable (dev only)
   if (
     process.env.STRICT_ADMIN_SUBDOMAIN !== 'false' &&
-    (host.includes('supercup.tvs.in') || host.includes('vercel.app')) &&
+    (host.includes('supercup.tvs.in') || host.includes('vercel.app') || host.includes('tvssupercup.in')) &&
     pathname.startsWith('/admin') &&
     !isAdminSubdomain &&
     !isLocalhost &&

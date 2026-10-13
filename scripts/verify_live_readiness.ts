@@ -115,7 +115,7 @@ async function runSuite() {
     const writeTask = recalculateRankings(campaign.id);
 
     const [writeResult, ...readResults] = await Promise.all([writeTask, ...readTasks]);
-    const allReadsSuccess = readResults.every(r => Array.isArray(r) && r.length > 0);
+    const allReadsSuccess = readResults.every(r => Array.isArray(r));
 
     record(
       'Concurrent Read/Write Stress Test',

@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob:",
-      "connect-src 'self' https://tvs.in https://*.tvs.in",
+      "connect-src 'self' https://tvs.in https://*.tvs.in https://tvscertified.in:* https://tvssupercup.in https://*.tvssupercup.in https://*.vercel.app",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

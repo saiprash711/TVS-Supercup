@@ -43,31 +43,6 @@ function findDatabaseSource(): string | null {
     } catch {}
   }
 
-  // Recursive search in Lambda root if not in standard locations
-  const searchRoots = ['/var/task', process.cwd()];
-  for (const root of searchRoots) {
-    try {
-      if (!fs.existsSync(root)) continue;
-      const search = (dir: string, depth = 0): string | null => {
-        if (depth > 3) return null;
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const full = path.join(dir, entry.name);
-          if (!entry.isDirectory() && entry.name === 'dev.db' && fs.statSync(full).size > 0) {
-            return full;
-          }
-          if (entry.isDirectory() && !['node_modules', '.next', '.git'].includes(entry.name)) {
-            const sub = search(full, depth + 1);
-            if (sub) return sub;
-          }
-        }
-        return null;
-      };
-      const found = search(root);
-      if (found) return found;
-    } catch {}
-  }
-
   return null;
 }
 
