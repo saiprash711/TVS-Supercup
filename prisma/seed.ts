@@ -88,7 +88,7 @@ async function main() {
     update: {
       name: 'TVS Certified Super Cup 2026–27',
       startDate: new Date('2026-10-14T18:30:00.000Z'),
-      endDate: new Date('2027-01-14T18:29:59.999Z'),
+      endDate: new Date('2027-01-31T18:29:59.999Z'),
       type: 'SUPER_CUP',
       status: 'ACTIVE',
     },
@@ -96,7 +96,7 @@ async function main() {
       name: 'TVS Certified Super Cup 2026–27',
       slug: 'supercup-2026-27',
       startDate: new Date('2026-10-14T18:30:00.000Z'),
-      endDate: new Date('2027-01-14T18:29:59.999Z'),
+      endDate: new Date('2027-01-31T18:29:59.999Z'),
       type: 'SUPER_CUP',
       status: 'ACTIVE',
     },
@@ -134,18 +134,30 @@ async function main() {
     });
   }
 
-  // 3. Four-series schedule across the campaign window.
-  console.log('📅 Setting the Oct 2026–Jan 2027 four-match schedule...');
+  // 3. 16-match weekly schedule across Oct 2026–Jan 2027.
+  console.log('📅 Setting the Oct 2026–Jan 2027 16-match weekly schedule...');
   const matchSchedule = [
-    { matchNumber: 1, auctionId: 'TVSC-2026-10-15', date: new Date('2026-10-15T08:30:00Z') },
-    { matchNumber: 2, auctionId: 'TVSC-2026-11-12', date: new Date('2026-11-12T08:30:00Z') },
-    { matchNumber: 3, auctionId: 'TVSC-2026-12-10', date: new Date('2026-12-10T08:30:00Z') },
-    { matchNumber: 4, auctionId: 'TVSC-2027-01-14', date: new Date('2027-01-14T08:30:00Z') },
+    { matchNumber: 1, auctionId: 'TVSC-2026-10-15', date: new Date('2026-10-15T08:30:00.000Z') },
+    { matchNumber: 2, auctionId: 'TVSC-2026-10-22', date: new Date('2026-10-22T08:30:00.000Z') },
+    { matchNumber: 3, auctionId: 'TVSC-2026-10-29', date: new Date('2026-10-29T08:30:00.000Z') },
+    { matchNumber: 4, auctionId: 'TVSC-2026-11-05', date: new Date('2026-11-05T08:30:00.000Z') },
+    { matchNumber: 5, auctionId: 'TVSC-2026-11-12', date: new Date('2026-11-12T08:30:00.000Z') },
+    { matchNumber: 6, auctionId: 'TVSC-2026-11-19', date: new Date('2026-11-19T08:30:00.000Z') },
+    { matchNumber: 7, auctionId: 'TVSC-2026-11-26', date: new Date('2026-11-26T08:30:00.000Z') },
+    { matchNumber: 8, auctionId: 'TVSC-2026-12-03', date: new Date('2026-12-03T08:30:00.000Z') },
+    { matchNumber: 9, auctionId: 'TVSC-2026-12-10', date: new Date('2026-12-10T08:30:00.000Z') },
+    { matchNumber: 10, auctionId: 'TVSC-2026-12-17', date: new Date('2026-12-17T08:30:00.000Z') },
+    { matchNumber: 11, auctionId: 'TVSC-2026-12-24', date: new Date('2026-12-24T08:30:00.000Z') },
+    { matchNumber: 12, auctionId: 'TVSC-2026-12-31', date: new Date('2026-12-31T08:30:00.000Z') },
+    { matchNumber: 13, auctionId: 'TVSC-2027-01-07', date: new Date('2027-01-07T08:30:00.000Z') },
+    { matchNumber: 14, auctionId: 'TVSC-2027-01-14', date: new Date('2027-01-14T08:30:00.000Z') },
+    { matchNumber: 15, auctionId: 'TVSC-2027-01-21', date: new Date('2027-01-21T08:30:00.000Z') },
+    { matchNumber: 16, auctionId: 'TVSC-2027-01-28', date: new Date('2027-01-28T08:30:00.000Z') },
   ];
   for (const match of matchSchedule) {
     await prisma.matchDay.upsert({
       where: { campaignId_matchNumber: { campaignId: campaign.id, matchNumber: match.matchNumber } },
-      update: { date: match.date },
+      update: { date: match.date, auctionId: match.auctionId },
       create: { campaignId: campaign.id, ...match, status: 'UPCOMING' },
     });
   }

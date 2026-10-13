@@ -268,7 +268,7 @@ export default function SuperCupPointsRulesModal({
 
                 <div className="rule-calc-pill">
                   <Target className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Formula: <strong>4 Matches Attended = 4 Verified Points</strong></span>
+                  <span>Formula: <strong>1 Match Attended = 1 Verified Point</strong> (Up to 16 Weekly Matches)</span>
                 </div>
 
                 <div className="rule-footer-meta">

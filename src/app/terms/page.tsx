@@ -138,7 +138,7 @@ function TermsContent() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Calendar className="w-4 h-4 text-sky-400" />
-              <span>{t('terms.seasonDates', 'Season: 15 Oct 2026 – 14 Jan 2027')}</span>
+              <span>{t('terms.seasonDates', 'Season: 15 Oct 2026 – 31 Jan 2027')}</span>
             </div>
             <span>•</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

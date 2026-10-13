@@ -634,7 +634,7 @@ function DashboardContent() {
                       </span>
                     ) : (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {t('breakdown.allMatchesHint', 'Participate in all 4 matches (+20 pts)')}
+                        {t('breakdown.allMatchesHint', `Participate in all ${matchCount} matches (+20 pts)`, { count: matchCount })}
                       </span>
                     )}
                   </td>
@@ -757,12 +757,12 @@ function DashboardContent() {
               <p className="card-subtitle">
                 {t('match.subtitle', `Every Thursday at 2:00 PM IST • Participate in all ${matchCount} ${isTestMode ? 'test auctions' : 'matches'} for a +20 PTS bonus`, {
                   count: matchCount,
-                  series: isTestMode ? t('match.testSeries', 'test auctions') : t('match.cupSeries', 'matches'),
+                  series: isTestMode ? t('match.testSeries', 'test auctions') : t('match.matches', 'matches'),
                 })}
               </p>
             </div>
             <span className="badge badge-primary">
-              {isTestMode ? t('match.testSeries', '2-Auction Test Series') : t('match.cupSeries', 'Super Cup 4-Series')}
+              {isTestMode ? t('match.testSeries', '2-Auction Test Series') : t('match.cupSeries', 'Super Cup Weekly Series')}
             </span>
           </div>
 

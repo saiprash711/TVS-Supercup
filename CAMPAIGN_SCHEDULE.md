@@ -14,9 +14,9 @@ Replace each placeholder with its actual TVS auction ID before that test. The sy
 ## Live campaign period
 
 - Start: 15 October 2026
-- End: 14 January 2027
+- End: 31 January 2027
 - Status: Active
-- Format: Four-match series
+- Format: 16-match weekly series (Every Thursday at 2:00 PM IST)
 
 ## Match schedule
 
@@ -25,9 +25,21 @@ All matches begin at 2:00 PM IST. The references below are safe placeholders; an
 | Match | Date | Time | Auction reference | Initial status |
 |---|---|---|---|---|
 | 1 | 15 October 2026 | 2:00 PM IST | `TVSC-2026-10-15` | Upcoming |
-| 2 | 12 November 2026 | 2:00 PM IST | `TVSC-2026-11-12` | Upcoming |
-| 3 | 10 December 2026 | 2:00 PM IST | `TVSC-2026-12-10` | Upcoming |
-| 4 | 14 January 2027 | 2:00 PM IST | `TVSC-2027-01-14` | Upcoming |
+| 2 | 22 October 2026 | 2:00 PM IST | `TVSC-2026-10-22` | Upcoming |
+| 3 | 29 October 2026 | 2:00 PM IST | `TVSC-2026-10-29` | Upcoming |
+| 4 | 5 November 2026 | 2:00 PM IST | `TVSC-2026-11-05` | Upcoming |
+| 5 | 12 November 2026 | 2:00 PM IST | `TVSC-2026-11-12` | Upcoming |
+| 6 | 19 November 2026 | 2:00 PM IST | `TVSC-2026-11-19` | Upcoming |
+| 7 | 26 November 2026 | 2:00 PM IST | `TVSC-2026-11-26` | Upcoming |
+| 8 | 3 December 2026 | 2:00 PM IST | `TVSC-2026-12-03` | Upcoming |
+| 9 | 10 December 2026 | 2:00 PM IST | `TVSC-2026-12-10` | Upcoming |
+| 10 | 17 December 2026 | 2:00 PM IST | `TVSC-2026-12-17` | Upcoming |
+| 11 | 24 December 2026 | 2:00 PM IST | `TVSC-2026-12-24` | Upcoming |
+| 12 | 31 December 2026 | 2:00 PM IST | `TVSC-2026-12-31` | Upcoming |
+| 13 | 7 January 2027 | 2:00 PM IST | `TVSC-2027-01-07` | Upcoming |
+| 14 | 14 January 2027 | 2:00 PM IST | `TVSC-2027-01-14` | Upcoming |
+| 15 | 21 January 2027 | 2:00 PM IST | `TVSC-2027-01-21` | Upcoming |
+| 16 | 28 January 2027 | 2:00 PM IST | `TVSC-2027-01-28` | Upcoming |
 
 ## Point system
 
@@ -39,12 +51,12 @@ All matches begin at 2:00 PM IST. The references below are safe placeholders; an
 | Verified live bid | 2 |
 | Vehicle inspection | 1 |
 | Watchlist addition | 1 |
-| Participate in all four matches | 20 bonus |
+| Participate in all 16 matches | 20 bonus |
 
 ## Data-integrity rules
 
 1. Only activities timestamped between the campaign start and end can affect scores.
-2. Only auctions mapped to one of the four campaign matches can be synchronized.
+2. Only auctions mapped to one of the 16 campaign matches can be synchronized.
 3. Match participation is awarded once per dealer per match.
 4. A verified non-pre-bid live bid, buy, or sell can establish participation if the upstream attendance feed omitted it.
 5. Previous campaigns remain archived with their ledgers intact and never carry points into this campaign.

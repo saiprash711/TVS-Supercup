@@ -403,6 +403,58 @@ export const dealerTranslations: TranslationDictionary = {
     en: 'Upcoming',
     ta: 'வரவிருக்கும்',
   },
+  'match.title': {
+    en: 'Match Day Schedule & Attendance Tracker',
+    ta: 'போட்டி நாள் அட்டவணை & வருகை கண்காணிப்பு',
+  },
+  'match.subtitle': {
+    en: 'Every Thursday at 2:00 PM IST • Participate in all {count} {series} for a +20 PTS bonus',
+    ta: 'ஒவ்வொரு வியாழக்கிழமையும் மதியம் 2:00 மணி • +20 போனஸ் புள்ளிகளுக்கு அனைத்து {count} {series}-லும் பங்கேற்கவும்',
+  },
+  'match.cupSeries': {
+    en: 'Super Cup Weekly Series',
+    ta: 'சூப்பர் கப் வாராந்திர தொடர்',
+  },
+  'match.matches': {
+    en: 'matches',
+    ta: 'போட்டிகள்',
+  },
+  'match.testSeries': {
+    en: 'test auctions',
+    ta: 'சோதனை ஏலங்கள்',
+  },
+  'match.matchLabel': {
+    en: 'Match #{num}',
+    ta: 'போட்டி #{num}',
+  },
+  'match.auctionLabel': {
+    en: 'Auction #{id}',
+    ta: 'ஏலம் #{id}',
+  },
+  'match.played': {
+    en: 'PLAYED (+1)',
+    ta: 'பங்கேற்றது (+1)',
+  },
+  'match.missed': {
+    en: 'MISSED',
+    ta: 'தவறியது',
+  },
+  'match.upcoming': {
+    en: 'UPCOMING',
+    ta: 'வரவிருக்கும்',
+  },
+  'match.live': {
+    en: 'LIVE',
+    ta: 'நேரலை',
+  },
+  'breakdown.allMatchesBonus': {
+    en: 'All-Matches Attendance Bonus',
+    ta: 'அனைத்து போட்டிகள் வருகை போனஸ்',
+  },
+  'breakdown.allMatchesHint': {
+    en: 'Participate in all {count} matches (+20 pts)',
+    ta: 'அனைத்து {count} போட்டிகளிலும் பங்கேற்கவும் (+20 புள்ளிகள்)',
+  },
 
   // ── Live Auction Telemetry ──
   'telemetry.title': {
@@ -1176,8 +1228,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'முழுமையான விதிகள், மதிப்பெண் சூத்திரங்கள், லீக் பிரிவுகள் மற்றும் பரிசு விநியோகக் கொள்கைகள். பதிவுசெய்யப்பட்ட அனைத்து டீலர்ஷிப்களிலும் வெளிப்படையான, தணிக்கை செய்யப்பட்ட மற்றும் டெலிமெட்ரி மூலம் சரிபார்க்கப்பட்ட போட்டி.',
   },
   'terms.seasonDates': {
-    en: 'Season: 15 Oct 2026 – 14 Jan 2027',
-    ta: 'சீசன்: 15 அக் 2026 – 14 ஜன 2027',
+    en: 'Season: 15 Oct 2026 – 31 Jan 2027',
+    ta: 'சீசன்: 15 அக் 2026 – 31 ஜன 2027',
   },
   'terms.prizePurse': {
     en: 'Prize Purse: ₹1,00,000 (₹1 Lakh)',
@@ -1244,8 +1296,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'அனைத்து போட்டிகள் வருகை போனஸ்: +20 புள்ளிகள்',
   },
   'terms.sec2BonusDesc': {
-    en: 'Dealers who maintain flawless attendance and participate in all 14 official Thursday matches throughout the campaign unlock a massive 20-point loyalty bonus at season conclusion.',
-    ta: 'பிரச்சார காலம் முழுவதும் அனைத்து 14 அதிகாரப்பூர்வ வியாழக்கிழமை போட்டிகளிலும் தவறாமல் கலந்துகொள்ளும் டீலர்கள் சீசன் முடிவில் பெரும் +20 போனஸ் புள்ளிகளைப் பெறுவார்கள்.',
+    en: 'Dealers who maintain flawless attendance and participate in all 16 official Thursday matches throughout the campaign unlock a massive 20-point loyalty bonus at season conclusion.',
+    ta: 'பிரச்சார காலம் முழுவதும் அனைத்து 16 அதிகாரப்பூர்வ வியாழக்கிழமை போட்டிகளிலும் தவறாமல் கலந்துகொள்ளும் டீலர்கள் சீசன் முடிவில் பெரும் +20 போனஸ் புள்ளிகளைப் பெறுவார்கள்.',
   },
   'terms.sec3Title': {
     en: '3. Seller Terms & Scoring Allocation',

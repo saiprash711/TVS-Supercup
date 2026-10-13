@@ -113,12 +113,12 @@ export default function PrizeShowcase() {
               ? 'இரண்டு லீக் முன்னிலை அட்டவணைகள். ஆறு வெற்றியாளர்கள். ஒவ்வொரு பரிவர்த்தனையும் மதிப்புமிக்க ஒரு பருவம்.' 
               : 'Two leaderboards. Six winners. One season to make every transaction count.'}
           </p>
-          <div className={styles.campaignDates} aria-label="Campaign period: 15 October 2026 to 14 January 2027">
+          <div className={styles.campaignDates} aria-label="Campaign period: 15 October 2026 to 31 January 2027">
             <CalendarDays size={17} strokeWidth={1.8} aria-hidden="true" />
             <span>{isTamil ? 'பிரச்சாரக் காலம்' : 'Campaign period'}</span>
             <strong>15 OCT 2026</strong>
             <span className={styles.dateLine} aria-hidden="true" />
-            <strong>14 JAN 2027</strong>
+            <strong>31 JAN 2027</strong>
           </div>
         </div>
 

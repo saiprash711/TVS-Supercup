@@ -175,7 +175,7 @@ export default function TermsAndConditionsModal({
                     <strong>No Total Dealer Points:</strong> Buyer points and Seller points are maintained independently. There is no combined &quot;Total Dealer Points&quot; championship or prize pool — winners and podium rankings are decided strictly within each respective league.
                   </li>
                   <li>
-                    <strong>Campaign Window:</strong> Points are accrued strictly during the scheduled season matches between 15 October 2026 and 14 January 2027. Transactions outside official match auction windows will not carry into the competition tally.
+                    <strong>Campaign Window:</strong> Points are accrued strictly during the scheduled season matches between 15 October 2026 and 31 January 2027. Transactions outside official match auction windows will not carry into the competition tally.
                   </li>
                 </ul>
               </div>
