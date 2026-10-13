@@ -407,7 +407,7 @@ function LeaderboardContent() {
           <div className="leaderboard-hero-ambient" aria-hidden="true" />
           <div className="leaderboard-hero-card">
             <div className="leaderboard-hero-grid-pattern" aria-hidden="true" />
-            
+
             <div className="leaderboard-hero-content">
               {/* Gold Trophy Crest with radiant aura */}
               <div className="leaderboard-trophy-crest" title="TVS Dealer Super Cup">
@@ -434,7 +434,7 @@ function LeaderboardContent() {
 
               {/* Informative Subtitle */}
               <p className="leaderboard-hero-subtitle">
-                {t('leaderboard.heroSubtitle', 'Official national leaderboard for verified TVS dealerships across India. Compete in weekly high-velocity auctions and climb separate Buyer and Seller standings.')}
+                {t('leaderboard.heroSubtitle', 'Official national leaderboard for verified TVS dealerships across Tamil Nadu. Compete in weekly high-velocity auctions and climb separate Buyer and Seller standings.')}
               </p>
 
               {/* High-Fidelity Telemetry Chips Bar */}
