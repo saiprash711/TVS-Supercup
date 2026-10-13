@@ -202,7 +202,7 @@ function LoginContent() {
           </h1>
 
           <p className="showcase-description">
-            {t('login.desc', 'The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the leaderboard, and win podium cash awards.')}
+            {t('login.desc', 'The official live championship for certified dealerships across Tamil Nadu. Earn rank points on every verified auction transaction, compete on the leaderboard, and win podium cash awards.')}
           </p>
 
           {/* Championship Highlights Grid */}
