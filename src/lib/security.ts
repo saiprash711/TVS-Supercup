@@ -92,7 +92,7 @@ export function checkRateLimit(
 // Pre-configured rate limit profiles
 export const RATE_LIMITS = {
   dealerLogin: (): RateLimitConfig => ({
-    maxRequests: parseInt(process.env.RATE_LIMIT_LOGIN_MAX || '5', 10),
+    maxRequests: parseInt(process.env.RATE_LIMIT_LOGIN_MAX || '100', 10),
     windowMs: parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS || '900000', 10),
     keyPrefix: 'dealer-login',
   }),

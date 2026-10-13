@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" width="100%" height="100%">
+  <defs>
+    <!-- TVS Racing Red Gradient -->
+    <linearGradient id="iconRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E31837" />
+      <stop offset="100%" stop-color="#B90E22" />
+    </linearGradient>
+
+    <!-- TVS Royal Blue Gradient -->
+    <linearGradient id="iconBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#364EA2" />
+      <stop offset="100%" stop-color="#0B1A4A" />
+    </linearGradient>
+
+    <!-- Trophy Gold Gradient -->
+    <linearGradient id="iconGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="40%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+
+    <linearGradient id="iconGoldShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#92400E" />
+    </linearGradient>
+
+    <!-- Rim Gradient -->
+    <linearGradient id="iconRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="50%" stop-color="#364EA2" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagonal Racing Shield -->
+  <path d="M50 5 L88 19 L88 64 C88 85 50 97 50 97 C50 97 12 85 12 64 L12 19 Z" 
+        fill="url(#iconBlueGrad)" 
+        stroke="url(#iconRimGrad)" 
+        stroke-width="3" 
+        stroke-linejoin="round" />
+
+  <!-- Inner Shield Inset -->
+  <path d="M50 11 L81 23 L81 62 C81 78 50 89 50 89 C50 89 19 78 19 62 L19 23 Z" 
+        fill="#040C2E" 
+        opacity="0.85" />
+
+  <!-- Racing Chevrons -->
+  <path d="M25 28 L33 19 L38 19 L30 28 Z" fill="url(#iconRedGrad)" />
+  <path d="M75 28 L67 19 L62 19 L70 28 Z" fill="url(#iconRedGrad)" />
+
+  <!-- Trophy Handles -->
+  <path d="M31 37 C25 37 23 44 25 51 C27 58 35 59 38 59 L38 54 C34 54 30 53 29 49 C28 46 29 41 33 41 Z" fill="url(#iconGoldGrad)" />
+  <path d="M69 37 C75 37 77 44 75 51 C73 58 65 59 62 59 L62 54 C66 54 70 53 71 49 C72 46 71 41 67 41 Z" fill="url(#iconGoldGrad)" />
+
+  <!-- Trophy Cup Body -->
+  <path d="M35 34 L65 34 L61 56 C59 65 53 70 50 70 C47 70 41 65 39 56 Z" fill="url(#iconGoldShine)" />
+  <rect x="34" y="31.5" width="32" height="4" rx="2" fill="#FEF08A" />
+
+  <!-- Trophy Stem & Base -->
+  <path d="M47 69 L53 69 L52 77 L48 77 Z" fill="url(#iconGoldGrad)" />
+  <path d="M38 77 L62 77 L64 83 L36 83 Z" fill="url(#iconGoldGrad)" />
+  <rect x="34" y="83" width="32" height="3.5" rx="1" fill="#B45309" />
+
+  <!-- Victory Star -->
+  <path d="M50 42 L51.8 47.5 L57.5 47.5 L52.9 50.8 L54.6 56.2 L50 52.8 L45.4 56.2 L47.1 50.8 L42.5 47.5 L48.2 47.5 Z" fill="#FFFFFF" />
+
+  <!-- TVS Racing Slash at base -->
+  <polygon points="46,89 56,89 52,94 42,94" fill="url(#iconRedGrad)" />
+</svg>

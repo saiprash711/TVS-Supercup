@@ -22,7 +22,15 @@ This application turns TVS Certified auction activities into a competitive leade
 
 ## 🚀 Quick Start
 
-### Local Development
+### Quick Admin Launcher (Windows)
+
+Double-click `start.bat` or run:
+```cmd
+start.bat
+```
+*Automatically validates Node.js, ensures dependencies/database, enables admin mode, launches the server, and opens `http://localhost:3000/admin` directly in your default browser.*
+
+### Local Development (Manual)
 
 ```bash
 # Install dependencies
@@ -38,7 +46,7 @@ npm run dev
 npm run sync:live
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) (Admin at [http://localhost:3000/admin](http://localhost:3000/admin))
 
 ---
 

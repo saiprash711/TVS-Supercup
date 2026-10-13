@@ -4,17 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
-import { 
-  Award, 
-  ShoppingCart, 
-  DollarSign, 
-  Gavel, 
-  Calendar, 
-  CheckCircle2, 
-  LogOut, 
-  Radio, 
-  TrendingUp, 
-  Clock, 
+import {
+  Award,
+  ShoppingCart,
+  DollarSign,
+  Gavel,
+  Calendar,
+  CheckCircle2,
+  LogOut,
+  Radio,
+  TrendingUp,
+  Clock,
   Sparkles,
   ArrowUp,
   ArrowDown,
@@ -112,7 +112,7 @@ function DashboardContent() {
         }, 750);
         return () => clearTimeout(timer);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -260,8 +260,8 @@ function DashboardContent() {
               </span>
             </li>
             <li>
-              <button 
-                onClick={() => setShowRulesModal(true)} 
+              <button
+                onClick={() => setShowRulesModal(true)}
                 className="rules-nav-pill-btn"
                 title="View Official Super Cup Points & Scoring Handbook"
               >
@@ -271,8 +271,8 @@ function DashboardContent() {
               </button>
             </li>
             <li>
-              <button 
-                onClick={() => setShowTermsModal(true)} 
+              <button
+                onClick={() => setShowTermsModal(true)}
                 className="navbar-link"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                 title="View Official Terms & Conditions for Buyers and Sellers"
@@ -293,8 +293,8 @@ function DashboardContent() {
               </div>
               <span className="navbar-username">{dealerName}</span>
             </div>
-            <button 
-              className="btn btn-ghost btn-sm" 
+            <button
+              className="btn btn-ghost btn-sm"
               onClick={handleLogout}
               title="Logout of session"
             >
@@ -397,14 +397,14 @@ function DashboardContent() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button 
+            <button
               className="rules-showcase-btn"
               onClick={() => setShowRulesModal(true)}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>{t('rulesBanner.btnRules', 'Point Rules')}</span>
             </button>
-            <button 
+            <button
               className="rules-showcase-btn"
               onClick={() => setShowTermsModal(true)}
               style={{ background: 'rgba(54, 78, 162, 0.25)', borderColor: 'rgba(54, 78, 162, 0.5)' }}
@@ -434,7 +434,7 @@ function DashboardContent() {
           <div className="card double-bezel">
             <div className="inner-bezel-core score-display" style={{ borderColor: 'rgba(59, 130, 246, 0.35)' }}>
               <div className="score-display-bg-glow" style={{ background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)' }}></div>
-              
+
               <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-blue)' }}>
                 <ShoppingCart className="w-4 h-4" />
                 {t('standings.buyerTitle', 'BUYER LEAGUE STANDINGS (₹50,000 PRIZE POOL)')}
@@ -489,7 +489,7 @@ function DashboardContent() {
           <div className="card double-bezel">
             <div className="inner-bezel-core score-display" style={{ borderColor: 'rgba(56, 189, 248, 0.35)' }}>
               <div className="score-display-bg-glow" style={{ background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%)' }}></div>
-              
+
               <div className="score-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)' }}>
                 <Layers className="w-4 h-4" />
                 {t('standings.sellerTitle', 'SELLER LEAGUE STANDINGS (₹50,000 PRIZE POOL)')}
@@ -768,8 +768,8 @@ function DashboardContent() {
 
           <div className="match-tracker">
             {matchTracker.map((match) => (
-              <div 
-                key={match.matchNumber} 
+              <div
+                key={match.matchNumber}
                 className={`match-item ${match.participated ? 'participated' : ''} ${match.status === 'UPCOMING' ? 'upcoming' : ''}`}
               >
                 <div className="match-number">{t('match.matchLabel', `Match #${match.matchNumber}`, { num: match.matchNumber })}</div>
@@ -796,10 +796,10 @@ function DashboardContent() {
                 </div>
                 <div className={`match-status ${match.status.toLowerCase()}`}>
                   {match.status === 'COMPLETED' && match.participated ? t('match.played', 'PLAYED (+1)') :
-                   match.status === 'COMPLETED' && !match.participated ? t('match.missed', 'MISSED') :
-                   match.status === 'UPCOMING' ? t('match.upcoming', 'UPCOMING') :
-                   match.status === 'LIVE' ? t('match.live', 'LIVE') :
-                   match.status}
+                    match.status === 'COMPLETED' && !match.participated ? t('match.missed', 'MISSED') :
+                      match.status === 'UPCOMING' ? t('match.upcoming', 'UPCOMING') :
+                        match.status === 'LIVE' ? t('match.live', 'LIVE') :
+                          match.status}
                 </div>
               </div>
             ))}
@@ -845,24 +845,23 @@ function DashboardContent() {
                         {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td>
-                        <span className={`badge ${
-                          act.activityType === 'BUY' ? 'badge-success' :
-                          act.activityType === 'SELL' ? 'badge-info' :
-                          act.activityType === 'SELL_LISTING' ? 'badge-primary' :
-                          act.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
-                          act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
-                          act.activityType === 'BID_PLACED' ? 'badge-primary' :
-                          'badge-warning'
-                        }`}>
+                        <span className={`badge ${act.activityType === 'BUY' ? 'badge-success' :
+                            act.activityType === 'SELL' ? 'badge-info' :
+                              act.activityType === 'SELL_LISTING' ? 'badge-primary' :
+                                act.activityType === 'SELL_COMMISSION' ? 'badge-warning' :
+                                  act.activityType === 'MATCH_PARTICIPATION' ? 'badge-lime' :
+                                    act.activityType === 'BID_PLACED' ? 'badge-primary' :
+                                      'badge-warning'
+                          }`}>
                           {act.activityType === 'BUY' ? t('telemetry.won', '🏆 WON LOT (CONVERSION)') :
-                           act.activityType === 'SELL' ? t('telemetry.sold', '💰 SOLD (CONVERSION)') :
-                           act.activityType === 'SELL_LISTING' ? t('telemetry.listed', '📋 VEHICLE LISTED') :
-                           act.activityType === 'SELL_COMMISSION' ? t('telemetry.commissionSettled', '💵 COMMISSION SETTLED') :
-                           act.activityType === 'BID_PLACED' ? t('telemetry.bidPlaced', '🔨 BID PLACED') :
-                           act.activityType === 'MATCH_PARTICIPATION' ? t('telemetry.room2pm', '🏏 2PM ROOM') :
-                           act.activityType === 'VEHICLE_INSPECTED' ? t('telemetry.inspection', '🔍 INSPECTION') :
-                           act.activityType === 'WATCHLIST_ADD' ? t('telemetry.watchlist', '⭐ WATCHLIST') :
-                           act.activityType.replace(/_/g, ' ')}
+                            act.activityType === 'SELL' ? t('telemetry.sold', '💰 SOLD (CONVERSION)') :
+                              act.activityType === 'SELL_LISTING' ? t('telemetry.listed', '📋 VEHICLE LISTED') :
+                                act.activityType === 'SELL_COMMISSION' ? t('telemetry.commissionSettled', '💵 COMMISSION SETTLED') :
+                                  act.activityType === 'BID_PLACED' ? t('telemetry.bidPlaced', '🔨 BID PLACED') :
+                                    act.activityType === 'MATCH_PARTICIPATION' ? t('telemetry.room2pm', '🏏 2PM ROOM') :
+                                      act.activityType === 'VEHICLE_INSPECTED' ? t('telemetry.inspection', '🔍 INSPECTION') :
+                                        act.activityType === 'WATCHLIST_ADD' ? t('telemetry.watchlist', '⭐ WATCHLIST') :
+                                          act.activityType.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td style={{ fontSize: '0.85rem' }}>
@@ -949,7 +948,7 @@ function DashboardContent() {
               </h2>
               <p className="card-subtitle">{t('protocol.subtitle', 'Verified point earning structure for the TVS Super Cup')}</p>
             </div>
-            <button 
+            <button
               className="btn btn-ghost btn-sm"
               onClick={() => setShowRulesModal(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', border: '1px solid var(--border-hairline)', borderRadius: '9999px', padding: '6px 14px' }}

@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 100" fill="none" width="100%" height="100%">
+  <defs>
+    <!-- TVS Racing Red Gradient -->
+    <linearGradient id="tvsRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E31837" />
+      <stop offset="100%" stop-color="#B90E22" />
+    </linearGradient>
+
+    <!-- TVS Royal Blue Gradient -->
+    <linearGradient id="tvsBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#364EA2" />
+      <stop offset="100%" stop-color="#182B6B" />
+    </linearGradient>
+
+    <!-- Championship Trophy Gold Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="40%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+
+    <linearGradient id="goldShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#92400E" />
+    </linearGradient>
+
+    <!-- Shield Rim Gradient -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="50%" stop-color="#364EA2" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+
+    <style>
+      .supercup-text-main {
+        font-family: 'Barlow', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 38px;
+        font-weight: 900;
+        font-style: italic;
+        letter-spacing: 0.04em;
+        fill: #0F172A;
+      }
+      .supercup-sub-text {
+        font-family: 'JetBrains Mono', 'Plus Jakarta Sans', monospace;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        fill: #364EA2;
+      }
+      @media (prefers-color-scheme: dark) {
+        .supercup-text-main {
+          fill: #F8FAFC;
+        }
+        .supercup-sub-text {
+          fill: #60A5FA;
+        }
+      }
+    </style>
+  </defs>
+
+  <!-- ═══════════ CREST / EMBLEM (X: 8 to 92) ═══════════ -->
+  <g transform="translate(10, 6)">
+    <!-- Outer Shield Hexagon -->
+    <path d="M44 4 L76 16 L76 56 C76 74 44 86 44 86 C44 86 12 74 12 56 L12 16 Z" 
+          fill="url(#tvsBlueGrad)" 
+          stroke="url(#rimGrad)" 
+          stroke-width="2.5" 
+          stroke-linejoin="round" />
+
+    <!-- Inner Shield Inset -->
+    <path d="M44 9 L71 20 L71 54 C71 68 44 79 44 79 C44 79 17 68 17 54 L17 20 Z" 
+          fill="#061138" 
+          opacity="0.8" />
+
+    <!-- Racing Chevrons -->
+    <path d="M22 24 L29 16 L33 16 L26 24 Z" fill="url(#tvsRedGrad)" />
+    <path d="M66 24 L59 16 L55 16 L62 24 Z" fill="url(#tvsRedGrad)" />
+
+    <!-- Trophy Handles / Wings -->
+    <path d="M28 32 C23 32 21 38 23 44 C25 50 31 51 34 51 L34 47 C30 47 27 46 26 43 C25 40 26 36 29 36 Z" fill="url(#goldGrad)" />
+    <path d="M60 32 C65 32 67 38 65 44 C63 50 57 51 54 51 L54 47 C58 47 61 46 62 43 C63 40 62 36 59 36 Z" fill="url(#goldGrad)" />
+
+    <!-- Trophy Cup Body -->
+    <path d="M31 29 L57 29 L54 48 C52 56 47 60 44 60 C41 60 36 56 34 48 Z" fill="url(#goldShine)" />
+    <!-- Trophy Lip -->
+    <rect x="30" y="27" width="28" height="3.5" rx="1.75" fill="#FEF08A" />
+    <!-- Trophy Stem -->
+    <path d="M41 59 L47 59 L46 66 L42 66 Z" fill="url(#goldGrad)" />
+    <!-- Trophy Base -->
+    <path d="M34 66 L54 66 L56 71 L32 71 Z" fill="url(#goldGrad)" />
+    <rect x="30" y="71" width="28" height="3" rx="1" fill="#B45309" />
+
+    <!-- Victory Star -->
+    <path d="M44 36 L45.5 40.5 L50 40.5 L46.5 43.2 L47.8 47.5 L44 44.8 L40.2 47.5 L41.5 43.2 L38 40.5 L42.5 40.5 Z" fill="#FFFFFF" opacity="0.95" />
+
+    <!-- TVS Racing Slash Accent at base -->
+    <polygon points="41,77 49,77 46,82 38,82" fill="url(#tvsRedGrad)" />
+  </g>
+
+  <!-- ═══════════ TYPOGRAPHY LOCKUP (X: 104 onwards) ═══════════ -->
+  <g transform="translate(104, 0)">
+    <!-- Word 'TVS' -->
+    <text x="0" y="47" 
+          font-family="'Barlow', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="40" 
+          font-weight="900" 
+          font-style="italic"
+          letter-spacing="0.04em" 
+          fill="url(#tvsRedGrad)">TVS</text>
+
+    <!-- TVS Racing Slash accent on TVS -->
+    <polygon points="86,16 102,16 95,23 79,23" fill="url(#tvsRedGrad)" />
+
+    <!-- Word 'SUPERCUP' -->
+    <text x="108" y="47" class="supercup-text-main">SUPERCUP</text>
+
+    <!-- Subtitle Pill / Telemetry Strip -->
+    <g transform="translate(0, 60)">
+      <!-- Pill Container -->
+      <rect x="0" y="0" width="345" height="24" rx="12" fill="rgba(54, 78, 162, 0.12)" stroke="rgba(54, 78, 162, 0.3)" stroke-width="1.2" />
+      
+      <!-- Live Status Dot -->
+      <circle cx="14" cy="12" r="3.5" fill="#10B981" />
+      <circle cx="14" cy="12" r="6" stroke="#10B981" stroke-width="1" opacity="0.4" />
+      
+      <!-- Subtitle Text -->
+      <text x="28" y="15.5" class="supercup-sub-text">DEALER CHAMPIONSHIP • 2026–27</text>
+
+      <!-- Badge Capsule -->
+      <rect x="268" y="3.5" width="72" height="17" rx="8.5" fill="url(#tvsRedGrad)" />
+      <text x="304" y="15" 
+            font-family="'Plus Jakarta Sans', sans-serif" 
+            font-size="9" 
+            font-weight="800" 
+            letter-spacing="0.1em" 
+            fill="#FFFFFF" 
+            text-anchor="middle">OFFICIAL</text>
+    </g>
+  </g>
+</svg>
