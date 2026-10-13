@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getCurrentDealer } from '@/lib/auth';
+import { requireDealer } from '@/lib/auth';
 import { getPositionContext } from '@/lib/services/ranking-engine';
 import { getActivityBreakdown } from '@/lib/services/points-engine';
 import { syncDealerActivities } from '@/lib/services/tvs-sync';
@@ -19,10 +19,11 @@ import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export async function GET() {
   try {
-    const dealer = await getCurrentDealer();
-    if (!dealer) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const auth = await requireDealer();
+    if (!auth.authorized || !auth.dealer) {
+      return NextResponse.json({ error: auth.error || 'Not authenticated' }, { status: auth.status || 401 });
     }
+    const dealer = auth.dealer;
 
     // Get active campaign
     const campaign = await getCurrentSuperCupCampaign();

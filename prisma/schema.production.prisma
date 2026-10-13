@@ -21,7 +21,7 @@ model Dealer {
   city             String           @default("")
   category         String           @default("Used Car Dealer") // "OEM Dealer", "Used Car Dealer", "Corporate / Other"
   phone            String?
-  password         String?          @default("tvs123")
+  password         String?
   status           String           @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
@@ -29,6 +29,7 @@ model Dealer {
   activities DealerActivity[]
   scores     DealerScore[]
   tiers      DealerTier[]
+  sessions   Session[]
 
   @@map("dealers")
 }
@@ -162,3 +163,25 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+// ─── Session (Server-side Session Store) ───────────────────────────────────
+
+model Session {
+  id            String    @id @default(uuid())
+  tokenHash     String    @unique @map("token_hash")
+  principalType String    @map("principal_type") // DEALER, ADMIN
+  principalId   String    @map("principal_id")
+  dealerId      Int?      @map("dealer_id")
+  upstreamToken String?   @map("upstream_token")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+
+  dealer        Dealer?   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([principalType, principalId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+

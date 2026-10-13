@@ -202,30 +202,8 @@ function resolveCustomer(idOrCode: any) {
   return custMap.get(s) || null;
 }
 
-import { createHmac } from 'node:crypto';
-
 async function checkIsAdmin(request: NextRequest): Promise<boolean> {
-  try {
-    if (await isAdmin()) return true;
-  } catch {}
-
-  const c = request.cookies.get('supercup_admin')?.value;
-  if (c) {
-    const password = process.env.ADMIN_PASSWORD?.replace(/^["']|["']$/g, '').trim();
-    const secret = process.env.SESSION_SECRET?.trim() || password;
-    if (secret) {
-      const [issuedAtRaw, suppliedSignature, ...extra] = c.split('.');
-      if (issuedAtRaw && suppliedSignature && extra.length === 0) {
-        const issuedAt = Number(issuedAtRaw);
-        const now = Math.floor(Date.now() / 1000);
-        if (Number.isInteger(issuedAt) && issuedAt <= now && now - issuedAt <= 60 * 60 * 8) {
-          const expectedSignature = createHmac('sha256', secret).update(issuedAtRaw).digest('base64url');
-          if (suppliedSignature === expectedSignature) return true;
-        }
-      }
-    }
-  }
-  return false;
+  return isAdmin();
 }
 
 export async function GET(request: NextRequest) {

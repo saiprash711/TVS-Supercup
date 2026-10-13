@@ -5,16 +5,17 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getCurrentDealer } from '@/lib/auth';
+import { requireDealer } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 
 export async function GET() {
   try {
-    const dealer = await getCurrentDealer();
-    if (!dealer) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const auth = await requireDealer();
+    if (!auth.authorized || !auth.dealer) {
+      return NextResponse.json({ error: auth.error || 'Not authenticated' }, { status: auth.status || 401 });
     }
+    const dealer = auth.dealer;
 
     const campaign = await getCurrentSuperCupCampaign();
 

@@ -44,53 +44,90 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, dealerId, identifier, username, mobile, password } = body;
-
-    const rawIdentifier = identifier || dealerId || username || mobile || token;
-
-    if (!rawIdentifier) {
-      return NextResponse.json(
-        { error: 'TVS Dealer ID or Registered Mobile number is required' },
-        { status: 400 }
-      );
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    // ── Input Sanitization ─────────────────────────────────────────────
-    const authIdentifier = sanitizeDealerIdentifier(String(rawIdentifier));
-    if (!authIdentifier) {
-      return NextResponse.json(
-        { error: 'Invalid identifier format' },
-        { status: 400 }
-      );
+    const { type, token, dealerId, identifier, username, mobile, password } = body;
+
+    // Discriminated Schema: Token / SSO Login vs Credential Login
+    const isTokenFlow = type === 'token' || (Boolean(token) && !password);
+
+    let loginResult;
+    let auditIdentifier = 'unknown';
+
+    if (isTokenFlow) {
+      const rawToken = token || identifier;
+      if (!rawToken || typeof rawToken !== 'string') {
+        return NextResponse.json({ error: 'Valid TVS session token is required' }, { status: 400 });
+      }
+      if (rawToken.length < 10 || rawToken.length > 4096) {
+        return NextResponse.json({ error: 'Malformed token length' }, { status: 400 });
+      }
+      // Never truncate tokens using identifier sanitizer
+      auditIdentifier = `token:${rawToken.slice(0, 8)}...`;
+      loginResult = await loginDealer({ type: 'token', token: rawToken });
+    } else {
+      // Credential Flow
+      const rawId = identifier || dealerId || username || mobile;
+      if (!rawId || typeof rawId !== 'string') {
+        return NextResponse.json(
+          { error: 'TVS Dealer ID or Registered Mobile number is required' },
+          { status: 400 }
+        );
+      }
+      if (rawId.length < 1 || rawId.length > 100) {
+        return NextResponse.json({ error: 'Identifier length must be between 1 and 100 characters' }, { status: 400 });
+      }
+      // Reject control characters
+      if (/[\x00-\x1F\x7F]/.test(rawId)) {
+        return NextResponse.json({ error: 'Identifier contains invalid characters' }, { status: 400 });
+      }
+
+      if (typeof password !== 'string' || password.length === 0) {
+        return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+      }
+      if (password.length > 256) {
+        return NextResponse.json({ error: 'Password exceeds maximum allowed length' }, { status: 400 });
+      }
+
+      auditIdentifier = rawId.trim();
+      // Pass password as EXACT string (do not trim silently)
+      loginResult = await loginDealer({
+        type: 'credentials',
+        identifier: rawId.trim(),
+        password,
+      });
     }
 
-    const result = await loginDealer(authIdentifier, password);
-    if (!result.success || !result.session) {
+    if (!loginResult.success || !loginResult.session) {
       // ── Audit: Failed Login ────────────────────────────────────────
       logAudit({
-        ...createAuditEntry(request, 'public', `LOGIN_FAILED: ${authIdentifier}`),
+        ...createAuditEntry(request, 'public', `LOGIN_FAILED: ${auditIdentifier}`),
         status: 401,
       });
       const res = NextResponse.json(
-        { error: result.error || 'Authentication failed' },
+        { error: loginResult.error || 'Authentication failed' },
         { status: 401 }
       );
       applySecurityHeaders(res);
       return res;
     }
 
+    const session = loginResult.session;
+
     // ── Audit: Successful Login ──────────────────────────────────────
     logAudit({
-      ...createAuditEntry(request, 'dealer', `LOGIN_SUCCESS: dealer_id=${result.session.dealerId}`),
+      ...createAuditEntry(request, 'dealer', `LOGIN_SUCCESS: dealer_id=${session.dealerId}`),
       status: 200,
     });
 
     const res = NextResponse.json({
       success: true,
       dealer: {
-        displayName: result.session.displayName,
-        maskedName: result.session.maskedName,
-        city: result.session.city,
+        displayName: session.displayName,
+        maskedName: session.maskedName,
+        city: session.city,
       },
     });
     applySecurityHeaders(res);
