@@ -2358,7 +2358,7 @@ export default function AdminPage() {
                               background: '#10b981',
                               boxShadow: '0 0 8px #10b981'
                             }}></span>
-                            <span>Viewing: <strong style={{ color: 'var(--text-primary)' }}>{adminLeaderboardTab === 'buyers' ? 'Buyer Standings (Unmasked)' : adminLeaderboardTab === 'sellers' ? 'Seller Standings (Unmasked)' : 'National Super Cup Standings (Unmasked)'}</strong></span>
+                            <span>Viewing: <strong style={{ color: 'var(--text-primary)' }}>{adminLeaderboardTab === 'buyers' ? 'Buyer Standings (Unmasked)' : adminLeaderboardTab === 'sellers' ? 'Seller Standings (Unmasked)' : 'Overall Super Cup Standings (Unmasked)'}</strong></span>
                           </div>
                         </div>
 
@@ -5840,7 +5840,7 @@ export default function AdminPage() {
               {/* Bento Metrics Strip */}
               <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
                 <div className="admin-stat-card" style={{ padding: '14px 16px', borderLeft: '4px solid var(--accent-gold)' }}>
-                  <span className="admin-stat-label">National Overall Rank</span>
+                  <span className="admin-stat-label">Overall Rank</span>
                   <div className="admin-stat-val" style={{ color: 'var(--accent-gold)', fontSize: '1.6rem' }}>
                     #{selectedDealer.scores[0]?.overallRank || selectedDealer.scores[0]?.rank || '-'}
                   </div>

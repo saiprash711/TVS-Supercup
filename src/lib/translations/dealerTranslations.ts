@@ -732,8 +732,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'சூப்பர்கப்',
   },
   'leaderboard.heroSubtitle': {
-    en: 'Official national leaderboard for verified TVS dealerships across India. Compete in weekly high-velocity auctions and climb separate Buyer and Seller standings.',
-    ta: 'இந்தியா முழுவதும் உள்ள சான்றளிக்கப்பட்ட டிவிஎஸ் டீலர்ஷிப்களுக்கான அதிகாரப்பூர்வ தேசிய முன்னிலை அட்டவணை. வாராந்திர அதிவேக ஏலங்களில் போட்டியிட்டு, தனித்தனி வாங்குபவர் மற்றும் விற்பனையாளர் தரவரிசையில் முன்னேறுங்கள்.',
+    en: 'Official leaderboard for verified TVS dealerships across Tamil Nadu. Compete in weekly high-velocity auctions and climb separate Buyer and Seller standings.',
+    ta: 'தமிழ்நாடு முழுவதும் உள்ள சான்றளிக்கப்பட்ட டிவிஎஸ் டீலர்ஷிப்களுக்கான அதிகாரப்பூர்வ முன்னிலை அட்டவணை. வாராந்திர அதிவேக ஏலங்களில் போட்டியிட்டு, தனித்தனி வாங்குபவர் மற்றும் விற்பனையாளர் தரவரிசையில் முன்னேறுங்கள்.',
   },
   'leaderboard.telemetrySeason': {
     en: 'Season:',
@@ -1082,8 +1082,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'சூப்பர்கப்',
   },
   'login.desc': {
-    en: 'The official live championship for certified dealerships across India. Earn rank points on every verified auction transaction, compete on the national leaderboard, and win podium cash awards.',
-    ta: 'இந்தியா முழுவதும் உள்ள சான்றளிக்கப்பட்ட டீலர்ஷிப்களுக்கான அதிகாரப்பூர்வ நேரடி சாம்பியன்ஷிப். சரிபார்க்கப்பட்ட ஒவ்வொரு ஏலப் பரிவர்த்தனையிலும் தரவரிசைப் புள்ளிகளைப் பெற்று, தேசிய முன்னிலை அட்டவணையில் போட்டியிட்டு, போடியம் ரொக்கப் பரிசுகளை வெல்லுங்கள்.',
+    en: 'The official live championship for certified dealerships across Tamil Nadu. Earn rank points on every verified auction transaction, compete on the leaderboard, and win podium cash awards.',
+    ta: 'தமிழ்நாடு முழுவதும் உள்ள சான்றளிக்கப்பட்ட டீலர்ஷிப்களுக்கான அதிகாரப்பூர்வ நேரடி சாம்பியன்ஷிப். சரிபார்க்கப்பட்ட ஒவ்வொரு ஏலப் பரிவர்த்தனையிலும் தரவரிசைப் புள்ளிகளைப் பெற்று, முன்னிலை அட்டவணையில் போட்டியிட்டு, போடியம் ரொக்கப் பரிசுகளை வெல்லுங்கள்.',
   },
   'login.podiumCard': {
     en: 'Total of ₹1 Lakh Cash Podium',
