@@ -65,8 +65,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Malformed token length' }, { status: 400 });
       }
       // Never truncate tokens using identifier sanitizer
-      auditIdentifier = `token:${rawToken.slice(0, 8)}...`;
-      loginResult = await loginDealer({ type: 'token', token: rawToken });
+      const userAgent = request.headers.get('user-agent') || undefined;
+      loginResult = await loginDealer(
+        { type: 'token', token: rawToken },
+        undefined,
+        { ipAddress: clientIp, userAgent, loginType: 'SSO' }
+      );
     } else {
       // Credential Flow
       const rawId = identifier || dealerId || username || mobile;
@@ -92,12 +96,17 @@ export async function POST(request: NextRequest) {
       }
 
       auditIdentifier = rawId.trim();
+      const userAgent = request.headers.get('user-agent') || undefined;
       // Pass password as EXACT string (do not trim silently)
-      loginResult = await loginDealer({
-        type: 'credentials',
-        identifier: rawId.trim(),
-        password,
-      });
+      loginResult = await loginDealer(
+        {
+          type: 'credentials',
+          identifier: rawId.trim(),
+          password,
+        },
+        undefined,
+        { ipAddress: clientIp, userAgent, loginType: 'CREDENTIALS' }
+      );
     }
 
     if (!loginResult.success || !loginResult.session) {
@@ -124,10 +133,12 @@ export async function POST(request: NextRequest) {
 
     const res = NextResponse.json({
       success: true,
+      isEmployee: Boolean(session.isEmployee),
       dealer: {
         displayName: session.displayName,
         maskedName: session.maskedName,
         city: session.city,
+        isEmployee: Boolean(session.isEmployee),
       },
     });
     applySecurityHeaders(res);
@@ -153,10 +164,12 @@ export async function GET() {
 
   return NextResponse.json({
     authenticated: true,
+    isEmployee: Boolean(dealer.isEmployee),
     dealer: {
       displayName: dealer.displayName,
       maskedName: dealer.maskedName,
       city: dealer.city,
+      isEmployee: Boolean(dealer.isEmployee),
     },
   });
 }

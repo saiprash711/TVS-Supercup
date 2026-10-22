@@ -12,15 +12,16 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isEmployee } from '@/lib/auth';
 
 export async function GET() {
   try {
     const admin = await isAdmin();
+    const employee = await isEmployee();
 
-    // Directory is restricted to administrators only.
-    // Dealers cannot access or enumerate other dealers under any circumstances.
-    if (!admin) {
+    // Directory is restricted to administrators and internal staff.
+    // Competing dealers cannot access or enumerate other dealers under any circumstances.
+    if (!admin && !employee) {
       return NextResponse.json(
         { error: 'Admin access required. Dealer directory is restricted.' },
         { status: 403 }

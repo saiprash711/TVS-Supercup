@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isEmployee } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +24,11 @@ export async function GET() {
     const campaign = await getCurrentSuperCupCampaign();
     const dealerCount = await prisma.dealer.count();
     const admin = await isAdmin();
+    const employee = await isEmployee();
+    const isPrivileged = admin || employee;
 
     // Public health check: minimal information only
-    if (!admin) {
+    if (!isPrivileged) {
       return NextResponse.json({
         status: 'ok',
         database: { connected: true },
@@ -62,8 +64,10 @@ export async function GET() {
     });
   } catch (error: any) {
     const admin = await isAdmin().catch(() => false);
+    const employee = await isEmployee().catch(() => false);
+    const isPrivileged = admin || employee;
 
-    if (!admin) {
+    if (!isPrivileged) {
       return NextResponse.json({ status: 'error' }, { status: 500 });
     }
 

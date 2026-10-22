@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isEmployee } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import * as XLSX from 'xlsx';
 import staticCustomerMapping from '@/lib/data/tvs-customer-mapping.json';
@@ -203,7 +203,9 @@ function resolveCustomer(idOrCode: any) {
 }
 
 async function checkIsAdmin(request: NextRequest): Promise<boolean> {
-  return isAdmin();
+  const admin = await isAdmin();
+  if (admin) return true;
+  return isEmployee();
 }
 
 export async function GET(request: NextRequest) {

@@ -410,7 +410,7 @@ export default function TermsAndConditionsModal({
                     <strong>KYC & Payout Method:</strong> All prize distributions will be disbursed through verified bank wire transfer (NEFT/RTGS) to the official registered dealership entity following GST and TDS compliance verification.
                   </li>
                   <li>
-                    <strong>Management Discretion:</strong> TVS Certified management reserves the right of final audit inspection on all logged telemetry records prior to official winner declaration.
+                    <strong>Management Discretion & Jurisdiction:</strong> TVS Certified management reserves the right of final audit inspection on all logged telemetry records prior to official winner declaration. In case of any conflicts or disputes, the matter shall be subjected to the exclusive jurisdiction and authority of the TVS Certified Madhavaram Office, Chennai.
                   </li>
                 </ul>
               </div>

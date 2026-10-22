@@ -151,18 +151,23 @@ echo.
 echo Starting Next.js Dev Server (Press Ctrl+C to stop)...
 echo.
 
-REM Trigger browser opening in background after 3 seconds
-start "" cmd /c "ping -n 4 127.0.0.1 >nul & start %URL%"
+REM Trigger browser opening in background as soon as server responds on port %PORT%
+start "" powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%PORT%; $url='%URL%'; for($i=0; $i -lt 40; $i++){ Start-Sleep -Milliseconds 700; $c = New-Object System.Net.Sockets.TcpClient; $w = $c.BeginConnect('127.0.0.1', $port, $null, $null).AsyncWaitHandle.WaitOne(400, $false); if($w -and $c.Connected){ $c.Close(); break }; $c.Close() }; Start-Process $url"
 
 REM Run the dev server
 call npm run dev
 
 if errorlevel 1 (
     echo.
-    echo [ERROR] Server terminated with an error.
+    echo [ERROR] Server terminated with an error code: %errorlevel%.
+    echo Please check the error messages above.
     pause
+    exit /b 1
 )
 
+echo.
+echo [INFO] Dev server stopped.
+pause
 exit /b 0
 
 :SHOW_HELP
@@ -176,3 +181,4 @@ echo   start.bat --help     Shows this help message
 echo.
 pause
 exit /b 0
+    

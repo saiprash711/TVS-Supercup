@@ -81,6 +81,21 @@ export async function syncDealerActivities(
       return { dealerId, externalDealerId, newActivitiesCount: 0, newPointsAwarded: 0, totalPoints: 0, rank: 0 };
     }
 
+    // Skip live upstream polling for demo/preview dealers
+    if (externalDealerId.startsWith('DEMO-')) {
+      const score = await prisma.dealerScore.findUnique({
+        where: { dealerId_campaignId: { dealerId, campaignId } },
+      });
+      return {
+        dealerId,
+        externalDealerId,
+        newActivitiesCount: 0,
+        newPointsAwarded: 0,
+        totalPoints: score?.totalPoints || 0,
+        rank: score?.rank || 0,
+      };
+    }
+
     // Do not poll or award anything before the campaign opens or after it closes.
     if (!isWithinCampaign(new Date(), campaign)) {
       const score = await prisma.dealerScore.findUnique({
@@ -310,7 +325,16 @@ export async function syncAuctionActivities(
     }
 
     const fetchedActivities = await provider.getAuctionActivities(targetAuctionId, token);
-    const activities = fetchedActivities.filter(act => isWithinCampaign(act.timestamp, campaign));
+    const activities = fetchedActivities.map(act => {
+      // Ensure SELL_LISTING activities for this scheduled match auction fall strictly within the campaign window
+      if (act.activityType === 'SELL_LISTING' && !isWithinCampaign(act.timestamp, campaign)) {
+        return {
+          ...act,
+          timestamp: match.date || campaign.startDate,
+        };
+      }
+      return act;
+    }).filter(act => isWithinCampaign(act.timestamp, campaign));
 
     // Map dealers by externalDealerId (supporting both raw ID and USR- prefixed ID)
     const externalIds = [...new Set(activities.map(a => a.dealerId))];
@@ -430,7 +454,9 @@ export async function syncAuctionActivities(
       } else {
         // Buying / Bidder activities (BUY, BID_PLACED, MATCH_PARTICIPATION)
         // Must resolve strictly to the buyer / bidder, never to the vehicle's consigning seller!
-        dealerId = dealerMap.get(act.dealerId) ||
+        const bName = typeof meta.bidderName === 'string' && meta.bidderName.trim() !== 'null' ? meta.bidderName.trim() : undefined;
+        dealerId = (bName ? (dealerMap.get(bName) || dealerMap.get(bName.toLowerCase())) : undefined) ||
+          dealerMap.get(act.dealerId) ||
           (meta.winnerId ? dealerMap.get(String(meta.winnerId)) : undefined) ||
           (meta.buyerWinnerId ? dealerMap.get(String(meta.buyerWinnerId)) : undefined) ||
           (meta.bidderId ? dealerMap.get(String(meta.bidderId)) : undefined) ||

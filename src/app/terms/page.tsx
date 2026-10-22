@@ -336,7 +336,7 @@ function TermsContent() {
             </div>
 
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: 1.75 }}>
-              {t('terms.sec5Desc', 'All telemetry records, bids, and listings are logged by TVS Certified auction systems. In case of discrepancies, the audit trail of the central auction engine shall be final and binding.')}
+              {t('terms.sec5Desc', 'All telemetry records, bids, and listings are logged by TVS Certified auction systems. In case of discrepancies, the audit trail of the central auction engine shall be final and binding. In case of any conflicts or disputes, the matter shall be subjected to the exclusive jurisdiction and authority of the TVS Certified Madhavaram Office, Chennai.')}
             </p>
           </section>
         </div>

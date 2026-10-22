@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loginAdmin, isAdmin, logoutAdmin } from '@/lib/auth';
+import { loginAdmin, isAdmin, logoutAdmin, isEmployee, logoutDealer } from '@/lib/auth';
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -86,7 +86,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   const admin = await isAdmin();
-  return NextResponse.json({ authenticated: admin });
+  const employee = await isEmployee();
+  return NextResponse.json({
+    authenticated: admin || employee,
+    isAdmin: admin,
+    isEmployee: employee,
+  });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -95,5 +100,6 @@ export async function DELETE(request: NextRequest) {
     status: 200,
   });
   await logoutAdmin();
+  await logoutDealer();
   return NextResponse.json({ success: true });
 }

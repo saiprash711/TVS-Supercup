@@ -963,6 +963,18 @@ export const dealerTranslations: TranslationDictionary = {
     en: 'Seller Pts',
     ta: 'விற்பனையாளர் புள்ளிகள்',
   },
+  'leaderboard.employeeViewTitle': {
+    en: 'TVS Certified Internal Employee View',
+    ta: 'டிவிஎஸ் சான்றளிக்கப்பட்ட உள் ஊழியர் பார்வை',
+  },
+  'leaderboard.employeeUnmaskedBadge': {
+    en: '👁️ UNMASKED LEADERBOARD',
+    ta: '👁️ மறைக்கப்படாத லீடர்போர்டு',
+  },
+  'leaderboard.employeeUnmaskedSub': {
+    en: 'Full legal dealership names and live performance telemetry across Tamil Nadu.',
+    ta: 'தமிழ்நாடு முழுவதும் உள்ள முழு டீலர்ஷிப் பெயர்கள் மற்றும் நேரடி செயல்திறன் தரவு.',
+  },
   'leaderboard.myPositionEyebrow': {
     en: 'MY CHAMPIONSHIP STANDING',
     ta: 'எனது சாம்பியன்ஷிப் நிலை',
@@ -1205,6 +1217,14 @@ export const dealerTranslations: TranslationDictionary = {
     en: 'Verifying secure session...',
     ta: 'பாதுகாப்பான அமர்வைச் சரிபார்க்கிறது...',
   },
+  'login.leaderboardLoginPrompt': {
+    en: 'Please sign in with your TVS Dealer account to view the Super Cup Leaderboard.',
+    ta: 'சூப்பர்கப் முன்னிலை பட்டியலைக் காண உங்கள் டிவிஎஸ் டீலர் கணக்கில் உள்நுழையவும்.',
+  },
+  'login.authRequiredPrompt': {
+    en: 'Please sign in with your TVS Dealer account to continue.',
+    ta: 'தொடர உங்கள் டிவிஎஸ் டீலர் கணக்கில் உள்நுழையவும்.',
+  },
 
   // ── Standalone Terms Page Translations ──
   'terms.officialTermsBadge': {
@@ -1376,8 +1396,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: '5. இணக்கம், சர்ச்சைகள் & நிர்வாகம்',
   },
   'terms.sec5Desc': {
-    en: 'All telemetry records, bids, and listings are logged by TVS Certified auction systems. In case of discrepancies, the audit trail of the central auction engine shall be final and binding.',
-    ta: 'அனைத்து டெலிமெட்ரி பதிவுகள், ஏலங்கள் மற்றும் பட்டியல்கள் டிவிஎஸ் சான்றளிக்கப்பட்ட அமைப்புகளால் பதிவு செய்யப்படுகின்றன. முரண்பாடுகள் ஏற்பட்டால், மத்திய ஏல அமைப்பின் தணிக்கைப் பதிவே இறுதியானது மற்றும் கட்டுப்படுத்தக்கூடியது.',
+    en: 'All telemetry records, bids, and listings are logged by TVS Certified auction systems. In case of discrepancies, the audit trail of the central auction engine shall be final and binding. In case of any conflicts or disputes, the matter shall be subjected to the exclusive jurisdiction and authority of the TVS Certified Madhavaram Office, Chennai.',
+    ta: 'அனைத்து டெலிமெட்ரி பதிவுகள், ஏலங்கள் மற்றும் பட்டியல்கள் டிவிஎஸ் சான்றளிக்கப்பட்ட அமைப்புகளால் பதிவு செய்யப்படுகின்றன. முரண்பாடுகள் ஏற்பட்டால், மத்திய ஏல அமைப்பின் தணிக்கைப் பதிவே இறுதியானது. ஏதேனும் சர்ச்சைகள் அல்லது முரண்பாடுகள் ஏற்பட்டால், அது டிவிஎஸ் சான்றளிக்கப்பட்ட மாதவரம் அலுவலகம், சென்னை (TVS Certified Madhavaram Office, Chennai) அதிகார வரம்பிற்கு உட்பட்டது.',
   },
 };
 

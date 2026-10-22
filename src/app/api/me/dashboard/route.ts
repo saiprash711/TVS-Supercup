@@ -41,6 +41,12 @@ export async function GET() {
     // Get activity breakdown
     const breakdown = await getActivityBreakdown(dealer.dealerId, campaign.id);
 
+    const dealerEntity = await prisma.dealer.findUnique({
+      where: { id: dealer.dealerId },
+      select: { category: true },
+    });
+    const dealerCategory = dealerEntity?.category;
+
     // Get match day info
     const matchDays = await prisma.matchDay.findMany({
       where: { campaignId: campaign.id },
@@ -83,10 +89,12 @@ export async function GET() {
     }));
 
     return NextResponse.json({
+      isEmployee: Boolean(dealer.isEmployee),
       dealer: {
         displayName: dealer.displayName,
         maskedName: dealer.maskedName,
         city: dealer.city,
+        isEmployee: Boolean(dealer.isEmployee),
       },
       position,
       breakdown: {
@@ -106,8 +114,8 @@ export async function GET() {
         vehicleInspected: { count: breakdown.inspectedCount, points: breakdown.inspectedPoints, perUnit: breakdown.rules['VEHICLE_INSPECTED'] || 0 },
         watchlistAdd: { count: breakdown.watchlistCount, points: breakdown.watchlistPoints, perUnit: breakdown.rules['WATCHLIST_ADD'] || 0 },
         allMatchesBonus: { points: breakdown.allMatchesBonus, count: breakdown.allMatchesBonus > 0 ? 1 : 0 },
-        buyerPoints: (breakdown.buyParticipationPoints + breakdown.buyBidPoints + breakdown.buyConversionPoints + breakdown.allMatchesBonus),
-        sellerPoints: (breakdown.sellListingPoints + breakdown.sellConversionPoints + breakdown.sellCommissionPoints),
+        buyerPoints: (breakdown.buyBidPoints + breakdown.buyConversionPoints + ((dealerCategory === 'Used Car Dealer' || breakdown.buyBidCount > 0 || breakdown.buyConversionCount > 0 || dealerCategory !== 'OEM Dealer') ? (breakdown.buyParticipationPoints + breakdown.allMatchesBonus) : 0)),
+        sellerPoints: (breakdown.sellListingPoints + breakdown.sellConversionPoints + breakdown.sellCommissionPoints + ((dealerCategory === 'OEM Dealer' || breakdown.sellListingCount > 0 || breakdown.sellConversionCount > 0) ? (breakdown.buyParticipationPoints + breakdown.allMatchesBonus) : 0)),
         totalPoints: breakdown.totalPoints,
       },
       recentActivities: breakdown.activities.slice(0, 25).map(a => {

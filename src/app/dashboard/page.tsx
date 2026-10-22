@@ -23,7 +23,8 @@ import {
   ChevronRight,
   Trophy,
   Crown,
-  Scale
+  Scale,
+  ShieldCheck
 } from 'lucide-react';
 import ScrollVideoHero from '../components/ScrollVideoHero';
 import TickerMarquee from '../components/TickerMarquee';
@@ -36,7 +37,8 @@ import { DealerLanguageProvider, useDealerLanguage } from '../context/DealerLang
 import { maskDealerName } from '@/lib/services/masking';
 
 interface DashboardData {
-  dealer: { displayName?: string; maskedName: string; city: string };
+  isEmployee?: boolean;
+  dealer: { displayName?: string; maskedName: string; city: string; isEmployee?: boolean };
   position: {
     rank: number;
     points: number;
@@ -221,6 +223,7 @@ function DashboardContent() {
   }
 
   const { dealer, position, breakdown, matchTracker } = data;
+  const isEmployee = Boolean(data.isEmployee || dealer.isEmployee);
   const dealerName = dealer.displayName || dealer.maskedName;
   const isTestMode = data.campaign.isTestMode;
   const matchCount = matchTracker.length;
@@ -248,6 +251,25 @@ function DashboardContent() {
           </Link>
 
           <ul className="navbar-nav">
+            {isEmployee && (
+              <li>
+                <Link
+                  href="/admin"
+                  className="navbar-link"
+                  style={{
+                    color: '#10b981',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Open Admin Command Center"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Admin Mission Control</span>
+                </Link>
+              </li>
+            )}
             <li>
               <Link href="/leaderboard" className="navbar-link">
                 <Award className="w-4 h-4 text-amber-500" />
@@ -347,6 +369,65 @@ function DashboardContent() {
           },
         ]}
       />
+
+      {/* TVS Employee Executive Privileges Banner */}
+      {isEmployee && (
+        <aside
+          className="admin-leaderboard-banner"
+          aria-label="TVS Employee View Notice"
+          role="region"
+          style={{
+            maxWidth: '1280px',
+            margin: '16px auto 0 auto',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(14, 165, 233, 0.1) 100%)',
+            borderColor: 'rgba(16, 185, 129, 0.3)',
+          }}
+        >
+          <div className="admin-banner-left">
+            <div className="admin-shield-icon" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="admin-banner-heading" style={{ color: '#10b981' }}>
+                <span>TVS Certified Internal Employee View</span>
+                <span className="admin-status-badge" style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                  👁️ FULL ADMIN PRIVILEGES
+                </span>
+              </div>
+              <p className="admin-banner-sub">
+                You are logged in with TVS executive staff clearance. You have full access to the Admin Command Center, live auction telemetry, fleet directory, and unmasked leaderboard.
+              </p>
+            </div>
+          </div>
+
+          <div className="admin-banner-actions">
+            <Link
+              href="/admin"
+              className="btn btn-primary btn-sm"
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                borderColor: '#10b981',
+                color: '#fff',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <ShieldCheck className="w-4 h-4 text-white" />
+              <span>Open Admin Command Center</span>
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="btn btn-ghost btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Award className="w-4 h-4 text-amber-400" />
+              <span>Unmasked Leaderboard</span>
+            </Link>
+          </div>
+        </aside>
+      )}
 
       <main className="content-wrapper">
         {isTestMode && (

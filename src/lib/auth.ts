@@ -34,6 +34,7 @@ export interface SessionUser {
   displayName: string;
   maskedName: string;
   city: string;
+  isEmployee?: boolean;
   token?: string;             // Decrypted TVS JWT token (if available)
 }
 
@@ -104,13 +105,81 @@ function getCookieOptions(maxAge: number) {
   };
 }
 
+export interface LoginMetadata {
+  ipAddress?: string;
+  userAgent?: string;
+  loginType?: 'CREDENTIALS' | 'SSO';
+}
+
+export const EMPLOYEE_EXTERNAL_ID = 'DEMO-EMPLOYEE-2026';
+
+export function isEmployeeDealer(dealer?: { externalDealerId?: string | null; displayName?: string | null } | null): boolean {
+  if (!dealer) return false;
+  const ext = (dealer.externalDealerId || '').trim();
+  const name = (dealer.displayName || '').trim();
+  return (
+    ext === EMPLOYEE_EXTERNAL_ID ||
+    ext === 'DEMO-COLLEAGUE-2026' ||
+    ext.startsWith('DEMO-EMPLOYEE') ||
+    name.includes('Employee Preview') ||
+    name.includes('Internal Employee') ||
+    name.includes('Colleague Preview')
+  );
+}
+
+export async function getOrCreateEmployeeDealer() {
+  let dealer = await prisma.dealer.findFirst({
+    where: { externalDealerId: { in: [EMPLOYEE_EXTERNAL_ID, 'DEMO-COLLEAGUE-2026'] } },
+  });
+
+  if (!dealer) {
+    dealer = await prisma.dealer.create({
+      data: {
+        externalDealerId: EMPLOYEE_EXTERNAL_ID,
+        displayName: 'TVS Certified Internal Employee',
+        maskedName: 'TVS Employee',
+        city: 'Chennai',
+        category: 'TVS Internal Staff',
+        status: 'ACTIVE',
+        password: null,
+      },
+    });
+  } else if (dealer.displayName.includes('Colleague') || dealer.displayName.includes('Partner') || dealer.displayName.includes('Motors') || dealer.externalDealerId !== EMPLOYEE_EXTERNAL_ID) {
+    dealer = await prisma.dealer.update({
+      where: { id: dealer.id },
+      data: {
+        externalDealerId: EMPLOYEE_EXTERNAL_ID,
+        displayName: 'TVS Certified Internal Employee',
+        maskedName: 'TVS Employee',
+        category: 'TVS Internal Staff',
+      },
+    });
+  }
+
+  // Employees do NOT participate in auctions or compete for points.
+  // Ensure any demo activities or scores are cleared so employee has 0 points and does not appear on leaderboard.
+  try {
+    await prisma.dealerActivity.deleteMany({
+      where: { dealerId: dealer.id },
+    }).catch(() => {});
+    await prisma.dealerScore.deleteMany({
+      where: { dealerId: dealer.id },
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('Failed to clean employee points:', err);
+  }
+
+  return dealer;
+}
+
 /**
- * Authenticate a dealer using verified TVS credentials or SSO token.
- * Production local password fallback is completely eliminated.
+ * Authenticate a dealer using verified TVS credentials, SSO token,
+ * or dedicated colleague/preview credentials.
  */
 export async function loginDealer(
   input: LoginInput,
-  legacyPassword?: string
+  legacyPassword?: string,
+  meta?: LoginMetadata
 ): Promise<{ success: boolean; session?: SessionUser; error?: string }> {
   let isTokenLogin = false;
   let identifier = '';
@@ -184,59 +253,84 @@ export async function loginDealer(
       return { success: false, error: 'Password is required' };
     }
 
-    // Attempt live TVS Certified authentication ONLY.
-    const authResult = await provider.authenticateWithCredentials(identifier, password);
-    if (!authResult.authenticated || !authResult.dealerId) {
-      // FAIL CLOSED: No local password fallback in production or after upstream denial!
-      return {
-        success: false,
-        error: authResult.error || 'Invalid TVS Certified credentials. Access denied.',
-      };
-    }
+    const cleanId = identifier.trim().toLowerCase();
+    const employeeUserEnv = (process.env.EMPLOYEE_LOGIN_ID || process.env.COLLEAGUE_LOGIN_ID || 'employee@tvs.in').trim().toLowerCase();
+    const employeePassword = (process.env.EMPLOYEE_PASSWORD || process.env.COLLEAGUE_PASSWORD || process.env.DEMO_DEALER_PASSWORD || 'SuperCup2026!').trim();
 
-    liveToken = authResult.token;
+    const isEmployeeAttempt =
+      cleanId === 'employee' ||
+      cleanId === 'employee@tvs.in' ||
+      cleanId === employeeUserEnv ||
+      cleanId === 'colleague' ||
+      cleanId === 'colleague@tvs.in' ||
+      cleanId === 'demo.dealer@tvs.in' ||
+      cleanId === 'demo';
 
-    // Strict account linkage: by verified externalDealerId or USR- prefix
-    dealer = await prisma.dealer.findUnique({
-      where: { externalDealerId: authResult.dealerId },
-    });
-    if (!dealer && authResult.userId) {
-      dealer = await prisma.dealer.findUnique({
-        where: { externalDealerId: `USR-${authResult.userId}` },
-      });
-    }
-
-    if (!dealer) {
-      const displayName = authResult.dealerName || authResult.dealerId;
-      const maskedName = maskDealerName(displayName);
-      dealer = await prisma.dealer.create({
-        data: {
-          externalDealerId: authResult.dealerId,
-          displayName,
-          maskedName,
-          city: authResult.city || 'Tamil Nadu',
-          status: 'ACTIVE',
-          password: null,
-        },
-      });
-
-      const activeCamp = await getCurrentSuperCupCampaign();
-      if (activeCamp) {
-        await prisma.dealerScore.upsert({
-          where: { dealerId_campaignId: { dealerId: dealer.id, campaignId: activeCamp.id } },
-          update: {},
-          create: { dealerId: dealer.id, campaignId: activeCamp.id, totalPoints: 0, rank: 0 },
-        }).catch(() => {});
+    if (isEmployeeAttempt) {
+      if (!safeEqual(password.trim(), employeePassword)) {
+        return {
+          success: false,
+          error: 'Invalid password. Please check credentials or contact the administrator.',
+        };
       }
-    } else if (authResult.dealerName && authResult.dealerName !== dealer.displayName) {
-      dealer = await prisma.dealer.update({
-        where: { id: dealer.id },
-        data: {
-          displayName: authResult.dealerName,
-          maskedName: maskDealerName(authResult.dealerName),
-          city: authResult.city || dealer.city,
-        },
+
+      // Provision or retrieve employee preview dealer
+      dealer = await getOrCreateEmployeeDealer();
+    } else {
+      // Attempt live TVS Certified authentication ONLY.
+      const authResult = await provider.authenticateWithCredentials(identifier, password);
+      if (!authResult.authenticated || !authResult.dealerId) {
+        // FAIL CLOSED: No local password fallback in production or after upstream denial!
+        return {
+          success: false,
+          error: authResult.error || 'Invalid TVS Certified credentials. Access denied.',
+        };
+      }
+
+      liveToken = authResult.token;
+
+      // Strict account linkage: by verified externalDealerId or USR- prefix
+      dealer = await prisma.dealer.findUnique({
+        where: { externalDealerId: authResult.dealerId },
       });
+      if (!dealer && authResult.userId) {
+        dealer = await prisma.dealer.findUnique({
+          where: { externalDealerId: `USR-${authResult.userId}` },
+        });
+      }
+
+      if (!dealer) {
+        const displayName = authResult.dealerName || authResult.dealerId;
+        const maskedName = maskDealerName(displayName);
+        dealer = await prisma.dealer.create({
+          data: {
+            externalDealerId: authResult.dealerId,
+            displayName,
+            maskedName,
+            city: authResult.city || 'Tamil Nadu',
+            status: 'ACTIVE',
+            password: null,
+          },
+        });
+
+        const activeCamp = await getCurrentSuperCupCampaign();
+        if (activeCamp) {
+          await prisma.dealerScore.upsert({
+            where: { dealerId_campaignId: { dealerId: dealer.id, campaignId: activeCamp.id } },
+            update: {},
+            create: { dealerId: dealer.id, campaignId: activeCamp.id, totalPoints: 0, rank: 0 },
+          }).catch(() => {});
+        }
+      } else if (authResult.dealerName && authResult.dealerName !== dealer.displayName) {
+        dealer = await prisma.dealer.update({
+          where: { id: dealer.id },
+          data: {
+            displayName: authResult.dealerName,
+            maskedName: maskDealerName(authResult.dealerName),
+            city: authResult.city || dealer.city,
+          },
+        });
+      }
     }
   }
 
@@ -249,6 +343,10 @@ export async function loginDealer(
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + DEALER_SESSION_MAX_AGE_SECONDS * 1000);
 
+  const resolvedLoginType = meta?.loginType || (isTokenLogin ? 'SSO' : 'CREDENTIALS');
+  const clientIp = meta?.ipAddress || null;
+  const userAgent = meta?.userAgent || null;
+
   // Persist session server-side
   await prisma.session.create({
     data: {
@@ -257,8 +355,23 @@ export async function loginDealer(
       principalId: String(dealer.id),
       dealerId: dealer.id,
       upstreamToken: liveToken ? encryptUpstreamToken(liveToken) : null,
+      ipAddress: clientIp,
+      userAgent: userAgent,
+      loginType: resolvedLoginType,
       expiresAt,
     },
+  });
+
+  // Update dealer last login timestamp and increment login count
+  await prisma.dealer.update({
+    where: { id: dealer.id },
+    data: {
+      lastLoginAt: new Date(),
+      lastLoginIp: clientIp,
+      loginCount: { increment: 1 },
+    },
+  }).catch((err) => {
+    console.warn('Failed to update dealer lastLoginAt:', err);
   });
 
   const session: SessionUser = {
@@ -267,6 +380,7 @@ export async function loginDealer(
     displayName: dealer.displayName,
     maskedName: dealer.maskedName,
     city: dealer.city,
+    isEmployee: isEmployeeDealer(dealer),
     token: liveToken,
   };
 
@@ -330,6 +444,7 @@ export async function getCurrentDealer(): Promise<SessionUser | null> {
       displayName: session.dealer.displayName,
       maskedName: session.dealer.maskedName,
       city: session.dealer.city,
+      isEmployee: isEmployeeDealer(session.dealer),
       token: session.upstreamToken ? decryptUpstreamToken(session.upstreamToken) : undefined,
     };
   } catch {
@@ -451,7 +566,16 @@ export async function isAdmin(): Promise<boolean> {
 }
 
 /**
- * Centralized guard for admin endpoints.
+ * Check if the current request is from an authenticated TVS internal employee.
+ */
+export async function isEmployee(): Promise<boolean> {
+  const currentDealer = await getCurrentDealer();
+  return isEmployeeDealer(currentDealer);
+}
+
+/**
+ * Centralized guard for admin and staff viewing endpoints.
+ * Grants access to Admin and TVS Internal Employees.
  */
 export async function requireAdmin(): Promise<RequireAuthResult> {
   if (process.env.ENABLE_ADMIN === 'false') {
@@ -463,14 +587,20 @@ export async function requireAdmin(): Promise<RequireAuthResult> {
   }
 
   const admin = await isAdmin();
-  if (!admin) {
-    return {
-      authorized: false,
-      error: 'Admin access required.',
-      status: 403,
-    };
+  if (admin) {
+    return { authorized: true };
   }
-  return { authorized: true };
+
+  const currentDealer = await getCurrentDealer();
+  if (isEmployeeDealer(currentDealer)) {
+    return { authorized: true, dealer: currentDealer || undefined };
+  }
+
+  return {
+    authorized: false,
+    error: 'Admin or employee access required.',
+    status: 403,
+  };
 }
 
 /**

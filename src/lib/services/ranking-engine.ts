@@ -375,6 +375,21 @@ export async function getSegmentedLeaderboard(
     activities: Array<{ metadata?: string | null }>;
   }>();
 
+  // Pre-determine league participation for attendance point attribution
+  const dealerRoles = new Map<number, { isBuyer: boolean; isSeller: boolean }>();
+  for (const a of activities) {
+    if (!dealerRoles.has(a.dealerId)) {
+      const d = dealerMap.get(a.dealerId);
+      dealerRoles.set(a.dealerId, {
+        isBuyer: d?.category === 'Used Car Dealer',
+        isSeller: d?.category === 'OEM Dealer',
+      });
+    }
+    const r = dealerRoles.get(a.dealerId)!;
+    if (['BUY', 'BID_PLACED'].includes(a.activityType)) r.isBuyer = true;
+    if (['SELL', 'SELL_LISTING', 'SELL_COMMISSION'].includes(a.activityType)) r.isSeller = true;
+  }
+
   for (const a of activities) {
     if (!aggMap.has(a.dealerId)) {
       aggMap.set(a.dealerId, {
@@ -399,7 +414,11 @@ export async function getSegmentedLeaderboard(
       item.buyerPoints += a.points;
       item.bidsCount++;
     } else if (a.activityType === 'MATCH_PARTICIPATION' || a.activityType === 'ALL_MATCHES_BONUS') {
-      item.buyerPoints += a.points;
+      // Award attendance and full-season bonus to both Buyer and Seller leagues appropriately
+      const r = dealerRoles.get(a.dealerId) || { isBuyer: true, isSeller: false };
+      if (r.isBuyer) item.buyerPoints += a.points;
+      if (r.isSeller) item.sellerPoints += a.points;
+      if (!r.isBuyer && !r.isSeller) item.buyerPoints += a.points;
     } else if (a.activityType === 'SELL') {
       item.sellerPoints += a.points;
       item.salesCount++;

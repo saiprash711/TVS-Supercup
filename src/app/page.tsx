@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Trophy,
@@ -73,6 +73,12 @@ function BackgroundLayers({ mousePos }: { mousePos: { x: number; y: number } }) 
 
 function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
+  const targetRedirect = (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//'))
+    ? redirectParam
+    : '/dashboard';
+
   const { t } = useDealerLanguage();
   const [dealerId, setDealerId] = useState('');
   const [password, setPassword] = useState('');
@@ -106,12 +112,16 @@ function LoginContent() {
       .then(res => res.json())
       .then(data => {
         if (data.authenticated) {
-          router.push('/dashboard');
+          const isEmployeeUser = Boolean(data.isEmployee || data.dealer?.isEmployee);
+          const safeDest = (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//'))
+            ? redirectParam
+            : (isEmployeeUser ? '/admin' : '/dashboard');
+          router.push(safeDest);
         }
       })
       .catch(() => { })
       .finally(() => setCheckingAuth(false));
-  }, [router]);
+  }, [router, redirectParam, targetRedirect]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +158,13 @@ function LoginContent() {
         try {
           sessionStorage.removeItem('tvs_supercup_rules_seen_session');
         } catch { }
-        router.push('/dashboard');
+
+        const isEmployeeUser = Boolean(data.isEmployee || data.dealer?.isEmployee);
+        const safeDest = (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//'))
+          ? redirectParam
+          : (isEmployeeUser ? '/admin' : '/dashboard');
+
+        router.push(safeDest);
       } else {
         setErrorMessage(data.error || t('login.errAuthFail', 'Authentication failed. Please verify your credentials.'));
       }
@@ -256,6 +272,33 @@ function LoginContent() {
                   {t('login.cardSub', 'Enter your credentials to access your live dashboard and competition telemetry.')}
                 </p>
               </div>
+
+              {/* Informational Redirect Banner */}
+              {redirectParam && (
+                <div
+                  className="login-redirect-notice"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    marginBottom: '16px',
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.28)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.85rem',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <Trophy size={18} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                  <span>
+                    {redirectParam.startsWith('/leaderboard')
+                      ? t('login.leaderboardLoginPrompt', 'Please sign in with your TVS Dealer account to view the Super Cup Leaderboard.')
+                      : t('login.authRequiredPrompt', 'Please sign in with your TVS Dealer account to continue.')}
+                  </span>
+                </div>
+              )}
 
               {/* Error Banner */}
               {errorMessage && (
@@ -474,7 +517,13 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <DealerLanguageProvider>
-      <LoginContent />
+      <Suspense fallback={
+        <div className="login-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="loading-spinner" />
+        </div>
+      }>
+        <LoginContent />
+      </Suspense>
     </DealerLanguageProvider>
   );
 }

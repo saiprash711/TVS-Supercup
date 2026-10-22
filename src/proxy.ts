@@ -52,7 +52,7 @@ export function proxy(request: NextRequest) {
   // unless explicitly allowed in environment variables.
   const isAdminGloballyDisabled = process.env.ENABLE_ADMIN === 'false';
   const isExplicitAdminAllowed = process.env.ENABLE_ADMIN === 'true';
-  const allowAdmin = !isAdminGloballyDisabled && (isLocalhost || isExplicitAdminAllowed || isAdminSubdomain);
+  const allowAdmin = !isAdminGloballyDisabled && (isLocalhost || isExplicitAdminAllowed || isAdminSubdomain || hasDealerSession);
 
   if (pathname.startsWith('/admin')) {
     if (!allowAdmin) {
@@ -63,14 +63,19 @@ export function proxy(request: NextRequest) {
   }
 
   // 4. Dealer Domain Routing (e.g., https://supercup.tvs.in or https://tvs-supercup.vercel.app)
-  // If dealer already has an active session and visits login page (/), send to /dashboard
+  // If dealer already has an active session and visits login page (/), send to /dashboard or target redirect
   if (pathname === '/' && hasDealerSession && !isAdminSubdomain) {
+    const redirectParam = request.nextUrl.searchParams.get('redirect');
+    const safeTarget = (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//'))
+      ? redirectParam
+      : '/dashboard';
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = safeTarget;
+    url.search = '';
     return NextResponse.redirect(url);
   }
 
-  // If unauthenticated user attempts to visit /dashboard, /dealer, or /leaderboard, redirect to /
+  // If unauthenticated user attempts to visit /dashboard, /dealer, or /leaderboard, redirect to / with target preserved
   if (
     (pathname.startsWith('/dashboard') || pathname.startsWith('/dealer') || pathname.startsWith('/leaderboard')) &&
     !hasDealerSession &&
@@ -78,6 +83,8 @@ export function proxy(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
+    const targetPath = pathname + request.nextUrl.search;
+    url.searchParams.set('redirect', targetPath);
     return NextResponse.redirect(url);
   }
 
@@ -90,7 +97,8 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/admin') &&
     !isAdminSubdomain &&
     !isLocalhost &&
-    !isExplicitAdminAllowed
+    !isExplicitAdminAllowed &&
+    !hasDealerSession
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/';

@@ -23,6 +23,9 @@ model Dealer {
   phone            String?
   password         String?
   status           String           @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  lastLoginAt      DateTime?        @map("last_login_at")
+  lastLoginIp      String?          @map("last_login_ip")
+  loginCount       Int              @default(0) @map("login_count")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -31,6 +34,7 @@ model Dealer {
   tiers      DealerTier[]
   sessions   Session[]
 
+  @@index([lastLoginAt])
   @@map("dealers")
 }
 
@@ -173,6 +177,9 @@ model Session {
   principalId   String    @map("principal_id")
   dealerId      Int?      @map("dealer_id")
   upstreamToken String?   @map("upstream_token")
+  ipAddress     String?   @map("ip_address")
+  userAgent     String?   @map("user_agent")
+  loginType     String?   @default("CREDENTIALS") @map("login_type") // CREDENTIALS, SSO
   createdAt     DateTime  @default(now()) @map("created_at")
   expiresAt     DateTime  @map("expires_at")
   revokedAt     DateTime? @map("revoked_at")
@@ -182,6 +189,8 @@ model Session {
   @@index([tokenHash])
   @@index([principalType, principalId])
   @@index([expiresAt])
+  @@index([createdAt])
+  @@index([dealerId])
   @@map("sessions")
 }
 

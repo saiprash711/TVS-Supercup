@@ -16,7 +16,7 @@
 import { NextResponse } from 'next/server';
 import { getSegmentedLeaderboard, getPositionContext } from '@/lib/services/ranking-engine';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
-import { isAdmin, getCurrentDealer } from '@/lib/auth';
+import { isAdmin, getCurrentDealer, isEmployeeDealer } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
@@ -35,6 +35,7 @@ export async function GET(request: Request) {
 
     const admin = await isAdmin();
     const currentDealer = await getCurrentDealer();
+    const isEmployee = isEmployeeDealer(currentDealer);
 
     // Leaderboard data is restricted to authenticated users only
     if (!admin && !currentDealer) {
@@ -44,15 +45,16 @@ export async function GET(request: Request) {
       );
     }
 
-    // In admin login: full unmasked dealer names are visible!
-    // For dealer specific login: competitor dealer names are masked.
-    const shouldUnmask = admin && searchParams.get('unmask') !== 'false';
+    // In admin and internal employee login: full unmasked dealer names are visible!
+    // For competitor dealer specific login: competitor dealer names are masked.
+    const isPrivileged = admin || isEmployee;
+    const shouldUnmask = isPrivileged && searchParams.get('unmask') !== 'false';
 
     const segmented = await getSegmentedLeaderboard(
       campaign.id,
       undefined,
       shouldUnmask,
-      currentDealer?.dealerId
+      isEmployee ? undefined : currentDealer?.dealerId
     );
 
     let activeLeaderboard = segmented.buyers;
@@ -62,8 +64,8 @@ export async function GET(request: Request) {
       activeLeaderboard = segmented.buyers;
     }
 
-    // Get authenticated dealer's position context
-    const dealerPosition = currentDealer
+    // Get authenticated dealer's position context (only for real dealers, not employees)
+    const dealerPosition = (currentDealer && !isEmployee)
       ? await getPositionContext(currentDealer.dealerId, campaign.id)
       : null;
 
@@ -81,15 +83,17 @@ export async function GET(request: Request) {
       overall: segmented.overall,
       counts: segmented.counts,
       isAdmin: admin,
+      isEmployee: Boolean(isEmployee),
       authenticated: Boolean(currentDealer || admin),
       unmasked: shouldUnmask,
-      currentDealerId: currentDealer?.dealerId,
+      currentDealerId: isEmployee ? null : currentDealer?.dealerId,
       currentDealer: currentDealer ? {
         dealerId: currentDealer.dealerId,
         displayName: currentDealer.displayName,
         maskedName: currentDealer.maskedName,
         city: currentDealer.city,
         externalDealerId: currentDealer.externalDealerId,
+        isEmployee: Boolean(isEmployee),
       } : null,
       dealerPosition,
     });

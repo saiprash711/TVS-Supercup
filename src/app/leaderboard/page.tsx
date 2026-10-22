@@ -83,6 +83,7 @@ function LeaderboardContent() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
+  const [isEmployee, setIsEmployee] = useState(false);
   const [showMaskedPreview, setShowMaskedPreview] = useState(false);
 
   // Authenticated Dealer Profile & Position Telemetry
@@ -126,6 +127,7 @@ function LeaderboardContent() {
         }
         setIsAuthenticated(Boolean(data.authenticated || data.currentDealerId || data.currentDealer));
         setIsAdminUser(Boolean(data.isAdmin));
+        setIsEmployee(Boolean(data.isEmployee || data.currentDealer?.isEmployee));
         if (data.currentDealer) {
           setCurrentDealerInfo(data.currentDealer);
         }
@@ -162,7 +164,7 @@ function LeaderboardContent() {
   }, [activeTab, buyersLeaderboard, sellersLeaderboard, overallLeaderboard]);
 
   const getDisplayName = useCallback((entry: LeaderboardEntry) => {
-    if (isAdminUser && !showMaskedPreview) {
+    if ((isAdminUser || isEmployee) && !showMaskedPreview) {
       return entry.realName || entry.dealerName || entry.dealer;
     }
     if (entry.isCurrentDealer) {
@@ -170,7 +172,7 @@ function LeaderboardContent() {
     }
     // Strict privacy: Competitor dealers are strictly masked
     return maskDealerName(entry.maskedName || entry.dealerName || entry.dealer || 'Dealer');
-  }, [isAdminUser, showMaskedPreview]);
+  }, [isAdminUser, isEmployee, showMaskedPreview]);
 
   // Client-side search filtering
   const filteredLeaderboard = useMemo(() => {
@@ -187,7 +189,7 @@ function LeaderboardContent() {
       const category = (entry.category || '').toLowerCase();
 
       // STRICT PRIVACY: Competitor private information is NEVER searchable by participating dealers
-      const canSearchPrivateDetails = isAdminUser && !showMaskedPreview;
+      const canSearchPrivateDetails = (isAdminUser || isEmployee) && !showMaskedPreview;
       const isSelf = Boolean(entry.isCurrentDealer);
       const rawDealer = (canSearchPrivateDetails || isSelf) ? (entry.realName || entry.dealer || '').toLowerCase() : '';
       const custId = (canSearchPrivateDetails || isSelf) ? (entry.customerId || '').toLowerCase() : '';
@@ -202,7 +204,7 @@ function LeaderboardContent() {
         category.includes(q)
       );
     });
-  }, [activeLeaderboard, searchQuery, getDisplayName, isAdminUser, showMaskedPreview]);
+  }, [activeLeaderboard, searchQuery, getDisplayName, isAdminUser, isEmployee, showMaskedPreview]);
 
   // Pagination calculations
   const effectivePageSize = pageSize === 0 ? filteredLeaderboard.length : pageSize;
@@ -244,6 +246,9 @@ function LeaderboardContent() {
 
   // Resolve current authenticated dealer's entry in active league
   const currentDealerEntry = useMemo(() => {
+    // TVS internal employees are staff viewers, not competing dealers
+    if (isEmployee) return null;
+
     // 1. In-list entry flagged as current dealer
     const inList = activeLeaderboard.find(
       (e) => e.isCurrentDealer || (currentDealerInfo && e.dealerId === currentDealerInfo.dealerId)
@@ -266,7 +271,7 @@ function LeaderboardContent() {
     }
 
     return null;
-  }, [activeLeaderboard, currentDealerInfo, dealerPosition, activeTab]);
+  }, [activeLeaderboard, currentDealerInfo, dealerPosition, activeTab, isEmployee]);
 
   // Points target calculation for securing 1st place
   const top1Dealer = activeLeaderboard.length > 0 ? activeLeaderboard[0] : null;
@@ -402,7 +407,73 @@ function LeaderboardContent() {
           </aside>
         )}
 
-        {/* Championship Executive Hero Bezel */}
+        {/* TVS Employee Internal View Banner */}
+        {isEmployee && !isAdminUser && (
+          <aside
+            className="admin-leaderboard-banner"
+            aria-label="TVS Employee View Notice"
+            role="region"
+            style={{
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%)',
+              borderColor: 'rgba(16, 185, 129, 0.25)',
+            }}
+          >
+            <div className="admin-banner-left">
+              <div className="admin-shield-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <div className="admin-banner-heading">
+                  <span>{t('leaderboard.employeeViewTitle', 'TVS Certified Internal Employee View')}</span>
+                  <span className="admin-status-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                    {showMaskedPreview ? t('leaderboard.adminMaskedBadge', '🔒 MASKED PREVIEW') : t('leaderboard.employeeUnmaskedBadge', '👁️ UNMASKED LEADERBOARD')}
+                  </span>
+                </div>
+                <p className="admin-banner-sub">
+                  {showMaskedPreview
+                    ? t('leaderboard.adminMaskedSub', 'Viewing leaderboard as participating dealers see it (competitor names masked).')
+                    : t('leaderboard.employeeUnmaskedSub', 'Full legal dealership names and live performance telemetry across Tamil Nadu.')}
+                </p>
+              </div>
+            </div>
+
+            <div className="admin-banner-actions">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm admin-preview-toggle-btn"
+                onClick={toggleMaskedPreview}
+              >
+                {showMaskedPreview ? (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{t('leaderboard.switchUnmasked', 'Switch to Unmasked View')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{t('leaderboard.previewMasked', 'Preview Dealer Masked View')}</span>
+                  </>
+                )}
+              </button>
+              <Link
+                href="/admin"
+                className="btn btn-primary btn-sm"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  borderColor: '#10b981',
+                  color: '#fff',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <ShieldCheck className="w-4 h-4 text-white" />
+                <span>{t('leaderboard.missionControlBtn', 'Mission Control')}</span>
+              </Link>
+            </div>
+          </aside>
+        )}
         <section className="leaderboard-hero-wrapper" aria-label="Dealer Super Cup Championship Header">
           <div className="leaderboard-hero-ambient" aria-hidden="true" />
           <div className="leaderboard-hero-card">

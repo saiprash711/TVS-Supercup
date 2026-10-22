@@ -528,8 +528,15 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     return this.userMappingPromise;
   }
 
-  resolveDealerKeyId(rawId: string | number): string {
+  resolveDealerKeyId(rawId: string | number, bidderName?: string): string {
+    if (bidderName && typeof bidderName === 'string' && bidderName.trim() !== 'null') {
+      const cust = this.findCustomerByCompanyName(bidderName.trim());
+      if (cust) return String(cust.id);
+    }
     const s = String(rawId).trim();
+    if (this.customerMap.has(s)) {
+      return s;
+    }
     return this.userToKeyMap.get(s) || s;
   }
 
@@ -839,23 +846,56 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
     }
 
     // 1. Process Listings (SELL_LISTING), Winners (BUY - Conversion), and Sellers (SELL - Conversion)
+    const nullSellerMap: Record<string, { id: number; name: string }> = {
+      'TN69AE3286': { id: 448, name: 'POPULAR VEHICLES AND SERVICES LIMITED' },
+      'TN02BQ5717': { id: 448, name: 'POPULAR VEHICLES AND SERVICES LIMITED' },
+      'TN85P7391':  { id: 448, name: 'POPULAR VEHICLES AND SERVICES LIMITED' },
+      'TN22CJ3173': { id: 459, name: 'Shree Thiya cars' },
+      'TN74K8683':  { id: 458, name: 'PRODUCTIVITY ELEMENTS PRIVATE LIMITED' },
+      'TN09BF7322': { id: 451, name: 'VISHNU CARS PRIVATE LIMITED' },
+    };
+    const sellerAliases: Record<string, string> = {
+      'Harsha': 'Harsha Toyota',
+      'NIRMAL': 'NIRMAL CARS',
+      'Epic Toyota': 'EPIC Toyota',
+    };
+
     if (Array.isArray(vehicles)) {
       for (const veh of vehicles) {
-        // Resolve Seller Dealership from customer_name or TVS customer mapping
-        const rawSellerName = (veh.customer_name || '').trim();
+        // Resolve Seller Dealership from customer_name or TVS customer mapping with fallback
+        let rawSellerName = (veh.customer_name || '').trim();
+        const reg = (veh.registration_number || '').trim();
+        if ((!rawSellerName || rawSellerName === 'null') && nullSellerMap[reg]) {
+          rawSellerName = nullSellerMap[reg].name;
+        }
+        if (sellerAliases[rawSellerName]) {
+          rawSellerName = sellerAliases[rawSellerName];
+        }
+
         const sellerCustomer = rawSellerName ? this.findCustomerByCompanyName(rawSellerName) : null;
-        const sellerDealerId = sellerCustomer?.code || (sellerCustomer?.id ? String(sellerCustomer.id) : (rawSellerName ? `SELLER-${rawSellerName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : ''));
+        let sellerDealerId = sellerCustomer?.code || (sellerCustomer?.id ? String(sellerCustomer.id) : '');
+        if (!sellerDealerId && nullSellerMap[reg]) {
+          sellerDealerId = String(nullSellerMap[reg].id);
+        }
+        if (!sellerDealerId && rawSellerName) {
+          sellerDealerId = `SELLER-${rawSellerName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}`;
+        }
+
         const sellerCity = sellerCustomer?.city || veh.location_name || 'Tamil Nadu';
         const sellerPhone = sellerCustomer?.phone || '';
 
         // 1A. SELLING: LISTING (5 points) for every vehicle listed in the auction
         if (rawSellerName && sellerDealerId) {
+          const listingTime = veh.auction_scheduled_time
+            ? parseTVSVehicleTimestamp(veh.auction_scheduled_time)
+            : (veh.created ? parseTVSVehicleTimestamp(veh.created) : (veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date()));
+
           activities.push({
-            transactionId: `LISTING-${auctionId}-${veh.id || veh.vehicle_id}`,
+            transactionId: `LISTING-${auctionId}-${veh.id || veh.vehicle_id || reg}`,
             dealerId: sellerDealerId,
             auctionId,
             activityType: 'SELL_LISTING',
-            vehicleId: String(veh.vehicle_id || veh.id),
+            vehicleId: String(veh.vehicle_id || veh.id || reg),
             amount: Number(veh.start_bid_value || 0),
             metadata: {
               vehicleId: veh.vehicle_id || veh.id,
@@ -879,22 +919,23 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
               lotNo: veh.sequence || veh.seq_num,
               location: veh.location_name,
             },
-            timestamp: veh.created ? parseTVSVehicleTimestamp(veh.created) : (veh.modified ? parseTVSVehicleTimestamp(veh.modified) : new Date()),
+            timestamp: listingTime,
           });
         }
 
         // 1B. CONVERSIONS: Won Vehicles (BUY for buyer: 10 pts, SELL for seller: 10 pts)
         if (veh.winner_id != null && (veh.winner_bid_value != null || veh.start_bid_value != null)) {
-          const buyerDealerId = this.resolveDealerKeyId(veh.winner_id);
+          // veh.winner_id is ALREADY the TVS customer ID (key_id), NOT a user id
+          const buyerDealerId = String(veh.winner_id);
           const winAmount = Number(veh.winner_bid_value || veh.start_bid_value || 0);
 
           // BUY Activity for winning bidder (BUYING: CONVERSION = 10 pts)
           activities.push({
-            transactionId: `BUY-${auctionId}-${veh.id || veh.vehicle_id}`,
+            transactionId: `BUY-${auctionId}-${veh.id || veh.vehicle_id || reg}`,
             dealerId: buyerDealerId,
             auctionId,
             activityType: 'BUY',
-            vehicleId: String(veh.vehicle_id || veh.id),
+            vehicleId: String(veh.vehicle_id || veh.id || reg),
             amount: winAmount,
             metadata: {
               vehicleId: veh.vehicle_id || veh.id,
@@ -1087,8 +1128,8 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
                   for (const bItem of bList) {
                     const bid = bItem?.bidderDetails || bItem;
                     const rawBidderId = bid.bidder_id || bid.buyer_id || bid.customer_id;
-                    if (!rawBidderId) continue;
-                    const dealerId = this.resolveDealerKeyId(rawBidderId);
+                    if (!rawBidderId && !bid.bidder_name) continue;
+                    const dealerId = this.resolveDealerKeyId(rawBidderId, bid.bidder_name);
                     const bidAmount = Number(bid.bid_value || bid.bid_amount || 0);
                     const bidId = bid.id || `${bidAmount}-${bid.bid_time || ''}`;
                     const bidTime = bid.bid_time ? new Date(bid.bid_time) : (bid.created_at ? new Date(bid.created_at) : new Date());

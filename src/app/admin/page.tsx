@@ -55,11 +55,19 @@ import {
   Tag,
   Trophy,
   Phone,
-  Mail
+  Mail,
+  LogIn,
+  Laptop,
+  Smartphone,
+  Globe,
+  UserCheck,
+  UserX,
+  FileSpreadsheet
 } from 'lucide-react';
 import TickerMarquee from '../components/TickerMarquee';
 import SwitchMode from '../components/watermelon/switch-mode';
 import HistoricalAuctionsTab from './components/HistoricalAuctionsTab';
+import { isTamilNaduDealer, getDealerBranch } from '@/lib/services/branch-utils';
 
 interface AdminStats {
   totalDealers: number;
@@ -74,6 +82,55 @@ interface AdminStats {
   totalInspections?: number;
   totalWatchlist?: number;
   totalActivities?: number;
+  dealersLoggedInToday?: number;
+  dealersActiveWeek?: number;
+  activeSessions?: number;
+  portalAdoptionRate?: number;
+  neverLoggedInCount?: number;
+}
+
+interface DealerLoginItem {
+  id: string;
+  sessionId?: string;
+  dealerId: number;
+  externalDealerId: string;
+  displayName: string;
+  dealerName?: string;
+  dealerTvsCode?: string;
+  city: string;
+  dealerCity?: string;
+  category: string;
+  dealerCategory?: string;
+  phone?: string;
+  status: string;
+  totalDealerLogins: number;
+  loginAt: string;
+  loginTime?: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+  isActive: boolean;
+  isSessionActive?: boolean;
+  ipAddress: string;
+  userAgent?: string;
+  device: string;
+  loginType: string;
+}
+
+interface DealerLoginSummary {
+  totalMatchingLogins?: number;
+  totalSessions?: number;
+  totalDealers: number;
+  dealersWithLoginCount: number;
+  totalDealersWithLogin?: number;
+  uniqueDealersToday: number;
+  activeToday?: number;
+  uniqueDealersWeek: number;
+  activeWeek?: number;
+  activeSessionsCount: number;
+  currentlyActiveSessions?: number;
+  neverLoggedInCount: number;
+  adoptionRate: number;
+  recentLogins?: DealerLoginItem[];
 }
 
 interface RecentActivityItem {
@@ -121,10 +178,14 @@ interface FleetDealer {
   displayName: string;
   maskedName?: string;
   city: string;
+  branch?: string;
   category?: string;
   status: string;
   points: number;
   rank: number;
+  lastLoginAt?: string | null;
+  lastLoginIp?: string | null;
+  loginCount?: number;
 }
 
 interface MatchDay {
@@ -167,6 +228,18 @@ interface DealerDetail {
   email?: string;
   contactName?: string;
   status: string;
+  lastLoginAt?: string | null;
+  lastLoginIp?: string | null;
+  loginCount?: number;
+  recentSessions?: Array<{
+    id: string;
+    loginAt: string;
+    expiresAt: string;
+    isActive: boolean;
+    ipAddress: string;
+    device: string;
+    loginType: string;
+  }>;
   scores: Array<{
     totalPoints: number;
     rank: number;
@@ -262,10 +335,11 @@ interface VehicleQueueStats {
   percentComplete: number;
 }
 
-type Tab = 'overview' | 'leaderboard' | 'liveMonitor' | 'dealers' | 'rules' | 'matches' | 'audit' | 'historicalAuctions';
+type Tab = 'overview' | 'leaderboard' | 'liveMonitor' | 'dealers' | 'dealerLogins' | 'rules' | 'matches' | 'audit' | 'historicalAuctions';
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
+  const [isEmployeeUser, setIsEmployeeUser] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -289,15 +363,33 @@ export default function AdminPage() {
   const [fleetDealers, setFleetDealers] = useState<FleetDealer[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetCategoryFilter, setFleetCategoryFilter] = useState<string>('ALL');
+  const [fleetBranchFilter, setFleetBranchFilter] = useState<string>('ALL');
+  const [fleetBranches, setFleetBranches] = useState<{ name: string; count: number }[]>([]);
+  const [fleetActivityFilter, setFleetActivityFilter] = useState<'ALL' | 'ACTIVE_TODAY' | 'LOGGED_IN' | 'NEVER_LOGGED_IN'>('ALL');
+  const [fleetSortBy, setFleetSortBy] = useState<'rank' | 'name' | 'points' | 'lastLogin'>('rank');
   const [fleetSearchQuery, setFleetSearchQuery] = useState('');
   const [fleetPage, setFleetPage] = useState(1);
   const [fleetPageSize, setFleetPageSize] = useState(50);
-  const [fleetCategoryCounts, setFleetCategoryCounts] = useState<{ total: number; oem: number; usedCar: number; corporate: number }>({
+  const [fleetCategoryCounts, setFleetCategoryCounts] = useState<{ total: number; oem: number; usedCar: number; corporate: number; loggedIn?: number; neverLoggedIn?: number; activeToday?: number }>({
     total: 0,
     oem: 0,
     usedCar: 0,
     corporate: 0,
   });
+
+  // Dealer Login & Portal Adoption State
+  const [recentDealerLogins, setRecentDealerLogins] = useState<DealerLoginItem[]>([]);
+  const [dealerLoginSummary, setDealerLoginSummary] = useState<DealerLoginSummary | null>(null);
+  const [loginLogList, setLoginLogList] = useState<DealerLoginItem[]>([]);
+  const [loginLogLoading, setLoginLogLoading] = useState(false);
+  const [loginLogSearch, setLoginLogSearch] = useState('');
+  const [loginLogCategory, setLoginLogCategory] = useState<string>('ALL');
+  const [loginLogTimeframe, setLoginLogTimeframe] = useState<string>('ALL');
+  const [loginLogSessionStatus, setLoginLogSessionStatus] = useState<string>('ALL');
+  const [loginLogPage, setLoginLogPage] = useState(1);
+  const [loginLogPageSize, setLoginLogPageSize] = useState(50);
+  const [loginLogTotalPages, setLoginLogTotalPages] = useState(1);
+  const [loginLogAutoRefresh, setLoginLogAutoRefresh] = useState(true);
   const [matchDays, setMatchDays] = useState<MatchDay[]>([]);
   const [historicalMatchesData, setHistoricalMatchesData] = useState<MatchDay[]>([]);
   const [rules, setRules] = useState<PointRuleItem[]>([]);
@@ -478,6 +570,22 @@ export default function AdminPage() {
     });
   };
 
+  const formatTimeAgo = (dateInput: Date | string | number | null | undefined): string => {
+    if (!dateInput) return 'Never';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return 'Never';
+    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return formatDateDDMMYYYY(d);
+  };
+
   // Helper: compute schedule label strictly in DD-MM-YYYY format
   const getAuctionScheduleLabel = (targetAuctionId: string = liveAuctionId) => {
     const match = matchDays.find(m => String(m.auctionId) === String(targetAuctionId.trim())) ||
@@ -532,8 +640,9 @@ export default function AdminPage() {
         cache: 'no-store',
       });
       const data = await res.json();
-      setAuthenticated(data.authenticated);
-      return data.authenticated;
+      setAuthenticated(Boolean(data.authenticated));
+      setIsEmployeeUser(Boolean(data.isEmployee));
+      return Boolean(data.authenticated);
     } catch {
       return false;
     }
@@ -615,6 +724,12 @@ export default function AdminPage() {
         if (data.recentActivities) {
           setRecentActivities(data.recentActivities);
         }
+        if (data.dealerLoginActivity) {
+          if (Array.isArray(data.dealerLoginActivity.recentLogins)) {
+            setRecentDealerLogins(data.dealerLoginActivity.recentLogins);
+          }
+          setDealerLoginSummary(data.dealerLoginActivity);
+        }
         const matches: MatchDay[] = data.matchDays || [];
         setMatchDays(matches);
         if (data.historicalMatches) {
@@ -678,12 +793,47 @@ export default function AdminPage() {
       if (data.counts) {
         setFleetCategoryCounts(data.counts);
       }
+      if (data.branches) {
+        setFleetBranches(data.branches);
+      }
     } catch (err) {
       console.error('Failed to load fleet dealers:', err);
     } finally {
       setFleetLoading(false);
     }
   }, [selectedCampaignId]);
+
+  const loadDealerLogins = useCallback(async (
+    targetPage = loginLogPage,
+    search = loginLogSearch,
+    category = loginLogCategory,
+    timeframe = loginLogTimeframe,
+    sessionStatus = loginLogSessionStatus,
+    silent = false
+  ) => {
+    if (!silent) setLoginLogLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('action', 'dealerLogins');
+      params.set('page', String(targetPage));
+      params.set('pageSize', String(loginLogPageSize));
+      if (search && search.trim()) params.set('search', search.trim());
+      if (category && category !== 'ALL') params.set('category', category);
+      if (timeframe && timeframe !== 'ALL') params.set('timeframe', timeframe);
+      if (sessionStatus && sessionStatus !== 'ALL') params.set('sessionStatus', sessionStatus);
+
+      const res = await fetch(`/api/admin?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load dealer logins');
+      const data = await res.json();
+      if (data.logins) setLoginLogList(data.logins);
+      if (data.summary) setDealerLoginSummary(data.summary);
+      if (data.pagination) setLoginLogTotalPages(data.pagination.totalPages || 1);
+    } catch (err) {
+      console.error('Failed to load dealer login logs:', err);
+    } finally {
+      if (!silent) setLoginLogLoading(false);
+    }
+  }, [loginLogPage, loginLogPageSize, loginLogSearch, loginLogCategory, loginLogTimeframe, loginLogSessionStatus]);
 
   const loadLiveActivities = useCallback(async (
     autoSync = false,
@@ -872,6 +1022,15 @@ export default function AdminPage() {
     if (authenticated && activeTab === 'dealers' && fleetDealers.length === 0 && !fleetLoading) {
       loadFleetDealers();
     }
+    if (authenticated && activeTab === 'dealerLogins') {
+      loadDealerLogins(loginLogPage, loginLogSearch, loginLogCategory, loginLogTimeframe, loginLogSessionStatus);
+      if (loginLogAutoRefresh) {
+        const interval = setInterval(() => {
+          loadDealerLogins(loginLogPage, loginLogSearch, loginLogCategory, loginLogTimeframe, loginLogSessionStatus, true);
+        }, 15000);
+        return () => clearInterval(interval);
+      }
+    }
     if (authenticated && activeTab === 'rules') loadRules();
     if (authenticated && activeTab === 'audit') loadAudit();
     if (authenticated && activeTab === 'liveMonitor') {
@@ -890,7 +1049,7 @@ export default function AdminPage() {
         return () => clearInterval(interval);
       }
     }
-  }, [authenticated, activeTab, stats, loading, fleetDealers.length, fleetLoading, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadFleetDealers, loadLiveActivities, loadAuctionVehicles, loadData]);
+  }, [authenticated, activeTab, stats, loading, fleetDealers.length, fleetLoading, loginLogPage, loginLogSearch, loginLogCategory, loginLogTimeframe, loginLogSessionStatus, loginLogAutoRefresh, liveAutoRefresh, liveFilter, liveAuctionId, matchDays, loadRules, loadAudit, loadFleetDealers, loadDealerLogins, loadLiveActivities, loadAuctionVehicles, loadData]);
 
   const handleSyncLiveAuction = async () => {
     setSyncing(true);
@@ -1027,28 +1186,48 @@ export default function AdminPage() {
     setExportModalOpen(true);
   };
 
-  const triggerExportDownload = (type: 'dealers' | 'activities' | 'allActivities', format: 'xlsx' | 'csv' = 'xlsx') => {
+  const triggerExportDownload = (
+    type: 'dealers' | 'activities' | 'allActivities' | 'dealerLogins' | 'auctionLeaderboard',
+    format: 'xlsx' | 'csv' = 'xlsx',
+    customAuctionId?: string
+  ) => {
     const ext = format.toUpperCase();
-    if (type === 'allActivities') {
+    const effectiveAuctionId = (customAuctionId || liveAuctionId || '2003').trim();
+    const campParam = selectedCampaignId ? `&campaignId=${selectedCampaignId}` : '';
+
+    if (type === 'dealers') {
+      const branchQuery = fleetBranchFilter && fleetBranchFilter !== 'ALL' ? `&branch=${encodeURIComponent(fleetBranchFilter)}` : '';
+      const catQuery = fleetCategoryFilter && fleetCategoryFilter !== 'ALL' ? `&category=${encodeURIComponent(fleetCategoryFilter)}` : '';
+      window.open(`/api/admin?action=export&type=dealers${branchQuery}${catQuery}&format=${format}`, '_blank');
+      showToast(`Downloading TN Dealer Fleet Directory (${fleetBranchFilter !== 'ALL' ? fleetBranchFilter + ' - ' : ''}${ext})...`);
+    } else if (type === 'dealerLogins') {
+      window.open(`/api/admin?action=export&type=dealerLogins&format=${format}`, '_blank');
+      showToast(`Downloading Dealer Login & Portal Adoption History (${ext})...`);
+    } else if (type === 'allActivities') {
       window.open(`/api/admin?action=export&type=activities&all=true&format=${format}`, '_blank');
       showToast(`Downloading Full Live Telemetry Log (${ext})...`);
     } else if (type === 'activities') {
-      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}&format=${format}`, '_blank');
-      showToast(`Downloading Auction #${liveAuctionId || '1991'} Buyers & Sellers Ledger (${ext})...`);
+      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(effectiveAuctionId)}${campParam}&format=${format}`, '_blank');
+      showToast(`Downloading Auction #${effectiveAuctionId} Buyers & Sellers Ledger (${ext})...`);
+    } else if (type === 'auctionLeaderboard') {
+      window.open(`/api/admin?action=export&type=auctionLeaderboard&auctionId=${encodeURIComponent(effectiveAuctionId)}${campParam}&format=${format}`, '_blank');
+      showToast(`Downloading Auction #${effectiveAuctionId} Standings & Points Calculation Audit (${ext})...`);
     } else {
-      window.open(`/api/admin?action=export&type=dealers&format=${format}`, '_blank');
-      showToast(`Downloading Dealer Leaderboard Summary (${ext})...`);
+      window.open(`/api/admin?action=export&type=auctionLeaderboard&auctionId=${encodeURIComponent(effectiveAuctionId)}${campParam}&format=${format}`, '_blank');
+      showToast(`Downloading Auction #${effectiveAuctionId} Standings & Points Calculation Audit (${ext})...`);
     }
   };
 
-  const triggerCsvDownload = (type: 'dealers' | 'activities' | 'allActivities') => triggerExportDownload(type, 'csv');
+  const triggerCsvDownload = (type: 'dealers' | 'activities' | 'allActivities' | 'dealerLogins' | 'auctionLeaderboard') => triggerExportDownload(type, 'csv');
 
   const triggerDownloadBoth = (format: 'xlsx' | 'csv' = 'xlsx') => {
-    window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(liveAuctionId || '1991')}&format=${format}`, '_blank');
+    const effectiveAuctionId = (liveAuctionId || '2003').trim();
+    const campParam = selectedCampaignId ? `&campaignId=${selectedCampaignId}` : '';
+    window.open(`/api/admin?action=export&type=auctionLeaderboard&auctionId=${encodeURIComponent(effectiveAuctionId)}${campParam}&format=${format}`, '_blank');
     setTimeout(() => {
-      window.open(`/api/admin?action=export&type=dealers&format=${format}`, '_blank');
+      window.open(`/api/admin?action=export&type=activities&auctionId=${encodeURIComponent(effectiveAuctionId)}${campParam}&format=${format}`, '_blank');
     }, 600);
-    showToast(`Downloading Auction Transactions & Dealer Summary (${format.toUpperCase()})...`);
+    showToast(`Downloading Auction #${effectiveAuctionId} Standings & Transaction Ledger (${format.toUpperCase()})...`);
   };
 
   const toggleTelecastPlay = () => {
@@ -1115,33 +1294,107 @@ export default function AdminPage() {
     });
   }, [activeAdminLeaderboard, adminLeaderboardTab, leaderboardCategoryFilter, searchQuery]);
 
+  // Derive available TN branches (either from backend API or calculated locally)
+  const availableBranches = useMemo(() => {
+    if (fleetBranches.length > 0) return fleetBranches;
+    const branchMap = new Map<string, number>();
+    for (const d of fleetDealers) {
+      if (!isTamilNaduDealer(d.city)) continue;
+      const b = d.branch || getDealerBranch(d.city);
+      branchMap.set(b, (branchMap.get(b) || 0) + 1);
+    }
+    return Array.from(branchMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [fleetBranches, fleetDealers]);
+
+  const displayFleetCategoryCounts = useMemo(() => {
+    if (fleetBranchFilter === 'ALL') {
+      return {
+        total: fleetCategoryCounts.total || 1060,
+        oem: fleetCategoryCounts.oem || 87,
+        usedCar: fleetCategoryCounts.usedCar || 902,
+        corporate: fleetCategoryCounts.corporate || 71,
+      };
+    }
+    const branchDealers = fleetDealers.filter(d => isTamilNaduDealer(d.city) && (d.branch || getDealerBranch(d.city)) === fleetBranchFilter);
+    const counts = { total: branchDealers.length, oem: 0, usedCar: 0, corporate: 0 };
+    for (const d of branchDealers) {
+      if (d.category === 'OEM Dealer') counts.oem++;
+      else if (d.category === 'Used Car Dealer') counts.usedCar++;
+      else if (d.category === 'Corporate / Other') counts.corporate++;
+    }
+    return counts;
+  }, [fleetBranchFilter, fleetCategoryCounts, fleetDealers]);
+
   const filteredFleetDealers = useMemo(() => {
     const sourceList: FleetDealer[] = fleetDealers.length > 0 ? fleetDealers : leaderboard.map(d => ({
       id: d.dealerId,
       externalId: d.externalId,
       displayName: d.dealerName,
       city: d.city,
+      branch: getDealerBranch(d.city),
       category: d.category || 'Used Car Dealer',
       status: 'ACTIVE',
       points: d.points,
       rank: d.rank,
+      lastLoginAt: (d as any).lastLoginAt || null,
+      lastLoginIp: (d as any).lastLoginIp || null,
+      loginCount: (d as any).loginCount || 0,
     }));
 
-    return sourceList.filter(d => {
-      if (fleetCategoryFilter === 'OEM' && d.category !== 'OEM Dealer') return false;
-      if (fleetCategoryFilter === 'USED' && d.category !== 'Used Car Dealer') return false;
-      if (fleetCategoryFilter === 'CORPORATE' && d.category !== 'Corporate / Other') return false;
+    // STRICT REQUIREMENT: Only dealers from Tamil Nadu (TN) are shown in Dealer Fleet
+    let filtered = sourceList.filter(d => isTamilNaduDealer(d.city));
 
-      if (!fleetSearchQuery) return true;
+    // Filter by selected TN Branch
+    if (fleetBranchFilter !== 'ALL') {
+      filtered = filtered.filter(d => (d.branch || getDealerBranch(d.city)) === fleetBranchFilter);
+    }
+
+    if (fleetCategoryFilter === 'OEM') filtered = filtered.filter(d => d.category === 'OEM Dealer');
+    else if (fleetCategoryFilter === 'USED') filtered = filtered.filter(d => d.category === 'Used Car Dealer');
+    else if (fleetCategoryFilter === 'CORPORATE') filtered = filtered.filter(d => d.category === 'Corporate / Other');
+
+    if (fleetActivityFilter === 'ACTIVE_TODAY') {
+      filtered = filtered.filter(d => {
+        if (!d.lastLoginAt) return false;
+        const diff = Date.now() - new Date(d.lastLoginAt).getTime();
+        return diff <= 24 * 60 * 60 * 1000;
+      });
+    } else if (fleetActivityFilter === 'LOGGED_IN') {
+      filtered = filtered.filter(d => Boolean(d.lastLoginAt));
+    } else if (fleetActivityFilter === 'NEVER_LOGGED_IN') {
+      filtered = filtered.filter(d => !d.lastLoginAt);
+    }
+
+    if (fleetSearchQuery) {
       const q = fleetSearchQuery.toLowerCase();
-      return (
-        d.displayName.toLowerCase().includes(q) ||
-        d.externalId.toLowerCase().includes(q) ||
-        d.city.toLowerCase().includes(q) ||
-        (d.category && d.category.toLowerCase().includes(q))
-      );
-    });
-  }, [fleetDealers, leaderboard, fleetCategoryFilter, fleetSearchQuery]);
+      filtered = filtered.filter(d => {
+        const branch = (d.branch || getDealerBranch(d.city)).toLowerCase();
+        return (
+          d.displayName.toLowerCase().includes(q) ||
+          d.externalId.toLowerCase().includes(q) ||
+          d.city.toLowerCase().includes(q) ||
+          branch.includes(q) ||
+          (d.category && d.category.toLowerCase().includes(q))
+        );
+      });
+    }
+
+    if (fleetSortBy === 'lastLogin') {
+      filtered = [...filtered].sort((a, b) => {
+        const timeA = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
+        const timeB = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
+        return timeB - timeA;
+      });
+    } else if (fleetSortBy === 'points') {
+      filtered = [...filtered].sort((a, b) => (b.points || 0) - (a.points || 0));
+    } else if (fleetSortBy === 'name') {
+      filtered = [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    }
+
+    return filtered;
+  }, [fleetDealers, leaderboard, fleetCategoryFilter, fleetBranchFilter, fleetActivityFilter, fleetSortBy, fleetSearchQuery]);
 
   const filteredLiveActivities = liveActivities.filter(a => {
     if (liveFilter !== 'ALL' && a.activityType !== liveFilter) return false;
@@ -1272,8 +1525,16 @@ export default function AdminPage() {
               <span className="navbar-logo">
                 <span>TVS</span> SUPERCUP
               </span>
-              <span className="navbar-badge" style={{ background: 'rgba(54, 78, 162, 0.12)', color: 'var(--tvs-blue)', borderColor: 'rgba(54, 78, 162, 0.35)' }}>
-                ADMIN MISSION CONTROL
+              <span
+                className="navbar-badge"
+                style={{
+                  background: isEmployeeUser ? 'rgba(16, 185, 129, 0.15)' : 'rgba(54, 78, 162, 0.12)',
+                  color: isEmployeeUser ? '#10b981' : 'var(--tvs-blue)',
+                  borderColor: isEmployeeUser ? 'rgba(16, 185, 129, 0.4)' : 'rgba(54, 78, 162, 0.35)',
+                  fontWeight: 700,
+                }}
+              >
+                {isEmployeeUser ? 'TVS EMPLOYEE MISSION CONTROL' : 'ADMIN MISSION CONTROL'}
               </span>
             </div>
           </Link>
@@ -1297,8 +1558,13 @@ export default function AdminPage() {
             <SwitchMode width={58} height={28} />
             <button 
               className="btn btn-ghost btn-sm" 
-              onClick={() => { fetch('/api/admin/auth', { method: 'DELETE' }); setAuthenticated(false); }}
-              title="Logout admin session"
+              onClick={async () => {
+                await fetch('/api/admin/auth', { method: 'DELETE' });
+                await fetch('/api/auth/login', { method: 'DELETE' });
+                setAuthenticated(false);
+                window.location.href = '/';
+              }}
+              title="Logout session"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Logout</span>
@@ -1550,6 +1816,7 @@ export default function AdminPage() {
               { key: 'leaderboard', icon: <Award className="w-4 h-4 text-amber-400" />, label: 'Leaderboard (Unmasked)' },
               { key: 'liveMonitor', icon: <Radio className="w-4 h-4 text-[#6cc14f]" />, label: 'War Room (Live Monitor)' },
               { key: 'dealers', icon: <Users className="w-4 h-4" />, label: 'Dealer Fleet' },
+              { key: 'dealerLogins', icon: <LogIn className="w-4 h-4 text-emerald-400" />, label: 'Dealer Login Activity' },
               { key: 'rules', icon: <Settings className="w-4 h-4" />, label: 'Scoring Rules Engine' },
               { key: 'matches', icon: <Calendar className="w-4 h-4" />, label: 'Match Schedule' },
               { key: 'audit', icon: <FileText className="w-4 h-4" />, label: 'Audit Trail' },
@@ -1567,10 +1834,27 @@ export default function AdminPage() {
                   if (item.key === 'dealers' && fleetDealers.length === 0) {
                     loadFleetDealers();
                   }
+                  if (item.key === 'dealerLogins') {
+                    loadDealerLogins();
+                  }
                 }}
               >
                 {item.icon}
                 <span>{item.label}</span>
+                {item.key === 'dealerLogins' && (stats?.activeSessions || dealerLoginSummary?.activeSessionsCount) ? (
+                  <span style={{
+                    fontSize: '0.62rem',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    marginLeft: '4px',
+                  }}>
+                    {stats?.activeSessions || dealerLoginSummary?.activeSessionsCount} online
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -1792,6 +2076,211 @@ export default function AdminPage() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        </div>
+
+                        {/* Last Logged-In Dealer Activity & Portal Adoption Telemetry Card */}
+                        <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--accent-cyan)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <LogIn className="w-5 h-5 text-emerald-400" />
+                                <h3 className="card-title" style={{ margin: 0 }}>
+                                  Last Logged-In Dealer Activity & Portal Adoption
+                                </h3>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'var(--font-mono)',
+                                  padding: '2px 8px',
+                                  borderRadius: '9999px',
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  color: '#34d399',
+                                  border: '1px solid rgba(16, 185, 129, 0.4)'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }} />
+                                  REAL-TIME LOGINS
+                                </span>
+                              </div>
+                              <p className="card-subtitle" style={{ marginTop: '4px' }}>
+                                Real-time visibility into dealership portal logins, recent sessions, and active TVS dealer engagement
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setActiveTab('dealerLogins')}
+                                title="Open full dealer logins monitor"
+                              >
+                                View All Logins ({dealerLoginSummary?.totalSessions || 0}) →
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 4 Mini Stat Badges */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 700, textTransform: 'uppercase' }}>Active Today</div>
+                              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>
+                                {dealerLoginSummary?.activeToday ?? 0}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginLeft: '6px' }}>
+                                  ({Math.round(((dealerLoginSummary?.activeToday ?? 0) / Math.max(stats?.totalDealers || 1, 1)) * 100)}% of fleet)
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>Active This Week</div>
+                              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38bdf8', marginTop: '2px' }}>
+                                {dealerLoginSummary?.activeWeek ?? 0}
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#c084fc', fontWeight: 700, textTransform: 'uppercase' }}>Adoption Rate</div>
+                              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c084fc', marginTop: '2px' }}>
+                                {dealerLoginSummary?.adoptionRate ?? 0}%
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginLeft: '6px' }}>
+                                  ({dealerLoginSummary?.totalDealersWithLogin ?? 0} dealers)
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.08)', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#fb7185', fontWeight: 700, textTransform: 'uppercase' }}>Never Logged In</div>
+                              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fb7185', marginTop: '2px' }}>
+                                {dealerLoginSummary?.neverLoggedInCount ?? (stats?.totalDealers ? stats.totalDealers - (dealerLoginSummary?.totalDealersWithLogin ?? 0) : 0)}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginLeft: '6px' }}>
+                                  Dormant
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Recent Logged-in Dealers Table */}
+                          <div style={{ overflowX: 'auto' }}>
+                            <table className="admin-table" style={{ margin: 0 }}>
+                              <thead>
+                                <tr>
+                                  <th>Dealer Legal Name</th>
+                                  <th>Category</th>
+                                  <th>City / Location</th>
+                                  <th>Last Logged In</th>
+                                  <th>Device & IP</th>
+                                  <th>Session State</th>
+                                  <th>Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(!recentDealerLogins || recentDealerLogins.length === 0) ? (
+                                  <tr>
+                                    <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                                      No dealer login activity recorded yet.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  recentDealerLogins.slice(0, 6).map((log) => (
+                                    <tr key={log.id}>
+                                      <td>
+                                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                          {log.dealerName}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                          Code: {log.dealerTvsCode}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span style={{
+                                          fontSize: '0.72rem',
+                                          fontWeight: 600,
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          background: log.dealerCategory === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                                          color: log.dealerCategory === 'OEM Dealer' ? '#34d399' : '#38bdf8',
+                                          border: `1px solid ${log.dealerCategory === 'OEM Dealer' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                                        }}>
+                                          {log.dealerCategory || 'Used Car Dealer'}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div style={{ fontSize: '0.82rem' }}>
+                                          {log.dealerCity || 'Tamil Nadu'}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                                          {formatTimeAgo(log.loginTime)}
+                                        </div>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                          {formatDateDDMMYYYY(log.loginTime || log.loginAt)} {new Date(log.loginTime || log.loginAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem' }}>
+                                          {log.device?.toLowerCase().includes('mobile') || log.device?.toLowerCase().includes('android') || log.device?.toLowerCase().includes('iphone') ? (
+                                            <Smartphone className="w-3.5 h-3.5 text-purple-400" />
+                                          ) : (
+                                            <Laptop className="w-3.5 h-3.5 text-sky-400" />
+                                          )}
+                                          <span>{log.device || 'Desktop'}</span>
+                                        </div>
+                                        <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                          {log.ipAddress || '—'}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        {log.isSessionActive ? (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            background: 'rgba(16, 185, 129, 0.15)',
+                                            color: '#34d399',
+                                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                                          }}>
+                                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#34d399' }} />
+                                            Active Session
+                                          </span>
+                                        ) : (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            background: 'rgba(148, 163, 184, 0.12)',
+                                            color: '#94a3b8',
+                                            border: '1px solid rgba(148, 163, 184, 0.25)',
+                                          }}>
+                                            Expired / Idle
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <button
+                                          className="btn btn-ghost btn-xs"
+                                          onClick={() => loadDealerDetail(log.dealerId)}
+                                          style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                                        >
+                                          Inspect →
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
 
@@ -2218,14 +2707,50 @@ export default function AdminPage() {
                               <span>Recalculate</span>
                             </button>
 
+                            {/* Excel Multi-Sheet Standings & Points Audit Export */}
                             <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => triggerExportDownload('auctionLeaderboard', 'xlsx')}
+                              title={`Download official multi-sheet Excel spreadsheet (.xlsx) with Auction #${liveAuctionId || ''} leaderboard, points calculation formulas for each dealer, and verification data`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '0.8rem',
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                borderColor: '#10b981',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.25)',
+                              }}
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              <span>Export Standings (Excel .xlsx)</span>
+                            </button>
+
+                            {/* Export Standings CSV */}
+                            <button
+                              type="button"
                               className="btn btn-primary btn-sm"
-                              onClick={handleExport}
-                              title="Export leaderboard summary CSV"
+                              onClick={() => triggerExportDownload('auctionLeaderboard', 'csv')}
+                              title={`Export Auction #${liveAuctionId || ''} verified leaderboard standings and dealer points calculation breakdown as CSV`}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
                             >
                               <Download className="w-3.5 h-3.5" />
                               <span>Export Standings CSV</span>
+                            </button>
+
+                            {/* More Export Options Modal */}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={handleExport}
+                              title="Open comprehensive Super Cup export center with all audit reports"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', border: '1px solid var(--border-subtle)' }}
+                            >
+                              <Sliders className="w-3.5 h-3.5" />
+                              <span>Export Center</span>
                             </button>
                           </div>
                         </div>
@@ -3363,12 +3888,30 @@ export default function AdminPage() {
                                   <span>View All {allAuctionVehicles.length} Vehicles</span>
                                 </button>
                                 <button
+                                  className="btn btn-sm"
+                                  onClick={() => triggerExportDownload('auctionLeaderboard', 'xlsx', liveAuctionId)}
+                                  title="Export full multi-sheet audit Excel workbook with leaderboard and point calculations"
+                                  style={{
+                                    gap: '6px',
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    borderColor: '#10b981',
+                                    color: '#ffffff',
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                                  }}
+                                >
+                                  <FileSpreadsheet className="w-4 h-4" />
+                                  <span>Export Standings (.xlsx)</span>
+                                </button>
+                                <button
                                   className="btn btn-ghost btn-sm"
                                   onClick={() => setExportModalOpen(true)}
                                   style={{ gap: '6px', border: '1px solid var(--border-subtle)' }}
                                 >
                                   <Download className="w-4 h-4 text-sky-400" />
-                                  <span>Export Auction Results</span>
+                                  <span>Export Reports</span>
                                 </button>
                               </div>
                             </div>
@@ -4311,13 +4854,13 @@ export default function AdminPage() {
                         onClick={() => { setFleetCategoryFilter('ALL'); setFleetPage(1); }}
                       >
                         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Total Fleet Enrolled
+                          {fleetBranchFilter === 'ALL' ? 'Tamil Nadu Fleet Enrolled' : `${fleetBranchFilter} Fleet Enrolled`}
                         </div>
                         <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--text-primary)', marginTop: '4px' }}>
-                          {(fleetCategoryCounts.total || stats?.totalDealers || 1545).toLocaleString()}
+                          {displayFleetCategoryCounts.total.toLocaleString()}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', marginTop: '2px' }}>
-                          Super Cup Verified Network
+                          {fleetBranchFilter === 'ALL' ? 'TN Network (Excl. Out-of-State)' : `Regional Branch: ${fleetBranchFilter}`}
                         </div>
                       </div>
 
@@ -4335,7 +4878,7 @@ export default function AdminPage() {
                           🏢 OEM Dealers • Sellers
                         </div>
                         <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#34d399', marginTop: '4px' }}>
-                          {(fleetCategoryCounts.oem || 124).toLocaleString()}
+                          {displayFleetCategoryCounts.oem.toLocaleString()}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           Authorized Brand Dealerships
@@ -4356,7 +4899,7 @@ export default function AdminPage() {
                           🚗 Used Car Dealers • Buyers
                         </div>
                         <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#38bdf8', marginTop: '4px' }}>
-                          {(fleetCategoryCounts.usedCar || 1278).toLocaleString()}
+                          {displayFleetCategoryCounts.usedCar.toLocaleString()}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           Multi-Brand Pre-Owned Traders
@@ -4377,7 +4920,7 @@ export default function AdminPage() {
                           🏛️ Corporate / Internal
                         </div>
                         <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#cbd5e1', marginTop: '4px' }}>
-                          {(fleetCategoryCounts.corporate || 143).toLocaleString()}
+                          {displayFleetCategoryCounts.corporate.toLocaleString()}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           TVS Outsource & Central Operations
@@ -4452,37 +4995,174 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Interactive Category Filter Pills */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-                            Category Filter:
-                          </span>
-                          {[
-                            { key: 'ALL', label: `All Dealers (${(fleetCategoryCounts.total || stats?.totalDealers || 1545).toLocaleString()})` },
-                            { key: 'OEM', label: `🏢 OEM Dealers / Sellers (${fleetCategoryCounts.oem || 124})`, color: '#34d399' },
-                            { key: 'USED', label: `🚗 Used Car Dealers / Buyers (${fleetCategoryCounts.usedCar || 1278})`, color: '#38bdf8' },
-                            { key: 'CORPORATE', label: `🏛️ Corporate (${fleetCategoryCounts.corporate || 143})`, color: '#94a3b8' },
-                          ].map(pill => (
-                            <button
-                              key={pill.key}
-                              className="btn btn-xs"
-                              style={{
-                                padding: '4px 12px',
-                                fontSize: '0.74rem',
+                        {/* Interactive Category & Activity Filter Pills */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                                Category:
+                              </span>
+                              {[
+                                { key: 'ALL', label: fleetBranchFilter === 'ALL' ? `All TN Dealers (${displayFleetCategoryCounts.total.toLocaleString()})` : `All in ${fleetBranchFilter} (${displayFleetCategoryCounts.total.toLocaleString()})` },
+                                { key: 'OEM', label: `🏢 OEM Dealers / Sellers (${displayFleetCategoryCounts.oem.toLocaleString()})`, color: '#34d399' },
+                                { key: 'USED', label: `🚗 Used Car Dealers / Buyers (${displayFleetCategoryCounts.usedCar.toLocaleString()})`, color: '#38bdf8' },
+                                { key: 'CORPORATE', label: `🏛️ Corporate (${displayFleetCategoryCounts.corporate.toLocaleString()})`, color: '#94a3b8' },
+                              ].map(pill => (
+                                <button
+                                  key={pill.key}
+                                  className="btn btn-xs"
+                                  style={{
+                                    padding: '4px 12px',
+                                    fontSize: '0.74rem',
+                                    borderRadius: '999px',
+                                    background: fleetCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                    border: `1px solid ${fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                    color: fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                    fontWeight: fleetCategoryFilter === pill.key ? 700 : 500,
+                                  }}
+                                  onClick={() => {
+                                    setFleetCategoryFilter(pill.key);
+                                    setFleetPage(1);
+                                  }}
+                                >
+                                  {pill.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Sort Selector */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                                Sort:
+                              </span>
+                              <select
+                                className="form-input"
+                                style={{ padding: '3px 8px', fontSize: '0.75rem', width: 'auto' }}
+                                value={fleetSortBy}
+                                onChange={e => {
+                                  setFleetSortBy(e.target.value as any);
+                                  setFleetPage(1);
+                                }}
+                              >
+                                <option value="points">Points (High to Low)</option>
+                                <option value="lastLogin">Last Logged In (Recent First)</option>
+                                <option value="name">Dealer Name (A-Z)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Login Activity Filter Pills */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px dashed var(--border-hairline)' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                              Portal Activity:
+                            </span>
+                            {[
+                              { key: 'ALL', label: 'All Activity' },
+                              { key: 'ACTIVE_TODAY', label: `🟢 Active Today (${dealerLoginSummary?.activeToday ?? 0})`, color: '#34d399' },
+                              { key: 'LOGGED_IN', label: `🔵 Logged In (${dealerLoginSummary?.totalDealersWithLogin ?? 0})`, color: '#38bdf8' },
+                              { key: 'NEVER_LOGGED_IN', label: `⚠️ Never Logged In (${dealerLoginSummary?.neverLoggedInCount ?? (stats?.totalDealers ? stats.totalDealers - (dealerLoginSummary?.totalDealersWithLogin ?? 0) : 0)})`, color: '#fb7185' },
+                            ].map(pill => (
+                              <button
+                                key={pill.key}
+                                className="btn btn-xs"
+                                style={{
+                                  padding: '3px 10px',
+                                  fontSize: '0.72rem',
+                                  borderRadius: '999px',
+                                  background: fleetActivityFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
+                                  border: `1px solid ${fleetActivityFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
+                                  color: fleetActivityFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
+                                  fontWeight: fleetActivityFilter === pill.key ? 700 : 500,
+                                }}
+                                onClick={() => {
+                                  setFleetActivityFilter(pill.key as any);
+                                  setFleetPage(1);
+                                }}
+                              >
+                                {pill.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Branch Filter & Regional Scope (Tamil Nadu) */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            flexWrap: 'wrap',
+                            paddingTop: '6px',
+                            borderTop: '1px dashed var(--border-hairline)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '3px 9px',
                                 borderRadius: '999px',
-                                background: fleetCategoryFilter === pill.key ? (pill.color ? `${pill.color}22` : 'rgba(255,255,255,0.12)') : 'transparent',
-                                border: `1px solid ${fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--border-subtle)'}`,
-                                color: fleetCategoryFilter === pill.key ? (pill.color || 'var(--accent-cyan)') : 'var(--text-secondary)',
-                                fontWeight: fleetCategoryFilter === pill.key ? 700 : 500,
-                              }}
-                              onClick={() => {
-                                setFleetCategoryFilter(pill.key);
-                                setFleetPage(1);
-                              }}
-                            >
-                              {pill.label}
-                            </button>
-                          ))}
+                                background: 'rgba(6, 214, 160, 0.12)',
+                                color: 'var(--accent-cyan)',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                border: '1px solid rgba(6, 214, 160, 0.3)'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-cyan)', display: 'inline-block' }} />
+                                📍 TN Dealers Only
+                              </span>
+
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, marginLeft: '4px' }}>
+                                Branch:
+                              </span>
+
+                              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                                <MapPin className="w-3.5 h-3.5 text-sky-400" style={{ position: 'absolute', left: '8px', pointerEvents: 'none' }} />
+                                <select
+                                  className="form-input"
+                                  style={{
+                                    padding: '4px 12px 4px 26px',
+                                    fontSize: '0.75rem',
+                                    width: 'auto',
+                                    minWidth: '220px',
+                                    background: fleetBranchFilter !== 'ALL' ? 'rgba(56, 189, 248, 0.15)' : 'var(--bg-elevated, #1a2234)',
+                                    borderColor: fleetBranchFilter !== 'ALL' ? '#38bdf8' : 'var(--border-subtle)',
+                                    color: fleetBranchFilter !== 'ALL' ? '#38bdf8' : 'var(--text-primary)',
+                                    fontWeight: 700,
+                                    borderRadius: '6px'
+                                  }}
+                                  value={fleetBranchFilter}
+                                  onChange={e => {
+                                    setFleetBranchFilter(e.target.value);
+                                    setFleetPage(1);
+                                  }}
+                                >
+                                  <option value="ALL">All TN Branches ({fleetCategoryCounts.total || 1060})</option>
+                                  {availableBranches.map(b => (
+                                    <option key={b.name} value={b.name}>
+                                      {b.name} ({b.count})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {fleetBranchFilter !== 'ALL' && (
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  style={{ fontSize: '0.72rem', color: '#fb7185', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  onClick={() => {
+                                    setFleetBranchFilter('ALL');
+                                    setFleetPage(1);
+                                  }}
+                                >
+                                  <span>Clear Branch ({fleetBranchFilter}) ✕</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              Showing <strong>{filteredFleetDealers.length}</strong> TN dealerships
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -4495,16 +5175,17 @@ export default function AdminPage() {
                               <th>Dealer Legal Name</th>
                               <th>Category & Primary Role</th>
                               <th style={{ width: '120px' }}>Dealer Code</th>
-                              <th style={{ width: '150px' }}>City / Location</th>
-                              <th style={{ width: '130px' }}>Total Points</th>
-                              <th style={{ width: '100px' }}>Status</th>
-                              <th style={{ width: '140px' }}>Actions</th>
+                              <th style={{ width: '170px' }}>Branch & City (TN)</th>
+                              <th style={{ width: '120px' }}>Total Points</th>
+                              <th style={{ width: '160px' }}>Last Logged In</th>
+                              <th style={{ width: '90px' }}>Status</th>
+                              <th style={{ width: '130px' }}>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {fleetLoading && (
                               <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                                   <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-sky-400" />
                                   Loading fleet directory...
                                 </td>
@@ -4572,9 +5253,66 @@ export default function AdminPage() {
                                 <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
                                   {d.externalId}
                                 </td>
-                                <td>{d.city}</td>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(56, 189, 248, 0.12)',
+                                      color: '#38bdf8',
+                                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      📍 {d.branch || getDealerBranch(d.city)}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', paddingLeft: '2px' }}>
+                                    {d.city}
+                                  </div>
+                                </td>
                                 <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent-cyan)' }}>
                                   {d.points ? `${d.points.toLocaleString()} PTS` : '0 PTS'}
+                                </td>
+                                <td>
+                                  {d.lastLoginAt ? (
+                                    <div>
+                                      <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        fontWeight: 700,
+                                        fontSize: '0.8rem',
+                                        color: (Date.now() - new Date(d.lastLoginAt).getTime()) < 24 * 60 * 60 * 1000 ? '#34d399' : 'var(--accent-cyan)'
+                                      }}>
+                                        <LogIn className="w-3.5 h-3.5" />
+                                        <span>{formatTimeAgo(d.lastLoginAt)}</span>
+                                      </div>
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                        {formatDateDDMMYYYY(d.lastLoginAt)} • {d.loginCount || 1} {d.loginCount === 1 ? 'login' : 'logins'}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      background: 'rgba(244, 63, 94, 0.1)',
+                                      color: '#fb7185',
+                                      border: '1px solid rgba(244, 63, 94, 0.25)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      <UserX className="w-3 h-3" /> Never Logged In
+                                    </span>
+                                  )}
                                 </td>
                                 <td>
                                   <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>
@@ -4612,7 +5350,7 @@ export default function AdminPage() {
                             ))}
                             {!fleetLoading && filteredFleetDealers.length === 0 && (
                               <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                                   No dealerships match &quot;{fleetSearchQuery}&quot; under &quot;{fleetCategoryFilter}&quot;
                                 </td>
                               </tr>
@@ -4653,6 +5391,517 @@ export default function AdminPage() {
                             className="btn btn-ghost btn-sm"
                             disabled={fleetPage * fleetPageSize >= filteredFleetDealers.length}
                             onClick={() => setFleetPage(p => p + 1)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                          >
+                            Next <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 3b. Dealer Login Activity & Portal Adoption Monitor Tab ──────── */}
+                {activeTab === 'dealerLogins' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Executive KPI Metric Banner */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                      gap: '14px',
+                    }}>
+                      <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Logged In Today
+                          </span>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+                        </div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
+                          {dealerLoginSummary?.activeToday ?? 0}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Dealers active in the last 24 hours
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Active This Week
+                          </span>
+                          <UserCheck className="w-4 h-4 text-sky-400" />
+                        </div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#38bdf8', marginTop: '4px' }}>
+                          {dealerLoginSummary?.activeWeek ?? 0}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Dealers active in past 7 days
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #3b82f6' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#60a5fa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Live Active Sessions
+                          </span>
+                          <Globe className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#60a5fa', marginTop: '4px' }}>
+                          {dealerLoginSummary?.currentlyActiveSessions ?? 0}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Currently authenticated browser tokens
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #a855f7' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#c084fc', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Portal Adoption Rate
+                          </span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' }}>
+                            VERIFIED
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#c084fc', marginTop: '4px' }}>
+                          {dealerLoginSummary?.adoptionRate ?? 0}%
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          {dealerLoginSummary?.totalDealersWithLogin ?? 0} of {stats?.totalDealers ?? 1545} dealers logged in
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #f43f5e' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#fb7185', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Dormant / Never Logged In
+                          </span>
+                          <UserX className="w-4 h-4 text-rose-400" />
+                        </div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#fb7185', marginTop: '4px' }}>
+                          {dealerLoginSummary?.neverLoggedInCount ?? (stats?.totalDealers ? stats.totalDealers - (dealerLoginSummary?.totalDealersWithLogin ?? 0) : 0)}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Dealers needing onboarding outreach
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Main Logins Telemetry Card */}
+                    <div className="card">
+                      {/* Header */}
+                      <div className="card-header" style={{ flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <LogIn className="w-5 h-5 text-emerald-400" />
+                            <h3 className="card-title" style={{ margin: 0 }}>
+                              Dealer Login & Portal Access Audit Stream
+                            </h3>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              fontFamily: 'var(--font-mono)',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#34d399',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                            }}>
+                              LIVE MONITORING
+                            </span>
+                          </div>
+                          <p className="card-subtitle" style={{ marginTop: '4px' }}>
+                            Comprehensive chronological log of every dealership authentication event, IP address, device footprint, and session lifecycle
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setLoginLogAutoRefresh(prev => !prev)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              color: loginLogAutoRefresh ? '#34d399' : 'var(--text-secondary)',
+                              borderColor: loginLogAutoRefresh ? 'rgba(16, 185, 129, 0.4)' : 'transparent',
+                            }}
+                            title="Toggle 15s auto-refresh interval"
+                          >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: loginLogAutoRefresh ? '#34d399' : '#64748b' }} />
+                            <span>Auto Refresh: {loginLogAutoRefresh ? 'ON (15s)' : 'OFF'}</span>
+                          </button>
+
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => loadDealerLogins(loginLogPage, loginLogSearch, loginLogCategory, loginLogTimeframe, loginLogSessionStatus)}
+                            disabled={loginLogLoading}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            title="Refresh dealer login history"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${loginLogLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                          </button>
+
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => triggerExportDownload('dealerLogins', 'csv')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            title="Export dealer login logs as CSV"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Export CSV</span>
+                          </button>
+
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => triggerExportDownload('dealerLogins', 'xlsx')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            title="Export dealer login logs as Excel (.xlsx)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Export Excel (.xlsx)</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Filter Controls Row */}
+                      <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div className="search-bar-wrap" style={{ padding: 0 }}>
+                          <div className="search-input-box">
+                            <Search className="w-4 h-4 search-icon-left" />
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Search by dealer name, TVS code, city, IP address, or device..."
+                              value={loginLogSearch}
+                              onChange={e => {
+                                setLoginLogSearch(e.target.value);
+                                setLoginLogPage(1);
+                              }}
+                            />
+                            {loginLogSearch && (
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)' }}
+                                onClick={() => {
+                                  setLoginLogSearch('');
+                                  setLoginLogPage(1);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                          {/* Timeframe Filter Pills */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                              Time Window:
+                            </span>
+                            {[
+                              { key: 'ALL', label: 'All Time' },
+                              { key: 'TODAY', label: 'Today (24h)' },
+                              { key: 'WEEK', label: 'Last 7 Days' },
+                              { key: 'MONTH', label: 'Last 30 Days' },
+                            ].map(pill => (
+                              <button
+                                key={pill.key}
+                                className="btn btn-xs"
+                                style={{
+                                  padding: '3px 10px',
+                                  fontSize: '0.72rem',
+                                  borderRadius: '999px',
+                                  background: loginLogTimeframe === pill.key ? 'rgba(56, 189, 248, 0.18)' : 'transparent',
+                                  border: `1px solid ${loginLogTimeframe === pill.key ? 'var(--accent-cyan)' : 'var(--border-subtle)'}`,
+                                  color: loginLogTimeframe === pill.key ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                                  fontWeight: loginLogTimeframe === pill.key ? 700 : 500,
+                                }}
+                                onClick={() => {
+                                  setLoginLogTimeframe(pill.key);
+                                  setLoginLogPage(1);
+                                }}
+                              >
+                                {pill.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Category Filter Pills */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                              Category:
+                            </span>
+                            {[
+                              { key: 'ALL', label: 'All Categories' },
+                              { key: 'OEM', label: '🏢 OEM Dealers' },
+                              { key: 'USED', label: '🚗 Used Car Dealers' },
+                            ].map(pill => (
+                              <button
+                                key={pill.key}
+                                className="btn btn-xs"
+                                style={{
+                                  padding: '3px 10px',
+                                  fontSize: '0.72rem',
+                                  borderRadius: '999px',
+                                  background: loginLogCategory === pill.key ? 'rgba(16, 185, 129, 0.18)' : 'transparent',
+                                  border: `1px solid ${loginLogCategory === pill.key ? '#34d399' : 'var(--border-subtle)'}`,
+                                  color: loginLogCategory === pill.key ? '#34d399' : 'var(--text-secondary)',
+                                  fontWeight: loginLogCategory === pill.key ? 700 : 500,
+                                }}
+                                onClick={() => {
+                                  setLoginLogCategory(pill.key);
+                                  setLoginLogPage(1);
+                                }}
+                              >
+                                {pill.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Session State Filter Pills */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                              Session:
+                            </span>
+                            {[
+                              { key: 'ALL', label: 'All States' },
+                              { key: 'ACTIVE', label: '🟢 Active Now' },
+                              { key: 'EXPIRED', label: '⚪ Expired / Idle' },
+                            ].map(pill => (
+                              <button
+                                key={pill.key}
+                                className="btn btn-xs"
+                                style={{
+                                  padding: '3px 10px',
+                                  fontSize: '0.72rem',
+                                  borderRadius: '999px',
+                                  background: loginLogSessionStatus === pill.key ? 'rgba(168, 85, 247, 0.18)' : 'transparent',
+                                  border: `1px solid ${loginLogSessionStatus === pill.key ? '#c084fc' : 'var(--border-subtle)'}`,
+                                  color: loginLogSessionStatus === pill.key ? '#c084fc' : 'var(--text-secondary)',
+                                  fontWeight: loginLogSessionStatus === pill.key ? 700 : 500,
+                                }}
+                                onClick={() => {
+                                  setLoginLogSessionStatus(pill.key);
+                                  setLoginLogPage(1);
+                                }}
+                              >
+                                {pill.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Logins Table */}
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '60px' }}>#</th>
+                              <th>Dealer Legal Entity</th>
+                              <th style={{ width: '130px' }}>Dealer Code</th>
+                              <th style={{ width: '160px' }}>Category & Role</th>
+                              <th style={{ width: '140px' }}>City / Location</th>
+                              <th style={{ width: '200px' }}>Login Timestamp</th>
+                              <th style={{ width: '180px' }}>Device & Client</th>
+                              <th style={{ width: '140px' }}>IP Address</th>
+                              <th style={{ width: '130px' }}>Session Status</th>
+                              <th style={{ width: '110px' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {loginLogLoading && (
+                              <tr>
+                                <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-sky-400" />
+                                  Loading dealer authentication logs...
+                                </td>
+                              </tr>
+                            )}
+                            {!loginLogLoading && loginLogList.length === 0 && (
+                              <tr>
+                                <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                                  No dealer logins match the applied filters.
+                                </td>
+                              </tr>
+                            )}
+                            {!loginLogLoading && loginLogList.map((log, idx) => (
+                              <tr key={log.id}>
+                                <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                                  {(loginLogPage - 1) * loginLogPageSize + idx + 1}
+                                </td>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    {log.dealerName}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>Auth: {log.loginType || 'SSO'}</span>
+                                    <span>•</span>
+                                    <span>ID #{log.dealerId}</span>
+                                  </div>
+                                </td>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                  {log.dealerTvsCode || '—'}
+                                </td>
+                                <td>
+                                  {log.dealerCategory === 'OEM Dealer' ? (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(16, 185, 129, 0.15)',
+                                      color: '#34d399',
+                                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      🏢 OEM Dealer
+                                    </span>
+                                  ) : (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(56, 189, 248, 0.15)',
+                                      color: '#38bdf8',
+                                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      🚗 Used Car Dealer
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                                    {log.dealerCity || 'Tamil Nadu'}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                                    {formatTimeAgo(log.loginTime)}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                    {formatDateDDMMYYYY(log.loginTime || log.loginAt)} {new Date(log.loginTime || log.loginAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}>
+                                    {log.device?.toLowerCase().includes('mobile') || log.device?.toLowerCase().includes('android') || log.device?.toLowerCase().includes('iphone') ? (
+                                      <Smartphone className="w-4 h-4 text-purple-400" />
+                                    ) : (
+                                      <Laptop className="w-4 h-4 text-sky-400" />
+                                    )}
+                                    <span style={{ fontWeight: 600 }}>{log.device || 'Desktop Browser'}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                    {log.ipAddress || '—'}
+                                  </span>
+                                </td>
+                                <td>
+                                  {log.isSessionActive ? (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(16, 185, 129, 0.15)',
+                                      color: '#34d399',
+                                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                                    }}>
+                                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#34d399' }} />
+                                      Active Session
+                                    </span>
+                                  ) : (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      background: 'rgba(148, 163, 184, 0.12)',
+                                      color: '#94a3b8',
+                                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                                    }}>
+                                      Expired / Idle
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => loadDealerDetail(log.dealerId)}
+                                    style={{ fontSize: '0.75rem', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                    title="Open full dealer inspector"
+                                  >
+                                    Inspect →
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination Footer */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        fontSize: '0.82rem',
+                        color: 'var(--text-secondary)',
+                        flexWrap: 'wrap',
+                        gap: '10px'
+                      }}>
+                        <div>
+                          Showing page <strong>{loginLogPage}</strong> of <strong>{loginLogTotalPages}</strong> ({dealerLoginSummary?.totalSessions || 0} total login sessions)
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={loginLogPage <= 1}
+                            onClick={() => {
+                              const newPage = Math.max(1, loginLogPage - 1);
+                              setLoginLogPage(newPage);
+                              loadDealerLogins(newPage);
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                          </button>
+
+                          <span style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)', padding: '0 8px', color: 'var(--text-primary)' }}>
+                            Page {loginLogPage} of {loginLogTotalPages}
+                          </span>
+
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={loginLogPage >= loginLogTotalPages}
+                            onClick={() => {
+                              const newPage = loginLogPage + 1;
+                              setLoginLogPage(newPage);
+                              loadDealerLogins(newPage);
+                            }}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
                           >
                             Next <ChevronRight className="w-3.5 h-3.5" />
@@ -4985,7 +6234,57 @@ export default function AdminPage() {
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {/* 1. Buyers & Sellers Ledger */}
+                {/* 1. Premier: Auction Standings, Points Calculation Breakdown & Verification */}
+                <div style={{
+                  padding: '18px',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1.5px solid rgba(16, 185, 129, 0.4)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '0.96rem', color: 'var(--text-primary)', display: 'block' }}>
+                            Auction #{liveAuctionId || '1991'} Standings & Points Calculation Audit
+                          </strong>
+                          <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>OFFICIAL AUDIT</span>
+                        </div>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          Multi-sheet official spreadsheet: Standings for this auction, exact formula-based points calculation breakdown for each dealer, vehicle lot results, bid audit trail with deduplication verification, all-auctions comparison, and tournament scoring rules.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '7px 16px', fontSize: '0.8rem', gap: '6px', border: '1px solid var(--border-subtle)' }}
+                      onClick={() => triggerExportDownload('auctionLeaderboard', 'csv')}
+                      title="Download verified auction standings and dealer points calculation breakdown as CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>CSV (.csv)</span>
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '7px 18px', fontSize: '0.8rem', gap: '6px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#10b981', fontWeight: 700 }}
+                      onClick={() => triggerExportDownload('auctionLeaderboard', 'xlsx')}
+                      title="Download as Microsoft Excel Spreadsheet with 6 verification sheets (XLSX)"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Download Excel Workbook (.xlsx)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Buyers & Sellers Ledger */}
                 <div style={{
                   padding: '16px',
                   background: 'var(--bg-base)',
@@ -5032,7 +6331,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* 2. Dealer Standings & Performance Summary */}
+                {/* 3. Dealer Standings & Performance Summary */}
                 <div style={{
                   padding: '16px',
                   background: 'var(--bg-base)',
@@ -5049,10 +6348,10 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
-                          Dealer Standings & Commercial Summary
+                          Championship Cumulative Standings
                         </strong>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          All dealers: Rank, Total Points, Buy Count, Sell Count, Total Won INR, Total Sold INR
+                          Tournament-wide standings across all match days with point calculation breakdown
                         </span>
                       </div>
                     </div>
@@ -5061,7 +6360,7 @@ export default function AdminPage() {
                     <button
                       className="btn btn-ghost"
                       style={{ padding: '6px 14px', fontSize: '0.78rem', gap: '6px', border: '1px solid var(--border-subtle)' }}
-                      onClick={() => triggerExportDownload('dealers', 'csv')}
+                      onClick={() => triggerExportDownload('auctionLeaderboard', 'csv')}
                       title="Download as Comma-Separated Values (CSV)"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -5070,7 +6369,7 @@ export default function AdminPage() {
                     <button
                       className="btn btn-primary"
                       style={{ padding: '6px 16px', fontSize: '0.78rem', gap: '6px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', borderColor: '#0284c7' }}
-                      onClick={() => triggerExportDownload('dealers', 'xlsx')}
+                      onClick={() => triggerExportDownload('auctionLeaderboard', 'xlsx')}
                       title="Download as Microsoft Excel Spreadsheet (XLSX)"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -5898,6 +7197,164 @@ export default function AdminPage() {
                   </div>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Logged Events</span>
                 </div>
+              </div>
+
+              {/* Portal Usage & Authentication Telemetry Card */}
+              <div style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                background: selectedDealer.lastLoginAt ? 'rgba(16, 185, 129, 0.05)' : 'rgba(244, 63, 94, 0.05)',
+                border: `1px solid ${selectedDealer.lastLoginAt ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LogIn className={`w-4 h-4 ${selectedDealer.lastLoginAt ? 'text-emerald-400' : 'text-rose-400'}`} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Dealer Portal Access & Login History
+                    </span>
+                    {selectedDealer.lastLoginAt ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.4)'
+                      }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#34d399' }} />
+                        Active Portal User
+                      </span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        background: 'rgba(244, 63, 94, 0.15)',
+                        color: '#fb7185',
+                        border: '1px solid rgba(244, 63, 94, 0.35)'
+                      }}>
+                        ⚠️ Never Logged In
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    Total Logins: <strong style={{ color: 'var(--text-primary)' }}>{selectedDealer.loginCount || (selectedDealer.lastLoginAt ? 1 : 0)}</strong>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '12px',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  padding: '12px',
+                  borderRadius: '8px',
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                      Last Logged In At
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: selectedDealer.lastLoginAt ? 'var(--accent-cyan)' : '#fb7185', marginTop: '2px' }}>
+                      {selectedDealer.lastLoginAt ? formatTimeAgo(selectedDealer.lastLoginAt) : 'Never'}
+                    </div>
+                    {selectedDealer.lastLoginAt && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        {formatDateDDMMYYYY(selectedDealer.lastLoginAt)} {new Date(selectedDealer.lastLoginAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                      Last Known IP Address
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                      {selectedDealer.lastLoginIp || 'Not available'}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                      Network Origin
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                      Active Web Session
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '2px' }}>
+                      {selectedDealer.recentSessions && selectedDealer.recentSessions.some(s => s.isActive) ? (
+                        <span style={{ color: '#34d399', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }} />
+                          Online Now
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          No Active Session
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                      Current Token State
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Session List if available */}
+                {selectedDealer.recentSessions && selectedDealer.recentSessions.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      Recent Authentication Sessions ({selectedDealer.recentSessions.length}):
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {selectedDealer.recentSessions.slice(0, 3).map((sess) => (
+                        <div key={sess.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-secondary)',
+                          flexWrap: 'wrap',
+                          gap: '6px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {sess.device?.toLowerCase().includes('mobile') ? (
+                              <Smartphone className="w-3.5 h-3.5 text-purple-400" />
+                            ) : (
+                              <Laptop className="w-3.5 h-3.5 text-sky-400" />
+                            )}
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sess.device || 'Browser'}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>({sess.ipAddress || '—'})</span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)' }}>
+                              {formatTimeAgo(sess.loginAt)} ({formatDateDDMMYYYY(sess.loginAt)})
+                            </span>
+                            {sess.isActive ? (
+                              <span style={{ color: '#34d399', fontWeight: 700, fontSize: '0.68rem' }}>• ACTIVE</span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>• Expired</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions & Filters Bar */}
