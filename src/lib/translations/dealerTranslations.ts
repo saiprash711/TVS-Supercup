@@ -102,8 +102,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'விற்பனை புள்ளிகள்',
   },
   'ticker.sellingAllocVal': {
-    en: 'VEHICLE LISTING = +5 PTS • COMMISSION SETTLEMENT = +5 PTS',
-    ta: 'வாகனப் பட்டியல் = +5 புள்ளிகள் • கமிஷன் தீர்வு = +5 புள்ளிகள்',
+    en: 'VEHICLE LISTING = +1 PT • MATCH PARTICIPATION = +1 PT • BONUS = +5 PTS • CONVERSION = +10 PTS',
+    ta: 'வாகனப் பட்டியல் = +1 புள்ளி • போட்டியில் பங்கேற்பு = +1 புள்ளி • போனஸ் = +5 புள்ளிகள் • விற்பனை = +10 புள்ளிகள்',
   },
   'ticker.sellingBadge': {
     en: 'SELLING',
@@ -114,8 +114,8 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'வாங்குதல் புள்ளிகள்',
   },
   'ticker.buyingAllocVal': {
-    en: 'MATCH ATTENDANCE = +1 PT • BIDS = +1 PT (PER-CAR BASIS) • BONUS = +20 PTS',
-    ta: 'ஏல வருகை = +1 புள்ளி • ஏலங்கள் = +1 புள்ளி (ஒரு காருக்கு) • போனஸ் = +20 புள்ளிகள்',
+    en: 'MATCH ATTENDANCE = +1 PT • BIDS = +1 PT (PER CAR) • BONUS = +5 PTS • CONVERSION = +10 PTS',
+    ta: 'ஏல வருகை = +1 புள்ளி • ஏலங்கள் = +1 புள்ளி (ஒரு காருக்கு) • போனஸ் = +5 புள்ளிகள் • வாங்குதல் = +10 புள்ளிகள்',
   },
   'ticker.buyingBadge': {
     en: 'BUYING',
@@ -520,24 +520,28 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'முழு விதிகள் கையேடு',
   },
   'protocol.listing': {
-    en: 'Vehicle Listing (SELL)',
-    ta: 'வாகனப் பட்டியல் (விற்பனை)',
+    en: 'Vehicle Listing (+1 PT - SELL)',
+    ta: 'வாகனப் பட்டியல் (+1 புள்ளி - விற்பனை)',
   },
   'protocol.commission': {
-    en: 'Commission Settlement (SELL)',
-    ta: 'கமிஷன் தீர்வு (விற்பனை)',
+    en: 'Commission Settlement (SELL - Inactive)',
+    ta: 'கமிஷன் தீர்வு (செயலற்றது)',
   },
   'protocol.bid': {
-    en: 'Unique Car Bid (BUY - Per Car)',
-    ta: 'தனிப்பட்ட கார் ஏலம் (வாங்குதல் - காருக்கு)',
+    en: 'Unique Car Bid (+1 PT - BUY)',
+    ta: 'தனிப்பட்ட கார் ஏலம் (+1 புள்ளி - வாங்குதல்)',
   },
   'protocol.attendance': {
-    en: 'Match Room Attendance (BUY)',
-    ta: 'போட்டி அறை வருகை (வாங்குதல்)',
+    en: 'Match Attendance (+1 PT - BUY/SELL)',
+    ta: 'போட்டி வருகை (+1 புள்ளி - வாங்குதல்/விற்பனை)',
   },
   'protocol.bonus': {
-    en: 'All-Matches Bonus (BUY)',
-    ta: 'அனைத்து போட்டிகள் போனஸ் (வாங்குதல்)',
+    en: 'All-Matches Bonus (+5 PTS)',
+    ta: 'அனைத்து போட்டிகள் போனஸ் (+5 புள்ளிகள்)',
+  },
+  'protocol.conversion': {
+    en: 'Vehicle Conversion (+10 PTS BUY/SELL)',
+    ta: 'வாகனம் Conversion (+10 புள்ளிகள் வாங்குதல்/விற்பனை)',
   },
   'protocol.seasonPrize': {
     en: 'Season Prize (₹50k Buy / ₹50k Sell)',
@@ -592,12 +596,12 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'அனைத்து புள்ளி விதிகள்',
   },
   'modal.tabSelling': {
-    en: 'Selling Allocations (+5 PTS)',
-    ta: 'விற்பனை புள்ளிகள் (+5 புள்ளிகள்)',
+    en: 'Selling Allocations (+1 / +10 PTS)',
+    ta: 'விற்பனை புள்ளிகள் (+1 / +10 புள்ளிகள்)',
   },
   'modal.tabBuying': {
-    en: 'Buying Allocations (+1 PT)',
-    ta: 'வாங்குதல் புள்ளிகள் (+1 புள்ளி)',
+    en: 'Buying Allocations (+1 / +10 PTS)',
+    ta: 'வாங்குதல் புள்ளிகள் (+1 / +10 புள்ளிகள்)',
   },
   'modal.sellerStream': {
     en: 'SELLER STREAM',
@@ -616,12 +620,12 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'உள்நுழையும்போது இந்த அறிவிப்பைத் தானாகக் காட்ட வேண்டாம்',
   },
   'modal.tieBreakerTitle': {
-    en: 'Equal Points Prize Distribution (Tie-Breaker Rule)',
-    ta: 'சம புள்ளிகள் பரிசு விநியோகம் (சமநிலை விதி)',
+    en: 'Tie-Breaker Rule: Higher GMV Ranks Higher',
+    ta: 'சமநிலை விதி: அதிக GMV முன்னிலை',
   },
   'modal.tieBreakerDesc': {
-    en: 'If two or more buyers or sellers score the exact same points on the podium, the combined prize purse for those positions is split equally (e.g. 2-way tie for 1st splits ₹40,000 = ₹20,000 each).',
-    ta: 'இரண்டு அல்லது அதற்கு மேற்பட்ட வாங்குபவர்கள் அல்லது விற்பனையாளர்கள் போடியத்தில் ஒரே புள்ளிகளைப் பெற்றால், அந்த இடங்களுக்கான மொத்த பரிசு சமமாகப் பிரிக்கப்படும் (எ.கா. 1வது இடத்திற்கு சமநிலை ஏற்பட்டால் ₹40,000 தலா ₹20,000 ஆகப் பிரிக்கப்படும்).',
+    en: 'Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher. In both Buyer and Seller leagues, ranking priority is determined strictly by cumulative GMV.',
+    ta: 'சமநிலை விதி: இறுதி புள்ளிகள் சமமாக இருந்தால், அதிக GMV (பரிவர்த்தனை மதிப்பு) கொண்ட டீலர் முன்னிலை பெறுவார். வாங்குபவர் மற்றும் விற்பனையாளர் லீகுகளில் GMV அடிப்படையில் தரவரிசை தீர்மானிக்கப்படும்.',
   },
 
   // ── Terms Modal ──
@@ -1332,32 +1336,56 @@ export const dealerTranslations: TranslationDictionary = {
     ta: 'வியாழக்கிழமை மதியம் 2:00 மணிக்கு நடைபெறும் அதிகாரப்பூர்வ ஏல அமர்வில் உள்நுழைந்து தீவிரமாகப் பங்கேற்பது ஒரு போட்டி நாளுக்கு 1 வருகைப் புள்ளியைப் பெற்றுத் தரும்.',
   },
   'terms.sec2BonusTitle': {
-    en: 'All-Matches Attendance Bonus: +20 Points',
-    ta: 'அனைத்து போட்டிகள் வருகை போனஸ்: +20 புள்ளிகள்',
+    en: 'All-Matches Attendance Bonus: +5 Points',
+    ta: 'அனைத்து போட்டிகள் வருகை போனஸ்: +5 புள்ளிகள்',
   },
   'terms.sec2BonusDesc': {
-    en: 'Dealers who maintain flawless attendance and participate in all 16 official Thursday matches throughout the campaign unlock a massive 20-point loyalty bonus at season conclusion.',
-    ta: 'பிரச்சார காலம் முழுவதும் அனைத்து 16 அதிகாரப்பூர்வ வியாழக்கிழமை போட்டிகளிலும் தவறாமல் கலந்துகொள்ளும் டீலர்கள் சீசன் முடிவில் பெரும் +20 போனஸ் புள்ளிகளைப் பெறுவார்கள்.',
+    en: 'Dealers who maintain flawless attendance and participate in all official Thursday matches throughout the campaign unlock a 5-point loyalty bonus at season conclusion.',
+    ta: 'பிரச்சார காலம் முழுவதும் அனைத்து அதிகாரப்பூர்வ வியாழக்கிழமை போட்டிகளிலும் தவறாமல் கலந்துகொள்ளும் டீலர்கள் சீசன் முடிவில் +5 போனஸ் புள்ளிகளைப் பெறுவார்கள்.',
+  },
+  'terms.sec2ConversionTitle': {
+    en: 'Vehicle Purchases (Conversions): +10 Points Per Car',
+    ta: 'வாகனம் வாங்குதல் (Conversion): ஒரு காருக்கு +10 புள்ளிகள்',
+  },
+  'terms.sec2ConversionDesc': {
+    en: 'Earn 10 points per conversion when you win and buy a vehicle. Conversions are calculated and audited manually upon verified offline completion.',
+    ta: 'நீங்கள் ஒரு வாகனத்தை வென்று வாங்கும் போது ஒவ்வொரு conversion-க்கும் 10 புள்ளிகளைப் பெறுங்கள். நேரில் முடிக்கப்படும் பரிவர்த்தனை சரிபார்ப்பின் அடிப்படையில் இது கணக்கிடப்படுகிறது.',
   },
   'terms.sec3Title': {
     en: '3. Seller Terms & Scoring Allocation',
     ta: '3. விற்பனையாளர் விதிமுறைகள் & புள்ளி ஒதுக்கீடு',
   },
   'terms.sec3ListingsTitle': {
-    en: 'Vehicle Listings: 5 Points Per Published Vehicle',
-    ta: 'வாகனப் பட்டியல்கள்: வெளியிடப்பட்ட வாகனத்திற்கு 5 புள்ளிகள்',
+    en: 'Vehicle Listings: 1 Point Per Car Listed',
+    ta: 'வாகனப் பட்டியல்கள்: பட்டியலிடப்பட்ட ஒரு காருக்கு 1 புள்ளி',
   },
   'terms.sec3ListingsDesc': {
-    en: 'Earn 5 points for every inspected and verified vehicle lot listed into the TVS Certified auction network.',
-    ta: 'டிவிஎஸ் சான்றளிக்கப்பட்ட ஏல வலையமைப்பில் ஆய்வு செய்யப்பட்டு பட்டியலிடப்படும் ஒவ்வொரு வாகனத்திற்கும் 5 புள்ளிகளைப் பெறுங்கள்.',
+    en: 'Earn 1 point for every car listed (e.g. list 100 cars and earn 100 points). Consigned vehicles must be inspected and published on TVS Certified.',
+    ta: 'பட்டியலிடப்படும் ஒவ்வொரு காருக்கும் 1 புள்ளியைப் பெறுங்கள் (எ.கா. 100 கார்களைப் பட்டியலிட்டு 100 புள்ளிகள் பெறுங்கள்). டிவிஎஸ் சான்றளிக்கப்பட்ட தளத்தில் வாகனங்கள் ஆய்வு செய்யப்பட்டு பட்டியலிடப்பட வேண்டும்.',
+  },
+  'terms.sec3ParticipationTitle': {
+    en: 'Match Day Consignment: 1 Point Per Event (+5 Bonus)',
+    ta: 'போட்டி நாள் பட்டியல்: ஒரு நிகழ்வுக்கு 1 புள்ளி (+5 போனஸ்)',
+  },
+  'terms.sec3ParticipationDesc': {
+    en: 'Earn 1 point per event with at least 1 car listed (listing 100 cars in an event is still 1 event participation point). Consign in every match for a +5 all-matches bonus.',
+    ta: 'குறைந்தது 1 காரையாவது பட்டியலிடும் ஒவ்வொரு நிகழ்விற்கும் 1 புள்ளியைப் பெறுங்கள் (ஒரே நிகழ்வில் 100 கார்களைப் பட்டியலிட்டாலும் 1 நிகழ்வுப் புள்ளி). அனைத்து போட்டிகளிலும் பட்டியலிட்டு +5 போனஸ் பெறுங்கள்.',
+  },
+  'terms.sec3ConversionTitle': {
+    en: 'Vehicle Sales (Conversions): +10 Points Per Car Sold',
+    ta: 'வாகனம் விற்பனை (Conversion): விற்ற காருக்கு +10 புள்ளிகள்',
+  },
+  'terms.sec3ConversionDesc': {
+    en: 'Earn 10 points per conversion when your consigned vehicle is successfully sold. Conversions are calculated and audited manually upon verified offline completion.',
+    ta: 'உங்கள் பட்டியலிடப்பட்ட வாகனம் வெற்றிகரமாக விற்கப்படும் போது ஒவ்வொரு conversion-க்கும் 10 புள்ளிகளைப் பெறுங்கள். நேரில் முடிக்கப்படும் பரிவர்த்தனை சரிபார்ப்பின் அடிப்படையில் இது கணக்கிடப்படுகிறது.',
   },
   'terms.sec3SettlementTitle': {
-    en: 'Commission Settlements: 5 Points Per Settled Transaction',
-    ta: 'கமிஷன் தீர்வுகள்: தீர்வு செய்யப்பட்ட பரிவர்த்தனைக்கு 5 புள்ளிகள்',
+    en: 'Commission Settlements: (Superseded by Conversion Points)',
+    ta: 'கமிஷன் தீர்வுகள்: (Conversion புள்ளிகளால் மாற்றப்பட்டது)',
   },
   'terms.sec3SettlementDesc': {
-    en: 'Earn 5 points for every successfully closed and settled vehicle transaction following auction conclusion.',
-    ta: 'ஏல முடிவைத் தொடர்ந்து வெற்றிகரமாக முடிக்கப்பட்டு தீர்வு செய்யப்பட்ட ஒவ்வொரு வாகனப் பரிவர்த்தனைக்கும் 5 புள்ளிகளைப் பெறுங்கள்.',
+    en: 'Commission settlement points are inactive and superseded by direct 10-point conversion rewards per sold car.',
+    ta: 'கமிஷன் தீர்வு புள்ளிகள் செயலற்றவை, நேரடி 10-புள்ளி conversion வெகுமதியால் மாற்றப்பட்டுள்ளன.',
   },
   'terms.sec4Title': {
     en: '4. Grand Finale Awards & Cash Distribution',
@@ -1384,12 +1412,12 @@ export const dealerTranslations: TranslationDictionary = {
     ta: '3வது இடம் 2வது ரன்னர்-அப்: ₹10,000 ரொக்கப் பரிசு + வெண்கலப் பலகை',
   },
   'terms.sec4TieSplit': {
-    en: 'Equal Points Tie-Breaker Policy (Split Purse):',
-    ta: 'சம புள்ளிகள் சமநிலை விதி (பரிசுப் பகிர்வு):',
+    en: 'Official Tie-Breaker Policy (Higher GMV Ranks Higher):',
+    ta: 'அதிகாரப்பூர்வ சமநிலை விதி (அதிக GMV முன்னிலை):',
   },
   'terms.sec4TieSplitDesc': {
-    en: 'If two or more dealerships tie on total league points for any podium spot, the combined cash purse of the tied spots is divided equally between the tied dealers. No subjective tie-breakers are used.',
-    ta: 'எந்தவொரு போடியம் இடத்திற்கும் இரண்டு அல்லது அதற்கு மேற்பட்ட டீலர்ஷிப்கள் சமமான புள்ளிகளைப் பெற்றால், அந்த இடங்களுக்கான மொத்த ரொக்கப் பரிசு சமமாகப் பிரிக்கப்படும். எந்தவொரு தன்னிச்சையான விதிகளும் பயன்படுத்தப்படாது.',
+    en: 'Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher. In both Buyer and Seller leagues, ranking priority is determined strictly by cumulative Gross Merchandise Value (GMV).',
+    ta: 'சமநிலை விதி: இறுதி புள்ளிகள் சமமாக இருந்தால், அதிக GMV (பரிவர்த்தனை மதிப்பு) கொண்ட டீலர் முன்னிலை பெறுவார். வாங்குபவர் மற்றும் விற்பனையாளர் லீகுகளில் GMV அடிப்படையில் தரவரிசை தீர்மானிக்கப்படும்.',
   },
   'terms.sec5Title': {
     en: '5. Compliance, Disputes & Governance',

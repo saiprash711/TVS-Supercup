@@ -226,16 +226,26 @@ export default function TermsAndConditionsModal({
                   <div style={{ background: 'var(--bg-card)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-hairline)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontWeight: 700, fontSize: '0.88rem', marginBottom: '4px' }}>
                       <Trophy className="w-4 h-4" />
-                      <span>Rule 2.3 — All-Matches Attendance Bonus: +20 Points</span>
+                      <span>Rule 2.3 — All-Matches Attendance Bonus: +5 Points</span>
                     </div>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                      Buyers who maintain <strong>100% participation attendance across all scheduled tournament matches</strong> in the season qualify for a one-time <strong>+20 Bonus Points</strong> reward. The bonus is automatically verified and credited to the buyer&apos;s league score upon conclusion of the match schedule.
+                      Buyers who maintain <strong>100% participation attendance across all scheduled tournament matches</strong> in the season qualify for a one-time <strong>+5 Bonus Points</strong> reward. The bonus is automatically verified and credited to the buyer&apos;s league score upon conclusion of the match schedule.
                     </p>
                   </div>
 
-                  <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                  <div style={{ background: 'var(--bg-card)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-hairline)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.88rem', marginBottom: '4px' }}>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Rule 2.4 — Vehicle Purchases (Conversions): +10 Points Per Car</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      Earn <strong>10 points per conversion</strong> when you win and buy a vehicle. Conversions are calculated and audited manually upon verified offline completion and payment settlement.
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                     <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                      <strong className="text-rose-400">Conversion Policy Note:</strong> Offline deliveries, post-auction vehicle handovers, and final sales closures are deliberately excluded from point scoring to ensure 100% transparent digital auditing through live software telemetry.
+                      <strong className="text-blue-400">Conversion Verification Note:</strong> Vehicle purchase conversions (+10 pts per car bought) are recorded manually upon confirmed transaction settlement and delivery documentation, ensuring complete accuracy.
                     </p>
                   </div>
                 </div>
@@ -266,27 +276,37 @@ export default function TermsAndConditionsModal({
                   <div style={{ background: 'var(--bg-card)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-hairline)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.88rem', marginBottom: '4px' }}>
                       <Layers className="w-4 h-4" />
-                      <span>Rule 3.1 — Vehicle Listings: 5 Points Per Consignment</span>
+                      <span>Rule 3.1 — Vehicle Listings: 1 Point Per Car Listed</span>
                     </div>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                      Earn <strong>5 points for every vehicle</strong> consigned, inspected, and published for auction on TVS Certified prior to or during the scheduled match window. Vehicles must pass standard TVS inspection verification to qualify.
+                      Earn <strong>1 point for every car listed</strong> (e.g. list 100 cars and earn 100 points). Consigned vehicles must be inspected and published on TVS Certified prior to or during the scheduled match window.
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'var(--bg-card)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-hairline)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-amber)', fontWeight: 700, fontSize: '0.88rem', marginBottom: '4px' }}>
+                      <Radio className="w-4 h-4" />
+                      <span>Rule 3.2 — Match Day Consignment: 1 Point Per Event (+5 Bonus)</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      Earn <strong>1 point per event with at least 1 car listed</strong> (listing 100 cars in an event is still 1 event participation point). Consign in every match throughout the tournament to receive an additional <strong>+5 All-Matches Bonus</strong>.
                     </p>
                   </div>
 
                   <div style={{ background: 'var(--bg-card)', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--border-hairline)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontWeight: 700, fontSize: '0.88rem', marginBottom: '4px' }}>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Rule 3.2 — Commission Settlement: 5 Points Per Clearance</span>
+                      <span>Rule 3.3 — Vehicle Sales (Conversions): +10 Points Per Car Sold</span>
                     </div>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                      Earn <strong>5 points per completed commission clearance</strong> and verified settlement allocation processed within the auction accounting cycle.
+                      Earn <strong>10 points per conversion</strong> when your consigned vehicle is successfully sold. Conversions are calculated and audited manually upon verified offline completion.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ── SECTION 4: PRIZE POOL & EQUAL POINTS TIE-BREAKER DISTRIBUTION ── */}
+            {/* ── SECTION 4: PRIZE POOL & GMV TIE-BREAKER RULE ── */}
             {(activeTab === 'all' || activeTab === 'prizes') && (
               <div
                 style={{
@@ -299,7 +319,7 @@ export default function TermsAndConditionsModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
                   <Trophy className="w-5 h-5 text-amber-400" />
                   <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    4. Prize Pool Distribution & Equal Points Tie-Breaker Rule
+                    4. Prize Pool Distribution & GMV Tie-Breaker Rule
                   </h3>
                 </div>
 
@@ -326,7 +346,7 @@ export default function TermsAndConditionsModal({
                   </div>
                 </div>
 
-                {/* THE TIE-BREAKER CLAUSE */}
+                {/* THE GMV TIE-BREAKER CLAUSE */}
                 <div
                   style={{
                     background: 'var(--bg-card)',
@@ -338,50 +358,18 @@ export default function TermsAndConditionsModal({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: 800, fontSize: '0.92rem', marginBottom: '8px' }}>
                     <Scale className="w-4 h-4" />
-                    <span>Equal Points Prize Distribution Rule (Tie-Breaker Clause)</span>
+                    <span>Official Tie-Breaker Rule: Higher GMV Ranks Higher</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                    If two or more buyers or sellers finish the championship with the <strong>exact same amount of points</strong> on any podium position, the combined prize purse allocated for those tied positions will be <strong>pooled and split equally</strong> among the tied participants.
+                    <strong>Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher.</strong>
                   </p>
-
-                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-subtle)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                      <strong className="text-white">Case 1: Two-Way Tie for 1st Place</strong>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        The 1st Place (₹25,000) and 2nd Place (₹15,000) prizes are combined into a <strong>₹40,000 purse</strong> and divided equally:
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: 700, marginLeft: '6px' }}>₹20,000 each</span>.
-                        The next highest scorer receives the 3rd Place prize of ₹10,000.
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-subtle)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                      <strong className="text-white">Case 2: Three-Way Tie for 1st Place</strong>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        All three podium prizes (₹25,000 + ₹15,000 + ₹10,000 = ₹50,000) are pooled together and divided equally:
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: 700, marginLeft: '6px' }}>₹16,666.67 each</span>.
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-subtle)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                      <strong className="text-white">Case 3: Two-Way Tie for 2nd Place</strong>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        The 1st Place winner receives ₹25,000 in full. The 2nd Place (₹15,000) and 3rd Place (₹10,000) prizes are combined into ₹25,000 and divided equally:
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: 700, marginLeft: '6px' }}>₹12,500 each</span>.
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-subtle)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                      <strong className="text-white">Case 4: Two-Way Tie for 3rd Place</strong>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        1st and 2nd place receive their full awards (₹25,000 and ₹15,000). The 3rd Place prize (₹10,000) is split equally:
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: 700, marginLeft: '6px' }}>₹5,000 each</span>.
-                      </div>
-                    </div>
-                  </div>
+                  <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    In both the Buyer League and Seller League, whenever two or more dealerships finish with identical total points on the podium, ranking priority is determined strictly by the dealer&apos;s verified cumulative Gross Merchandise Value (GMV) accrued through tournament auctions. If GMV is also identical, priority is determined by the earliest timestamp of achieving the score.
+                  </p>
                 </div>
 
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  *Note: On digital leaderboard screens, secondary tie-break order for display purposes alone is arranged by (1) Total unique cars bid on / listings, then (2) Earliest timestamp of point achievement. However, <strong>actual cash prize payouts follow the equal split formula above</strong>.
+                  *Note: As confirmed in tournament rules, the dealership with the higher Gross Merchandise Value (GMV) takes higher podium standing. If GMV is also identical, priority is determined by the earliest timestamp of points earned.
                 </p>
               </div>
             )}

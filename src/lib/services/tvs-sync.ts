@@ -25,6 +25,8 @@ function isWithinCampaign(timestamp: Date | string | undefined, campaign: Campai
 function provesLiveParticipation(activityType: string, metadata?: Record<string, unknown>): boolean {
   if (activityType === 'MATCH_PARTICIPATION') return true;
   if (activityType === 'BUY' || activityType === 'SELL') return true;
+  // Pitch Deck: +1 Per event with at least 1 car listed (Listing 100 cars is still 1 pt)
+  if (activityType === 'SELL_LISTING') return true;
   return activityType === 'BID_PLACED' && metadata?.isPreBid !== true;
 }
 
@@ -180,6 +182,12 @@ export async function syncDealerActivities(
       const matchId = act.auctionId ? auctionToMatchMap.get(act.auctionId) : liveMatch?.id;
       if (!matchId) {
         continue; // Unmapped auction outside Super Cup
+      }
+
+      // Conversions (+10 pts BUY / +10 pts SELL) are calculated and recorded manually once verified offline
+      // Raw database winners cannot be fetched directly from the database as verified conversions.
+      if (act.activityType === 'BUY' || act.activityType === 'SELL') {
+        continue;
       }
 
       const recordResult = await recordActivity({
@@ -516,6 +524,11 @@ export async function syncAuctionActivities(
       }
 
       if (!dealerId) continue;
+
+      // Conversions (+10 pts BUY / +10 pts SELL) are calculated and recorded manually once verified offline
+      if (act.activityType === 'BUY' || act.activityType === 'SELL') {
+        continue;
+      }
 
       const dedupeKey = `${dealerId}:${act.activityType}:${act.transactionId}`;
       if (existingSet.has(dedupeKey)) continue;

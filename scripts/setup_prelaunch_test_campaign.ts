@@ -13,13 +13,14 @@ const campaignData = {
 
 const rules = [
   // SELLING
-  ['SELL_LISTING', 5, 'Selling: Points per vehicle listing', true],
-  ['SELL_COMMISSION', 5, 'Selling: Commission points allocation', true],
-  ['SELL', 0, 'Selling: Conversion (deactivated / not captured in website)', false],
-  // BUYING
-  ['MATCH_PARTICIPATION', 1, 'Buying: Test match participation points', true],
-  ['BID_PLACED', 1, 'Buying: Points per verified live auction bid', true],
-  ['BUY', 0, 'Buying: Conversion (deactivated / not captured in website)', false],
+  ['SELL_LISTING', 1, 'Selling: Points per vehicle listing (+1 pt per car listed)', true],
+  ['SELL', 10, 'Selling: Conversion (+10 pts per car sold - manually verified)', true],
+  ['SELL_COMMISSION', 0, 'Selling: Commission points allocation (superseded by conversion)', false],
+  // BUYING & GENERAL
+  ['MATCH_PARTICIPATION', 1, 'Points for participating in a test match day', true],
+  ['ALL_MATCHES_BONUS', 5, 'Bonus points for joining all test matches (+5 pts)', true],
+  ['BID_PLACED', 1, 'Buying: Points per unique car bid (per-car basis)', true],
+  ['BUY', 10, 'Buying: Conversion (+10 pts per car won and bought - manually verified)', true],
 ] as const;
 
 const matches = [

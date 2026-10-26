@@ -15,7 +15,7 @@ import { prisma } from '@/lib/db';
 import { recalculateRankings, getSegmentedLeaderboard, resolveDealerCustomer } from '@/lib/services/ranking-engine';
 import { syncDealerActivities, syncLiveAuction } from '@/lib/services/tvs-sync';
 import { getTVSProvider } from '@/lib/services/tvs-integration';
-import { clearPointRulesCache } from '@/lib/services/points-engine';
+import { clearPointRulesCache, calculatePoints } from '@/lib/services/points-engine';
 import * as XLSX from 'xlsx';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 import { isTamilNaduDealer, getDealerBranch } from '@/lib/services/branch-utils';
@@ -2512,41 +2512,61 @@ export async function GET(request: NextRequest) {
             'SELL_LISTING',
             'Vehicle Listing in Super Cup Auction',
             'Seller League',
-            '5 Points per vehicle',
-            '5 pts per listed car in official match day catalog',
+            '1 Point per vehicle',
+            '1 pt per listed car (e.g. 100 cars listed = 100 pts)',
             'Strictly deduped on vehicleId and sellerCustomerId',
             'Vehicles cataloged and approved for official match auction',
             'Clause 4.2(a) — Vehicle Listings',
           ],
           [
-            'SELL_COMMISSION',
-            'Seller Commission Allocation',
+            'MATCH_PARTICIPATION_SELLER',
+            'Seller Event Participation (>= 1 Car Listed)',
             'Seller League',
-            '5 Points',
-            'Per verified commissionable transaction',
-            'Verified against TVS Certified commercial ledger',
-            'Awarded for completed commercial settlements',
-            'Clause 4.2(b) — Commercial Settlement',
+            '1 Point per event',
+            'Max 1 pt per match day with at least 1 car listed',
+            'Listing 100 cars is still 1 pt participation for that event',
+            'Verified active listing inventory in match auction',
+            'Clause 4.2(b) — Seller Event Participation',
           ],
           [
             'ALL_MATCHES_BONUS',
             'All-Matches Participation Championship Bonus',
-            'Buyer League',
-            '20 Points',
-            'One-time award upon tournament completion',
-            'Requires participation in all 16 scheduled matches',
-            'Validated against complete season attendance matrix',
+            'Buyer League & Seller League',
+            '5 Bonus Points',
+            'One-time award upon joining/listing in every match',
+            'Join every match in the tournament for a +5 bonus',
+            'Validated against complete season match participation matrix',
             'Clause 4.3 — Championship Loyalty Bonus',
           ],
           [
-            'BUY / SELL',
-            'Vehicle Sales Conversion Points',
-            'Deactivated',
-            '0 Points',
-            'Deactivated',
-            'Conversions excluded to ensure transparent real-time bidding focus',
-            'Recorded in audit ledger for commercial tracking only',
-            'Clause 4.4 — Sales Conversions Policy',
+            'BUY',
+            'Vehicle Purchase Conversion (Won & Bought)',
+            'Buyer League',
+            '10 Points per vehicle',
+            '10 pts per car bought (calculated manually upon delivery/settlement verification)',
+            'Verified offline transaction settlement; tie-breaker decided by higher GMV',
+            'Official completed sales confirmation',
+            'Clause 4.4(a) — Buyer Vehicle Conversions',
+          ],
+          [
+            'SELL',
+            'Vehicle Sale Conversion (Consigned & Sold)',
+            'Seller League',
+            '10 Points per vehicle',
+            '10 pts per car sold (calculated manually upon delivery/settlement verification)',
+            'Verified offline transaction settlement; tie-breaker decided by higher GMV',
+            'Official completed sales confirmation',
+            'Clause 4.4(b) — Seller Vehicle Conversions',
+          ],
+          [
+            'TIE_BREAKER_RULE',
+            'Tournament Final Standings Tie-Breaker',
+            'Buyer League & Seller League',
+            'Ranked by Higher GMV',
+            'Applied when two or more dealers finish with equal points',
+            'The dealer with the higher Gross Merchandise Value (GMV / transaction value) ranks higher',
+            'Official confirmed transaction volume across campaign',
+            'Clause 4.5 — Pitch Deck Tie-Breaker Specification',
           ],
         ];
 
@@ -2572,14 +2592,15 @@ export async function GET(request: NextRequest) {
           'Bidding Points Awarded',
           'Duplicate Bids Deduplicated (0 pts - Rule 4b)',
           'Vehicle Listings Count',
-          'Listing Points Awarded (5 pts each)',
-          'Commission Points Awarded (5 pts)',
-          'All Matches Bonus Points (20 pts)',
+          'Listing Points Awarded (1 pt each)',
+          'All Matches Bonus Points (5 pts)',
           'Vehicles Won / Bought Count',
-          'Total Won Amount (INR)',
+          'Won Conversion Points (10 pts each)',
+          'Total Won GMV Amount (INR)',
           'Won Vehicles List',
           'Vehicles Sold Count',
-          'Total Sold Amount (INR)',
+          'Sold Conversion Points (10 pts each)',
+          'Total Sold GMV Amount (INR)',
           'Cumulative Tournament Points',
           'Cumulative Championship Rank',
           'Auction ID',
@@ -2593,10 +2614,9 @@ export async function GET(request: NextRequest) {
           const cumScore = cumulativeScoreMap.get(d.dealerId);
           const formulaParts = [];
           if (d.participationPoints > 0) formulaParts.push(`Attendance: ${d.participationPoints}pt`);
-          if (d.wonVehiclesCount > 0) formulaParts.push(`Purchases: ${d.wonVehiclesCount} unique cars x 1pt = ${d.wonVehiclesCount}pts`);
-          else if (d.bidPoints > 0) formulaParts.push(`Bids: ${d.uniqueCarsBid.size} unique cars x 1pt = ${d.bidPoints}pts`);
-          if (d.listingsCount > 0) formulaParts.push(`Listings: ${d.listingsCount} cars x 5pts = ${d.listingPoints}pts`);
-          if (d.commissionPoints > 0) formulaParts.push(`Commission: ${d.commissionPoints}pts`);
+          if (d.wonVehiclesCount > 0) formulaParts.push(`Purchases: ${d.wonVehiclesCount} cars x 10pts = ${d.wonVehiclesCount * 10}pts`);
+          if (d.bidPoints > 0) formulaParts.push(`Bids: ${d.uniqueCarsBid.size} unique cars x 1pt = ${d.bidPoints}pts`);
+          if (d.listingsCount > 0) formulaParts.push(`Listings: ${d.listingsCount} cars x 1pt = ${d.listingPoints}pts`);
           if (d.bonusPoints > 0) formulaParts.push(`Bonus: ${d.bonusPoints}pts`);
           const formulaText = formulaParts.length > 0 ? formulaParts.join(' + ') + ` = ${d.totalAuctionPoints} pts` : 'No scoring actions';
 
@@ -3010,6 +3030,149 @@ export async function POST(request: NextRequest) {
           discovered,
           match: updated,
           message: `Successfully linked TVS Auction #${discovered.id} (${discovered.title})!`,
+        });
+      }
+
+      case 'recordConversion': {
+        // Manual recording of buyer and/or seller vehicle conversions (+10 pts)
+        // Pitch deck: "+10 Per conversion, when you win and buy a car" (buyer)
+        // "+10 Per conversion, when your car is sold" (seller)
+        // Tie-breaker: If final scores are equal, the dealer with higher GMV ranks higher.
+        const {
+          buyerDealerId,
+          sellerDealerId,
+          matchId,
+          vehicleId,
+          vehicleName,
+          regNo,
+          saleAmount,
+          timestamp,
+          reason,
+        } = body;
+
+        if (!buyerDealerId && !sellerDealerId) {
+          return NextResponse.json(
+            { error: 'At least one of buyerDealerId or sellerDealerId is required' },
+            { status: 400 }
+          );
+        }
+
+        const effectiveMatchId = matchId ? parseInt(String(matchId), 10) : null;
+        const gmvAmount = Number(saleAmount || 0);
+        const effectiveDate = timestamp ? new Date(timestamp) : new Date();
+        const baseTxId = `CONV-${campaign.id}-${effectiveMatchId || 'MANUAL'}-${regNo || vehicleId || Date.now()}`;
+        const createdActivities = [];
+
+        // 1. Record BUY conversion for Buyer (+10 pts)
+        if (buyerDealerId) {
+          const bId = parseInt(String(buyerDealerId), 10);
+          const buyerDealer = await prisma.dealer.findFirst({
+            where: {
+              OR: [
+                { id: isNaN(bId) ? undefined : bId },
+                { externalDealerId: String(buyerDealerId) },
+                { displayName: String(buyerDealerId) },
+                { displayName: { contains: String(buyerDealerId) } },
+              ],
+            },
+          });
+
+          if (buyerDealer) {
+            const points = (await calculatePoints(campaign.id, 'BUY')) || 10;
+            const buyActivity = await prisma.dealerActivity.create({
+              data: {
+                dealerId: buyerDealer.id,
+                campaignId: campaign.id,
+                matchId: effectiveMatchId,
+                activityType: 'BUY',
+                externalTransactionId: `BUY-${baseTxId}`,
+                points,
+                metadata: JSON.stringify({
+                  vehicleId: vehicleId || '',
+                  vehicleName: vehicleName || 'Auction Vehicle',
+                  regNo: regNo || '',
+                  saleAmount: gmvAmount,
+                  winningBid: gmvAmount,
+                  conversionVerified: true,
+                  manual: true,
+                  reason: reason || 'Manual conversion recorded',
+                  recordedAt: new Date().toISOString(),
+                }),
+                timestamp: effectiveDate,
+              },
+            });
+            createdActivities.push(buyActivity);
+          }
+        }
+
+        // 2. Record SELL conversion for Seller (+10 pts)
+        if (sellerDealerId) {
+          const sId = parseInt(String(sellerDealerId), 10);
+          const sellerDealer = await prisma.dealer.findFirst({
+            where: {
+              OR: [
+                { id: isNaN(sId) ? undefined : sId },
+                { externalDealerId: String(sellerDealerId) },
+                { displayName: String(sellerDealerId) },
+                { displayName: { contains: String(sellerDealerId) } },
+              ],
+            },
+          });
+
+          if (sellerDealer) {
+            const points = (await calculatePoints(campaign.id, 'SELL')) || 10;
+            const sellActivity = await prisma.dealerActivity.create({
+              data: {
+                dealerId: sellerDealer.id,
+                campaignId: campaign.id,
+                matchId: effectiveMatchId,
+                activityType: 'SELL',
+                externalTransactionId: `SELL-${baseTxId}`,
+                points,
+                metadata: JSON.stringify({
+                  vehicleId: vehicleId || '',
+                  vehicleName: vehicleName || 'Auction Vehicle',
+                  regNo: regNo || '',
+                  saleAmount: gmvAmount,
+                  winningBid: gmvAmount,
+                  conversionVerified: true,
+                  manual: true,
+                  reason: reason || 'Manual conversion recorded',
+                  recordedAt: new Date().toISOString(),
+                }),
+                timestamp: effectiveDate,
+              },
+            });
+            createdActivities.push(sellActivity);
+          }
+        }
+
+        // Recalculate tournament rankings with new GMV and points
+        await recalculateRankings(campaign.id);
+
+        await prisma.auditLog.create({
+          data: {
+            adminUser: 'admin',
+            action: 'MANUAL_CONVERSION_RECORDED',
+            targetType: 'CONVERSION',
+            targetId: regNo || String(vehicleId) || baseTxId,
+            details: JSON.stringify({
+              buyerDealerId,
+              sellerDealerId,
+              matchId: effectiveMatchId,
+              saleAmount: gmvAmount,
+              regNo,
+              vehicleName,
+              activitiesCreated: createdActivities.length,
+            }),
+            reason: reason || 'Manual conversion verified and points awarded (+10 pts)',
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          activitiesCount: createdActivities.length,
+          activities: createdActivities,
         });
       }
 

@@ -99,21 +99,21 @@ export async function GET() {
       position,
       breakdown: {
         // SELLING
-        sellingListing: { count: breakdown.sellListingCount, points: breakdown.sellListingPoints, perUnit: breakdown.rules['SELL_LISTING'] ?? 5 },
-        sellingConversion: { count: breakdown.sellConversionCount, points: breakdown.sellConversionPoints, perUnit: breakdown.rules['SELL'] ?? 0 },
-        sellingCommission: { count: breakdown.sellCommissionCount, points: breakdown.sellCommissionPoints, perUnit: breakdown.rules['SELL_COMMISSION'] ?? 5 },
+        sellingListing: { count: breakdown.sellListingCount, points: breakdown.sellListingPoints, perUnit: breakdown.rules['SELL_LISTING'] ?? 1 },
+        sellingConversion: { count: breakdown.sellConversionCount, points: breakdown.sellConversionPoints, perUnit: breakdown.rules['SELL'] ?? 10 },
+        sellingCommission: { count: breakdown.sellCommissionCount, points: breakdown.sellCommissionPoints, perUnit: breakdown.rules['SELL_COMMISSION'] ?? 0 },
         // BUYING
         buyingParticipation: { count: breakdown.buyParticipationCount, points: breakdown.buyParticipationPoints, perUnit: breakdown.rules['MATCH_PARTICIPATION'] ?? 1 },
         buyingBids: { count: breakdown.buyBidCount, points: breakdown.buyBidPoints, perUnit: breakdown.rules['BID_PLACED'] ?? 1, totalBids: breakdown.bidCount },
-        buyingConversion: { count: breakdown.buyConversionCount, points: breakdown.buyConversionPoints, perUnit: breakdown.rules['BUY'] ?? 0 },
+        buyingConversion: { count: breakdown.buyConversionCount, points: breakdown.buyConversionPoints, perUnit: breakdown.rules['BUY'] ?? 10 },
         // Backwards Compatibility Aliases
-        buyTransactions: { count: breakdown.buyCount, points: breakdown.buyPoints, perUnit: breakdown.rules['BUY'] ?? 0 },
-        sellTransactions: { count: breakdown.sellCount, points: breakdown.sellPoints, perUnit: breakdown.rules['SELL'] ?? 0 },
+        buyTransactions: { count: breakdown.buyCount, points: breakdown.buyPoints, perUnit: breakdown.rules['BUY'] ?? 10 },
+        sellTransactions: { count: breakdown.sellCount, points: breakdown.sellPoints, perUnit: breakdown.rules['SELL'] ?? 10 },
         matchParticipation: { count: breakdown.matchParticipationCount, points: breakdown.matchParticipationPoints, perUnit: breakdown.rules['MATCH_PARTICIPATION'] || 1 },
         bidsPlaced: { count: breakdown.buyBidCount, points: breakdown.bidPoints, perUnit: breakdown.rules['BID_PLACED'] || 1 },
         vehicleInspected: { count: breakdown.inspectedCount, points: breakdown.inspectedPoints, perUnit: breakdown.rules['VEHICLE_INSPECTED'] || 0 },
         watchlistAdd: { count: breakdown.watchlistCount, points: breakdown.watchlistPoints, perUnit: breakdown.rules['WATCHLIST_ADD'] || 0 },
-        allMatchesBonus: { points: breakdown.allMatchesBonus, count: breakdown.allMatchesBonus > 0 ? 1 : 0 },
+        allMatchesBonus: { points: breakdown.allMatchesBonus, count: breakdown.allMatchesBonus > 0 ? 1 : 0, perUnit: breakdown.rules['ALL_MATCHES_BONUS'] ?? 5 },
         buyerPoints: (breakdown.buyBidPoints + breakdown.buyConversionPoints + ((dealerCategory === 'Used Car Dealer' || breakdown.buyBidCount > 0 || breakdown.buyConversionCount > 0 || dealerCategory !== 'OEM Dealer') ? (breakdown.buyParticipationPoints + breakdown.allMatchesBonus) : 0)),
         sellerPoints: (breakdown.sellListingPoints + breakdown.sellConversionPoints + breakdown.sellCommissionPoints + ((dealerCategory === 'OEM Dealer' || breakdown.sellListingCount > 0 || breakdown.sellConversionCount > 0) ? (breakdown.buyParticipationPoints + breakdown.allMatchesBonus) : 0)),
         totalPoints: breakdown.totalPoints,

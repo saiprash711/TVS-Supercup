@@ -105,14 +105,14 @@ async function main() {
   // 2. Point Rules
   const rules = [
     // SELLING
-    { activityType: 'SELL_LISTING', points: 5, description: 'Selling: Points per vehicle listing', active: true },
-    { activityType: 'SELL_COMMISSION', points: 5, description: 'Selling: Commission points allocation', active: true },
-    { activityType: 'SELL', points: 0, description: 'Selling: Conversion (deactivated / not captured in website)', active: false },
-    // BUYING
-    { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Buying: Match day participation points', active: true },
+    { activityType: 'SELL_LISTING', points: 1, description: 'Selling: Points per vehicle listing (+1 pt per car listed)', active: true },
+    { activityType: 'SELL', points: 10, description: 'Selling: Conversion (+10 pts per car sold - manually verified)', active: true },
+    { activityType: 'SELL_COMMISSION', points: 0, description: 'Selling: Commission points allocation (superseded by conversion)', active: false },
+    // BUYING & GENERAL
+    { activityType: 'MATCH_PARTICIPATION', points: 1, description: 'Points for participating in a match day / event with >=1 car listed', active: true },
     { activityType: 'BID_PLACED', points: 1, description: 'Buying: Points per unique car bid on (per-car basis)', active: true },
-    { activityType: 'ALL_MATCHES_BONUS', points: 20, description: 'Buying: Bonus points for participating in all scheduled matches', active: true },
-    { activityType: 'BUY', points: 0, description: 'Buying: Conversion (deactivated / not captured in website)', active: false },
+    { activityType: 'ALL_MATCHES_BONUS', points: 5, description: 'Bonus points for participating/consigning in all scheduled matches (+5 pts)', active: true },
+    { activityType: 'BUY', points: 10, description: 'Buying: Conversion (+10 pts per car won and bought - manually verified)', active: true },
   ];
 
   for (const rule of rules) {

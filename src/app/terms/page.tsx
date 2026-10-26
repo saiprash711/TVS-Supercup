@@ -73,19 +73,19 @@ function TermsContent() {
           },
           {
             label: t('ticker.buyingAlloc', 'BUYER ALLOCATIONS'),
-            value: t('ticker.buyingAllocVal', 'BIDS PER CAR BASIS (+1 PT) • MATCH ATTENDANCE (+1 PT) • ALL-MATCHES BONUS (+20 PTS)'),
+            value: t('ticker.buyingAllocVal', 'BIDS PER CAR BASIS (+1 PT) • MATCH ATTENDANCE (+1 PT) • ALL-MATCHES BONUS (+5 PTS) • CONVERSION (+10 PTS)'),
             badge: 'BUYING',
             type: 'positive',
           },
           {
             label: t('ticker.sellingAlloc', 'SELLER ALLOCATIONS'),
-            value: t('ticker.sellingAllocVal', 'VEHICLE LISTINGS (+5 PTS) • COMMISSION SETTLEMENT (+5 PTS)'),
+            value: t('ticker.sellingAllocVal', 'VEHICLE LISTING (+1 PT) • MATCH PARTICIPATION (+1 PT) • BONUS (+5 PTS) • CONVERSION (+10 PTS)'),
             badge: 'SELLING',
             type: 'positive',
           },
           {
-            label: t('ticker.podium', 'EQUAL POINTS POLICY'),
-            value: t('terms.sec4TieSplitDesc', 'TIED PODIUM PLACES SPLIT COMBINED PRIZE POOL EQUALLY'),
+            label: t('ticker.podium', 'TIE-BREAKER POLICY'),
+            value: t('terms.sec4TieSplitDesc', 'TIE-BREAKER: HIGHER GMV (TRANSACTION VALUE) RANKS HIGHER'),
             badge: 'PRIZES',
             type: 'accent',
           },
@@ -229,10 +229,20 @@ function TermsContent() {
               <div style={{ padding: '18px 20px', borderRadius: '14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-hairline)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
                   <Sparkles className="w-4 h-4" />
-                  <span>{t('terms.sec2BonusTitle', 'All-Matches Attendance Bonus: +20 Points')}</span>
+                  <span>{t('terms.sec2BonusTitle', 'All-Matches Attendance Bonus: +5 Points')}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                  {t('terms.sec2BonusDesc', 'Dealers who maintain flawless attendance and participate in all 14 official Thursday matches throughout the campaign unlock a massive 20-point loyalty bonus at season conclusion.')}
+                  {t('terms.sec2BonusDesc', 'Dealers who maintain flawless attendance and participate in all official Thursday matches throughout the campaign unlock a 5-point loyalty bonus at season conclusion.')}
+                </p>
+              </div>
+
+              <div style={{ padding: '18px 20px', borderRadius: '14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-hairline)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{t('terms.sec2ConversionTitle', 'Vehicle Purchases (Conversions): +10 Points Per Car')}</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                  {t('terms.sec2ConversionDesc', 'Earn 10 points per conversion when you win and buy a vehicle. Conversions are calculated and audited manually upon verified offline completion.')}
                 </p>
               </div>
             </div>
@@ -251,20 +261,30 @@ function TermsContent() {
               <div style={{ padding: '18px 20px', borderRadius: '14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-hairline)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
                   <Layers className="w-4 h-4" />
-                  <span>{t('terms.sec3ListingsTitle', 'Vehicle Listings: 5 Points Per Published Vehicle')}</span>
+                  <span>{t('terms.sec3ListingsTitle', 'Vehicle Listings: 1 Point Per Car Listed')}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                  {t('terms.sec3ListingsDesc', 'Earn 5 points for every inspected and verified vehicle lot listed into the TVS Certified auction network.')}
+                  {t('terms.sec3ListingsDesc', 'Earn 1 point for every car listed (e.g. list 100 cars and earn 100 points). Consigned vehicles must be inspected and published on TVS Certified.')}
+                </p>
+              </div>
+
+              <div style={{ padding: '18px 20px', borderRadius: '14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-hairline)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-amber)', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+                  <Radio className="w-4 h-4" />
+                  <span>{t('terms.sec3ParticipationTitle', 'Match Day Consignment: 1 Point Per Event (+5 Bonus)')}</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                  {t('terms.sec3ParticipationDesc', 'Earn 1 point per event with at least 1 car listed (listing 100 cars in an event is still 1 event participation point). Consign in every match for a +5 all-matches bonus.')}
                 </p>
               </div>
 
               <div style={{ padding: '18px 20px', borderRadius: '14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-hairline)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{t('terms.sec3SettlementTitle', 'Commission Settlements: 5 Points Per Settled Transaction')}</span>
+                  <span>{t('terms.sec3ConversionTitle', 'Vehicle Sales (Conversions): +10 Points Per Car Sold')}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                  {t('terms.sec3SettlementDesc', 'Earn 5 points for every successfully closed and settled vehicle transaction following auction conclusion.')}
+                  {t('terms.sec3ConversionDesc', 'Earn 10 points per conversion when your consigned vehicle is successfully sold. Conversions are calculated and audited manually upon verified offline completion.')}
                 </p>
               </div>
             </div>
@@ -318,10 +338,10 @@ function TermsContent() {
             <div style={{ background: 'var(--bg-card)', padding: '22px 24px', borderRadius: '14px', border: '1px solid rgba(245, 158, 11, 0.35)', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: 800, fontSize: '1rem', marginBottom: '10px' }}>
                 <Scale className="w-5 h-5" />
-                <span>{t('terms.sec4TieSplit', 'Equal Points Tie-Breaker Policy (Split Purse):')}</span>
+                <span>{t('terms.sec4TieSplit', 'Official Tie-Breaker Policy (Higher GMV Ranks Higher):')}</span>
               </div>
               <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                {t('terms.sec4TieSplitDesc', 'If two or more dealerships tie on total league points for any podium spot, the combined cash purse of the tied spots is divided equally between the tied dealers. No subjective tie-breakers are used.')}
+                {t('terms.sec4TieSplitDesc', 'Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher. Ranking priority is determined strictly by cumulative Gross Merchandise Value (GMV).')}
               </p>
             </div>
           </section>

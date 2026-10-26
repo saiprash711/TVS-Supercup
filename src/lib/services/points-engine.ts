@@ -13,17 +13,17 @@ import { prisma } from '@/lib/db';
 
 export type ActivityType =
   // SELLING
-  | 'SELL_LISTING'        // Listing: 5 points
-  | 'SELL_COMMISSION'     // Commission: 5 points
+  | 'SELL_LISTING'        // Listing: 1 point per car listed
+  | 'SELL'                // Conversion: 10 points per car sold (calculated manually)
+  | 'SELL_COMMISSION'     // Commission: 0 points (deactivated / replaced by conversion)
   // BUYING
-  | 'MATCH_PARTICIPATION' // Participation: 1 point
-  | 'BID_PLACED'          // Bids: 1 point
-  // Legacy / Deactivated (Conversions ignored as cannot be captured reliably)
-  | 'SELL'                // Conversion: 0 points (deactivated)
-  | 'BUY'                 // Conversion: 0 points (deactivated)
+  | 'MATCH_PARTICIPATION' // Participation: 1 point per event attended/listed
+  | 'BID_PLACED'          // Bids: 1 point per unique car bid on
+  | 'BUY'                 // Conversion: 10 points per car bought (calculated manually)
+  | 'ALL_MATCHES_BONUS'   // Loyalty: 5 bonus points for participating in all matches
+  // Deactivated
   | 'VEHICLE_INSPECTED'
-  | 'WATCHLIST_ADD'
-  | 'ALL_MATCHES_BONUS';
+  | 'WATCHLIST_ADD';
 
 interface PointRuleMap {
   [key: string]: number;

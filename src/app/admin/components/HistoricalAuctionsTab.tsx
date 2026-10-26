@@ -133,6 +133,10 @@ export default function HistoricalAuctionsTab() {
   const [exportingAuctionId, setExportingAuctionId] = useState<string | null>(null);
   const [exportingCatalog, setExportingCatalog] = useState(false);
 
+  // Manual Conversion State
+  const [recordingConversionId, setRecordingConversionId] = useState<string | number | null>(null);
+  const [conversionSuccessMsg, setConversionSuccessMsg] = useState<string | null>(null);
+
   // Load Auctions Directory
   const loadAuctions = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -250,6 +254,57 @@ export default function HistoricalAuctionsTab() {
       console.error('Master export error:', err);
       setMasterExportStatus('ERROR');
       setMasterExportError(err?.message || 'Failed to download master catalog Excel file');
+    }
+  };
+
+  // Record manual conversion as per confirmed pitch deck (+10 pts BUY, +10 pts SELL, GMV tie-breaker)
+  const handleRecordConversion = async (v: AuctionVehicle) => {
+    if (!v.isWon && !v.winnerName) {
+      alert('Only won vehicle lots with buyer details can be recorded as conversions.');
+      return;
+    }
+
+    const gmv = v.winningBidValue || 0;
+    const confirmed = window.confirm(
+      `Award verified manual conversion points (+10 pts each)?\n\n` +
+      `• Vehicle: ${v.registrationNumber} - ${v.title}\n` +
+      `• Transaction GMV: ₹${gmv.toLocaleString('en-IN')}\n` +
+      `• Buyer (+10 pts BUY): ${v.winnerName} (${v.winnerCity || 'Verified'})\n` +
+      `• Seller (+10 pts SELL): ${v.sellerName} (${v.sellerCity || 'Verified'})\n\n` +
+      `This will credit +10 points to both dealerships and update the tie-breaker GMV ranking.`
+    );
+    if (!confirmed) return;
+
+    setRecordingConversionId(v.vehicleId);
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'recordConversion',
+          buyerDealerId: v.winnerId || v.winnerName,
+          sellerDealerId: v.sellerName,
+          vehicleId: String(v.vehicleId),
+          vehicleName: v.title,
+          regNo: v.registrationNumber,
+          saleAmount: gmv,
+          reason: `Manual conversion from Historical Auction #${selectedAuction?.summary?.auctionId || ''} (${selectedAuction?.summary?.code || ''})`,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setConversionSuccessMsg(
+          `Successfully recorded +10 pts conversion for ${v.registrationNumber}! Buyer GMV: ₹${gmv.toLocaleString('en-IN')}. Leaderboard rankings updated.`
+        );
+        setTimeout(() => setConversionSuccessMsg(null), 6000);
+      } else {
+        alert(data.error || 'Failed to record manual conversion.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error communicating with server.');
+    } finally {
+      setRecordingConversionId(null);
     }
   };
 
@@ -674,6 +729,27 @@ export default function HistoricalAuctionsTab() {
               )}
             </div>
 
+            {/* Conversion Success Notification */}
+            {conversionSuccessMsg && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  color: '#34d399',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{conversionSuccessMsg}</span>
+              </div>
+            )}
+
             {/* 1. Vehicles Table */}
             {viewerTab === 'VEHICLES' && (
               <div style={{ overflowX: 'auto', marginTop: '12px', maxHeight: '480px', overflowY: 'auto' }}>
@@ -689,6 +765,7 @@ export default function HistoricalAuctionsTab() {
                       <th>Winner / Buyer Dealership</th>
                       <th>Seller Dealership</th>
                       <th>Status</th>
+                      <th style={{ textAlign: 'center' }}>Manual Conversion</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -740,12 +817,38 @@ export default function HistoricalAuctionsTab() {
                             {v.status}
                           </span>
                         </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {v.isWon ? (
+                            <button
+                              className="btn btn-sm btn-outline"
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                color: '#10b981',
+                                borderColor: 'rgba(16, 185, 129, 0.4)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                whiteSpace: 'nowrap',
+                              }}
+                              onClick={() => handleRecordConversion(v)}
+                              disabled={recordingConversionId === v.vehicleId}
+                              title="Award verified manual conversion points (+10 pts BUY / +10 pts SELL) as per tournament pitch deck"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>{recordingConversionId === v.vehicleId ? 'Saving...' : '+10 Conversion'}</span>
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
 
                     {filteredVehicles.length === 0 && (
                       <tr>
-                        <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                           No vehicles match the selected filter.
                         </td>
                       </tr>

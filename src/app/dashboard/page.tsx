@@ -649,29 +649,31 @@ function DashboardContent() {
                 <tr>
                   <td>
                     <Layers className="w-4 h-4 text-sky-400 mr-2" />
-                    {t('breakdown.listing', 'Listing (5 pts)')}
+                    {t('breakdown.listing', 'Listing (1 pt)')}
                   </td>
-                  <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 5} {t('breakdown.pts', 'pts')}</td>
+                  <td>{breakdown.sellingListing?.count ?? 0} × {breakdown.sellingListing?.perUnit ?? 1} {t('breakdown.pts', 'pts')}</td>
                   <td>+{breakdown.sellingListing?.points ?? 0}</td>
                 </tr>
                 {(breakdown.sellingConversion?.perUnit ?? 0) > 0 && (
                   <tr>
                     <td>
                       <DollarSign className="w-4 h-4 text-emerald-400 mr-2" />
-                      {t('breakdown.sellingConversion', `Conversion (${breakdown.sellingConversion?.perUnit} pts)`, { perUnit: breakdown.sellingConversion?.perUnit ?? 5 })}
+                      {t('breakdown.sellingConversion', `Conversion (${breakdown.sellingConversion?.perUnit ?? 10} pts)`, { perUnit: breakdown.sellingConversion?.perUnit ?? 10 })}
                     </td>
-                    <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit} {t('breakdown.pts', 'pts')}</td>
+                    <td>{breakdown.sellingConversion?.count ?? breakdown.sellTransactions.count} × {breakdown.sellingConversion?.perUnit ?? 10} {t('breakdown.pts', 'pts')}</td>
                     <td>+{breakdown.sellingConversion?.points ?? breakdown.sellTransactions.points}</td>
                   </tr>
                 )}
-                <tr>
-                  <td>
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 mr-2" />
-                    {t('breakdown.commission', 'Commission (5 pts)')}
-                  </td>
-                  <td>{breakdown.sellingCommission?.count ?? 0} × {breakdown.sellingCommission?.perUnit ?? 5} {t('breakdown.pts', 'pts')}</td>
-                  <td>+{breakdown.sellingCommission?.points ?? 0}</td>
-                </tr>
+                {(breakdown.sellingCommission?.points ?? 0) > 0 && (
+                  <tr>
+                    <td>
+                      <CheckCircle2 className="w-4 h-4 text-amber-400 mr-2" />
+                      {t('breakdown.commission', 'Commission (5 pts)')}
+                    </td>
+                    <td>{breakdown.sellingCommission?.count ?? 0} × {breakdown.sellingCommission?.perUnit ?? 5} {t('breakdown.pts', 'pts')}</td>
+                    <td>+{breakdown.sellingCommission?.points ?? 0}</td>
+                  </tr>
+                )}
 
                 {/* ── BUYING ALLOCATIONS ── */}
                 <tr className="breakdown-section-header">
@@ -712,11 +714,11 @@ function DashboardContent() {
                   <td>
                     {(breakdown.allMatchesBonus?.points ?? 0) > 0 ? (
                       <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                        {t('breakdown.awarded', 'AWARDED (+20 PTS)')}
+                        {t('breakdown.awarded', 'AWARDED (+5 PTS)')}
                       </span>
                     ) : (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {t('breakdown.allMatchesHint', `Participate in all ${matchCount} matches (+20 pts)`, { count: matchCount })}
+                        {t('breakdown.allMatchesHint', `Participate in all ${matchCount} matches (+5 pts)`, { count: matchCount })}
                       </span>
                     )}
                   </td>
@@ -726,9 +728,9 @@ function DashboardContent() {
                   <tr>
                     <td>
                       <ShoppingCart className="w-4 h-4 text-sky-400 mr-2" />
-                      {t('breakdown.buyingConversion', `Conversion (${breakdown.buyingConversion?.perUnit} pts)`, { perUnit: breakdown.buyingConversion?.perUnit ?? 5 })}
+                      {t('breakdown.buyingConversion', `Conversion (${breakdown.buyingConversion?.perUnit ?? 10} pts)`, { perUnit: breakdown.buyingConversion?.perUnit ?? 10 })}
                     </td>
-                    <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit} {t('breakdown.pts', 'pts')}</td>
+                    <td>{breakdown.buyingConversion?.count ?? breakdown.buyTransactions.count} × {breakdown.buyingConversion?.perUnit ?? 10} {t('breakdown.pts', 'pts')}</td>
                     <td>+{breakdown.buyingConversion?.points ?? breakdown.buyTransactions.points}</td>
                   </tr>
                 )}

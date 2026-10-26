@@ -144,6 +144,46 @@ export function resolveDealerCustomer(
   };
 }
 
+/**
+ * Extracts transaction GMV (Gross Merchandise Value) for tie-breaker resolution.
+ * Pitch Deck Rule: "Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher."
+ */
+export function extractActivityGmv(activity: { activityType?: string; metadata?: string | null }): { buyerGmv: number; sellerGmv: number } {
+  if (!activity.metadata) return { buyerGmv: 0, sellerGmv: 0 };
+  let meta: any = {};
+  try {
+    meta = typeof activity.metadata === 'string' ? JSON.parse(activity.metadata) : activity.metadata;
+  } catch {
+    return { buyerGmv: 0, sellerGmv: 0 };
+  }
+
+  const val = Number(
+    meta.winningBid ||
+    meta.saleAmount ||
+    meta.transactionAmount ||
+    meta.amount ||
+    meta.bidAmount ||
+    meta.startBidValue ||
+    meta.expectedPrice ||
+    0
+  );
+  const numVal = isNaN(val) ? 0 : val;
+
+  if (activity.activityType === 'BUY') {
+    return { buyerGmv: numVal, sellerGmv: 0 };
+  }
+  if (activity.activityType === 'BID_PLACED') {
+    return { buyerGmv: Number(meta.bidAmount || meta.winningBid || 0) || 0, sellerGmv: 0 };
+  }
+  if (activity.activityType === 'SELL') {
+    return { buyerGmv: 0, sellerGmv: numVal };
+  }
+  if (activity.activityType === 'SELL_LISTING') {
+    return { buyerGmv: 0, sellerGmv: Number(meta.startBidValue || meta.expectedPrice || 0) || 0 };
+  }
+  return { buyerGmv: 0, sellerGmv: 0 };
+}
+
 export interface LeaderboardEntry {
   rank: number;
   dealer: string;
@@ -159,6 +199,10 @@ export interface LeaderboardEntry {
   totalPoints: number;
   buyerPoints: number;
   sellerPoints: number;
+  gmv?: number;
+  buyerGmv?: number;
+  sellerGmv?: number;
+  totalGmv?: number;
   role: 'Buyer' | 'Seller' | 'General';
   category: string;
   dealerId: number;
@@ -187,6 +231,7 @@ export interface SegmentedLeaderboardResult {
 /**
  * Recalculate all dealer scores and rankings for a campaign.
  * This aggregates all dealer_activities and updates dealer_scores.
+ * Ties are broken strictly by Gross Merchandise Value (GMV / transaction value).
  */
 export async function recalculateRankings(campaignId: number) {
   const campaign = await prisma.campaign.findUniqueOrThrow({
@@ -201,7 +246,7 @@ export async function recalculateRankings(campaignId: number) {
 
   if (isPostgres) {
     try {
-      // 1 single atomic SQL query in PostgreSQL: computes total points and rank, upserts all dealer_scores
+      // Postgres atomic query: ranks by points DESC, then GMV DESC, then dealer_id ASC
       await prisma.$executeRawUnsafe(`
         WITH point_totals AS (
           SELECT 
@@ -209,7 +254,12 @@ export async function recalculateRankings(campaignId: number) {
             COALESCE(SUM(da.points), 0)::int AS total_points,
             CASE
               WHEN COALESCE(SUM(da.points), 0) <= 0 THEN 0
-              ELSE ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(da.points), 0) DESC, d.id ASC)::int
+              ELSE ROW_NUMBER() OVER (
+                ORDER BY 
+                  COALESCE(SUM(da.points), 0) DESC,
+                  COALESCE(SUM(COALESCE((NULLIF(da.metadata, '')::json->>'winningBid')::numeric, (NULLIF(da.metadata, '')::json->>'startBidValue')::numeric, 0)), 0) DESC,
+                  d.id ASC
+              )::int
             END AS rank
           FROM dealers d
           LEFT JOIN dealer_activities da 
@@ -278,7 +328,30 @@ export async function recalculateRankings(campaignId: number) {
     }
   }
 
-  const sorted = [...pointsMap.entries()].sort((a, b) => b[1] - a[1]);
+  // Pre-calculate cumulative GMV per dealer for tie-breaker resolution
+  const gmvTotalsMap = new Map<number, number>();
+  const campaignActivities = await prisma.dealerActivity.findMany({
+    where: {
+      campaignId,
+      timestamp: { gte: campaign.startDate, lte: campaign.endDate },
+    },
+    select: { dealerId: true, activityType: true, metadata: true },
+  });
+  for (const act of campaignActivities) {
+    const gmv = extractActivityGmv(act);
+    const curr = gmvTotalsMap.get(act.dealerId) || 0;
+    gmvTotalsMap.set(act.dealerId, curr + gmv.buyerGmv + gmv.sellerGmv);
+  }
+
+  // Pitch Deck Tie-Breaker Rule:
+  // "Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher."
+  const sorted = [...pointsMap.entries()].sort((a, b) => {
+    const ptDiff = b[1] - a[1];
+    if (ptDiff !== 0) return ptDiff;
+    const gmvDiff = (gmvTotalsMap.get(b[0]) || 0) - (gmvTotalsMap.get(a[0]) || 0);
+    if (gmvDiff !== 0) return gmvDiff;
+    return a[0] - b[0];
+  });
 
   const batchSize = 100;
   for (let i = 0; i < sorted.length; i += batchSize) {
@@ -316,6 +389,9 @@ export async function recalculateRankings(campaignId: number) {
  * - buyers: Dealers ranked by their Buyer points (Won lots, bids, participation)
  * - sellers: Dealers ranked by their Seller points (Vehicle sales, listings)
  * - overall: Combined championship standings
+ *
+ * Pitch Deck Tie-Breaker:
+ * "Tie-breaker: if final scores are equal, the dealer with the higher GMV (transaction value) ranks higher."
  *
  * For all dealers across all leagues, TVS Customer IDs are fetched and resolved.
  */
@@ -363,11 +439,14 @@ export async function getSegmentedLeaderboard(
   });
   const scoreMap = new Map(scores.map(s => [s.dealerId, s]));
 
-  // Aggregate points and activity telemetry per dealer
+  // Aggregate points, GMV, and activity telemetry per dealer
   const aggMap = new Map<number, {
     buyerPoints: number;
     sellerPoints: number;
     totalPoints: number;
+    buyerGmv: number;
+    sellerGmv: number;
+    totalGmv: number;
     buysCount: number;
     bidsCount: number;
     salesCount: number;
@@ -396,6 +475,9 @@ export async function getSegmentedLeaderboard(
         buyerPoints: 0,
         sellerPoints: 0,
         totalPoints: 0,
+        buyerGmv: 0,
+        sellerGmv: 0,
+        totalGmv: 0,
         buysCount: 0,
         bidsCount: 0,
         salesCount: 0,
@@ -406,6 +488,12 @@ export async function getSegmentedLeaderboard(
     const item = aggMap.get(a.dealerId)!;
     item.totalPoints += a.points;
     item.activities.push(a);
+
+    // Track GMV
+    const gmv = extractActivityGmv(a);
+    item.buyerGmv += gmv.buyerGmv;
+    item.sellerGmv += gmv.sellerGmv;
+    item.totalGmv += (gmv.buyerGmv + gmv.sellerGmv);
 
     if (a.activityType === 'BUY') {
       item.buyerPoints += a.points;
@@ -437,6 +525,9 @@ export async function getSegmentedLeaderboard(
         buyerPoints: 0,
         sellerPoints: 0,
         totalPoints: s.totalPoints,
+        buyerGmv: 0,
+        sellerGmv: 0,
+        totalGmv: 0,
         buysCount: 0,
         bidsCount: 0,
         salesCount: 0,
@@ -489,6 +580,10 @@ export async function getSegmentedLeaderboard(
       totalPoints: totalPts,
       buyerPoints: agg.buyerPoints,
       sellerPoints: agg.sellerPoints,
+      buyerGmv: agg.buyerGmv,
+      sellerGmv: agg.sellerGmv,
+      totalGmv: agg.totalGmv,
+      gmv: finalRole === 'Seller' ? agg.sellerGmv : agg.buyerGmv,
       buysCount: agg.buysCount,
       bidsCount: agg.bidsCount,
       salesCount: agg.salesCount,
@@ -498,20 +593,20 @@ export async function getSegmentedLeaderboard(
     });
   }
 
-  // 1. Overall Standings
+  // 1. Overall Standings (Tie-breaker: higher total GMV)
   const overallSorted = [...validEntries]
     .filter(e => e.totalPoints > 0)
-    .sort((a, b) => b.totalPoints - a.totalPoints || a.dealerId - b.dealerId);
+    .sort((a, b) => b.totalPoints - a.totalPoints || (b.totalGmv || 0) - (a.totalGmv || 0) || a.dealerId - b.dealerId);
 
-  // 2. Buyer Leaderboard (strictly ranked by Buyer points earned from cars bid on, participation, and bonus)
+  // 2. Buyer Leaderboard (strictly ranked by Buyer points; tie-breaker: higher Buyer GMV)
   const buyersSorted = [...validEntries]
     .filter(e => e.buyerPoints > 0)
-    .sort((a, b) => b.buyerPoints - a.buyerPoints || a.dealerId - b.dealerId);
+    .sort((a, b) => b.buyerPoints - a.buyerPoints || (b.buyerGmv || 0) - (a.buyerGmv || 0) || a.dealerId - b.dealerId);
 
-  // 3. Seller Leaderboard (strictly ranked by Seller points earned from vehicle listings and commission)
+  // 3. Seller Leaderboard (strictly ranked by Seller points; tie-breaker: higher Seller GMV)
   const sellersSorted = [...validEntries]
     .filter(e => e.sellerPoints > 0)
-    .sort((a, b) => b.sellerPoints - a.sellerPoints || a.dealerId - b.dealerId);
+    .sort((a, b) => b.sellerPoints - a.sellerPoints || (b.sellerGmv || 0) - (a.sellerGmv || 0) || a.dealerId - b.dealerId);
 
   // Compute ranking lookup maps across categories
   const buyerRankMap = new Map<number, number>(buyersSorted.map((e, idx) => [e.dealerId, idx + 1]));
@@ -522,6 +617,7 @@ export async function getSegmentedLeaderboard(
     ...e,
     rank: idx + 1,
     points: e.totalPoints,
+    gmv: e.totalGmv,
     overallRank: idx + 1,
     buyerRank: buyerRankMap.get(e.dealerId),
     sellerRank: sellerRankMap.get(e.dealerId),
@@ -531,6 +627,7 @@ export async function getSegmentedLeaderboard(
     ...e,
     rank: idx + 1,
     points: e.buyerPoints,
+    gmv: e.buyerGmv,
     buyerRank: idx + 1,
     sellerRank: sellerRankMap.get(e.dealerId),
     overallRank: overallRankMap.get(e.dealerId),
@@ -540,6 +637,7 @@ export async function getSegmentedLeaderboard(
     ...e,
     rank: idx + 1,
     points: e.sellerPoints,
+    gmv: e.sellerGmv,
     sellerRank: idx + 1,
     buyerRank: buyerRankMap.get(e.dealerId),
     overallRank: overallRankMap.get(e.dealerId),

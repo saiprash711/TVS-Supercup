@@ -5956,9 +5956,10 @@ export default function AdminPage() {
                                   }`}>
                                     {r.activityType === 'BUY' ? 'BUY: CONVERSION (10)' :
                                      r.activityType === 'SELL' ? 'SELL: CONVERSION (10)' :
-                                     r.activityType === 'SELL_LISTING' ? 'SELL: LISTING (5)' :
-                                     r.activityType === 'SELL_COMMISSION' ? 'SELL: COMMISSION (5)' :
-                                     r.activityType === 'MATCH_PARTICIPATION' ? 'BUY: PARTICIPATION (1)' :
+                                     r.activityType === 'SELL_LISTING' ? 'SELL: LISTING (1)' :
+                                     r.activityType === 'SELL_COMMISSION' ? 'SELL: COMMISSION (0)' :
+                                     r.activityType === 'MATCH_PARTICIPATION' ? 'PARTICIPATION (1)' :
+                                     r.activityType === 'ALL_MATCHES_BONUS' ? 'BONUS: ALL MATCHES (5)' :
                                      r.activityType === 'BID_PLACED' ? 'BUY: BIDS (1)' :
                                      r.activityType.replace(/_/g, ' ')}
                                   </span>

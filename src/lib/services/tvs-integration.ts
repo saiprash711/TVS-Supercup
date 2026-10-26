@@ -884,7 +884,7 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
         const sellerCity = sellerCustomer?.city || veh.location_name || 'Tamil Nadu';
         const sellerPhone = sellerCustomer?.phone || '';
 
-        // 1A. SELLING: LISTING (5 points) for every vehicle listed in the auction
+        // 1A. SELLING: LISTING (1 point) for every vehicle listed in the auction (Pitch Deck: +1 Per car listed)
         if (rawSellerName && sellerDealerId) {
           const listingTime = veh.auction_scheduled_time
             ? parseTVSVehicleTimestamp(veh.auction_scheduled_time)
@@ -923,7 +923,8 @@ export class RealTVSAuctionProvider implements TVSAuctionProvider {
           });
         }
 
-        // 1B. CONVERSIONS: Won Vehicles (BUY for buyer: 10 pts, SELL for seller: 10 pts)
+        // 1B. CONVERSIONS: Calculated manually upon verified offline settlement (+10 pts BUY, +10 pts SELL)
+        // Raw DB winners cannot be fetched directly from the database as verified conversions.
         if (veh.winner_id != null && (veh.winner_bid_value != null || veh.start_bid_value != null)) {
           // veh.winner_id is ALREADY the TVS customer ID (key_id), NOT a user id
           const buyerDealerId = String(veh.winner_id);
