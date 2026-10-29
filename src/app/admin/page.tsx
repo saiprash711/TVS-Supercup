@@ -12,6 +12,7 @@ import {
   RefreshCw, 
   Download, 
   Search, 
+  Filter, 
   ShieldCheck, 
   CheckCircle2, 
   Radio, 
@@ -418,6 +419,17 @@ export default function AdminPage() {
   const [liveAuctionId, setLiveAuctionId] = useState('TVSC-2026-10-01');
   const [customAuctionInput, setCustomAuctionInput] = useState('');
 
+  // Multi-Auction Selection for Leaderboard Processing (Super Cup >= Oct 15, 2026)
+  const [selectedAuctionIds, setSelectedAuctionIds] = useState<string[]>([]);
+  const [leaderboardSortOrder, setLeaderboardSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [leaderboardSummary, setLeaderboardSummary] = useState<{
+    firstPlace?: LeaderboardDealer | null;
+    lastPlace?: LeaderboardDealer | null;
+    totalDealers: number;
+    totalPoints: number;
+    selectedAuctions?: string[];
+  } | null>(null);
+
   // Auction Vehicle Run Order & Upcoming Cars State
   const [vehicleQueueStats, setVehicleQueueStats] = useState<VehicleQueueStats | null>(null);
   const [ongoingCar, setOngoingCar] = useState<AuctionVehicleItem | null>(null);
@@ -492,19 +504,40 @@ export default function AdminPage() {
     return [];
   };
 
-  // Only LIVE or UPCOMING auctions should be shown (exclude completed/old matches like 1978, 1991)
-  const activeMatches = useMemo(() => {
-    const filtered = matchDays.filter(m => m.status === 'LIVE' || m.status === 'UPCOMING');
-    if (filtered.length > 0) return filtered;
-    return [
-      { id: 3, matchNumber: 3, auctionId: '2003', date: '2026-09-24T08:30:00Z', status: 'LIVE' },
-    ] as MatchDay[];
-  }, [matchDays]);
+  // Official Super Cup start boundary: October 15, 2026 IST (14-Oct 18:30 UTC)
+  const SUPERCUP_START_MS = new Date('2026-10-14T18:30:00.000Z').getTime();
 
-  // Historical / completed auctions for browsing past match data
+  // Helper to ensure an auction strictly belongs to the Super Cup (started Oct 15, 2026)
+  const isSuperCupMatch = useCallback((m: { date?: any; auctionId?: any; id?: any }) => {
+    if (m.date) {
+      const time = new Date(m.date).getTime();
+      if (!isNaN(time)) {
+        return time >= SUPERCUP_START_MS;
+      }
+    }
+    const numeric = parseInt(String(m.auctionId || m.id).replace(/\D/g, ''), 10);
+    if (!isNaN(numeric) && numeric < 2038) return false;
+    return true;
+  }, [SUPERCUP_START_MS]);
+
+  // Only LIVE or UPCOMING auctions should be shown (strictly Super Cup >= Oct 15)
+  const activeMatches = useMemo(() => {
+    const filtered = matchDays.filter(m => {
+      return (m.status === 'LIVE' || m.status === 'UPCOMING') && isSuperCupMatch(m);
+    });
+    if (filtered.length > 0) return filtered;
+    const postStart = matchDays.filter(m => isSuperCupMatch(m));
+    if (postStart.length > 0) return postStart;
+    return [
+      { id: 89, matchNumber: 2, auctionId: '2049', date: '2026-10-22T08:30:00Z', status: 'COMPLETED' },
+    ] as MatchDay[];
+  }, [matchDays, isSuperCupMatch]);
+
+  // Historical / completed auctions for browsing past match data (strictly Super Cup >= Oct 15, 2026)
   const historicalMatches = useMemo(() => {
-    const fromCurrent = matchDays.filter(m => m.status === 'COMPLETED');
-    const combined = [...fromCurrent, ...historicalMatchesData];
+    const fromCurrent = matchDays.filter(m => m.status === 'COMPLETED' && isSuperCupMatch(m));
+    const fromHistorical = historicalMatchesData.filter(m => isSuperCupMatch(m));
+    const combined = [...fromCurrent, ...fromHistorical];
     const seen = new Set<string>();
     return combined.filter(m => {
       const aId = String(m.auctionId || m.id);
@@ -512,7 +545,27 @@ export default function AdminPage() {
       seen.add(aId);
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [matchDays, historicalMatchesData]);
+  }, [matchDays, historicalMatchesData, isSuperCupMatch]);
+
+  // All distinct Super Cup auctions available for multi-selection processing
+  const allSuperCupAuctions = useMemo(() => {
+    const list: { auctionId: string; matchNumber?: number; date?: string; status?: string }[] = [];
+    const seen = new Set<string>();
+    for (const m of [...historicalMatches, ...activeMatches]) {
+      const id = String(m.auctionId || m.id).trim();
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push({ auctionId: id, matchNumber: m.matchNumber, date: String(m.date), status: m.status });
+      }
+    }
+    for (const id of selectedAuctionIds) {
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push({ auctionId: id, matchNumber: undefined, date: undefined, status: 'CUSTOM' });
+      }
+    }
+    return list;
+  }, [historicalMatches, activeMatches, selectedAuctionIds]);
 
   const currentMatch = useMemo(() => {
     return matchDays.find(m => String(m.auctionId) === String(liveAuctionId)) ||
@@ -677,13 +730,20 @@ export default function AdminPage() {
     }
   };
 
-  const loadData = useCallback(async (keepAuctionId = false, showFullLoader = false, targetCampaignId?: number) => {
+  const loadData = useCallback(async (
+    keepAuctionId = false,
+    showFullLoader = false,
+    targetCampaignId?: number,
+    overrideSelectedAuctions?: string[]
+  ) => {
     if (showFullLoader) setLoading(true);
     setStatsError(null);
     try {
       const activeCampaignId = targetCampaignId !== undefined ? targetCampaignId : selectedCampaignId;
       const campaignParam = activeCampaignId ? `&campaignId=${activeCampaignId}` : '';
-      const res = await fetch(`/api/admin?action=stats${campaignParam}`, {
+      const auctionsToQuery = overrideSelectedAuctions !== undefined ? overrideSelectedAuctions : selectedAuctionIds;
+      const auctionsQuery = auctionsToQuery && auctionsToQuery.length > 0 ? `&auctions=${encodeURIComponent(auctionsToQuery.join(','))}` : '';
+      const res = await fetch(`/api/admin?action=stats${campaignParam}${auctionsQuery}`, {
         credentials: 'same-origin',
         cache: 'no-store',
       });
@@ -712,6 +772,7 @@ export default function AdminPage() {
         if (Array.isArray(data.buyers)) setBuyersLeaderboard(data.buyers);
         if (Array.isArray(data.sellers)) setSellersLeaderboard(data.sellers);
         if (Array.isArray(data.overall)) setOverallLeaderboard(data.overall);
+        if (data.summary) setLeaderboardSummary(data.summary);
         if (data.counts) {
           setAdminLeaderboardCounts(data.counts);
         } else {
@@ -760,7 +821,33 @@ export default function AdminPage() {
     } finally {
       if (showFullLoader) setLoading(false);
     }
-  }, [selectedCampaignId]);
+  }, [selectedCampaignId, selectedAuctionIds]);
+
+  const handleToggleAuctionSelection = (auctionId: string) => {
+    const clean = String(auctionId).trim();
+    if (!clean) return;
+    setSelectedAuctionIds(prev => {
+      const next = prev.includes(clean)
+        ? prev.filter(id => id !== clean)
+        : [...prev, clean];
+      loadData(true, false, undefined, next);
+      showToast(next.includes(clean) ? `Added Auction #${clean} to Leaderboard` : `Removed Auction #${clean} from Leaderboard`);
+      return next;
+    });
+  };
+
+  const handleSelectAllAuctions = () => {
+    const allIds = allSuperCupAuctions.map(a => a.auctionId);
+    setSelectedAuctionIds(allIds);
+    loadData(true, false, undefined, allIds);
+    showToast(`Processing Leaderboard across all ${allIds.length} Super Cup auctions`);
+  };
+
+  const handleClearAuctionSelection = () => {
+    setSelectedAuctionIds([]);
+    loadData(true, false, undefined, []);
+    showToast('Reset Leaderboard to all-tournament cumulative standings');
+  };
 
   const handleSwitchCampaign = async (campaignId: number) => {
     setSelectedCampaignId(campaignId);
@@ -970,8 +1057,15 @@ export default function AdminPage() {
 
   const handleCustomAuctionSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!customAuctionInput.trim()) return;
-    handleMatchSelect(customAuctionInput.trim());
+    const clean = customAuctionInput.trim();
+    if (!clean) return;
+    handleMatchSelect(clean);
+    setSelectedAuctionIds(prev => {
+      if (prev.includes(clean)) return prev;
+      const next = [...prev, clean];
+      loadData(true, false, undefined, next);
+      return next;
+    });
     setCustomAuctionInput('');
   };
 
@@ -1293,6 +1387,14 @@ export default function AdminPage() {
       );
     });
   }, [activeAdminLeaderboard, adminLeaderboardTab, leaderboardCategoryFilter, searchQuery]);
+
+  const sortedAndFilteredLeaderboard = useMemo(() => {
+    const list = [...filteredLeaderboard];
+    if (leaderboardSortOrder === 'asc') {
+      return list.reverse();
+    }
+    return list;
+  }, [filteredLeaderboard, leaderboardSortOrder]);
 
   // Derive available TN branches (either from backend API or calculated locally)
   const availableBranches = useMemo(() => {
@@ -2755,6 +2857,209 @@ export default function AdminPage() {
                           </div>
                         </div>
 
+                        {/* ── Multi-Auction Selection & Processing Bar (Super Cup >= Oct 15) ── */}
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(168, 85, 247, 0.05) 100%)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          borderRadius: '12px',
+                          padding: '16px 20px',
+                          marginBottom: '20px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <Filter className="w-4 h-4 text-sky-400" />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                                  Multi-Auction Standings Processor
+                                </span>
+                                <span style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  background: 'rgba(56, 189, 248, 0.2)',
+                                  color: 'var(--accent-blue)',
+                                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                                }}>
+                                  SUPERCUP (START: OCT 15, 2026)
+                                </span>
+                              </div>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                Multi-select auctions below to process overall rankings across all chosen match events. TVS Super Cup officially began on October 15th, 2026.
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="btn btn-xs"
+                                onClick={handleSelectAllAuctions}
+                                style={{
+                                  background: selectedAuctionIds.length > 0 && selectedAuctionIds.length === allSuperCupAuctions.length
+                                    ? 'var(--accent-blue)'
+                                    : 'rgba(56, 189, 248, 0.15)',
+                                  color: selectedAuctionIds.length > 0 && selectedAuctionIds.length === allSuperCupAuctions.length
+                                    ? '#fff'
+                                    : 'var(--accent-blue)',
+                                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                                  fontWeight: 700,
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                }}
+                              >
+                                ✓ Select All ({allSuperCupAuctions.length})
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-ghost"
+                                onClick={handleClearAuctionSelection}
+                                style={{
+                                  border: '1px solid var(--border-subtle)',
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                Cumulative Whole Season
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Interactive Auction Checkbox Chips */}
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {allSuperCupAuctions.map(auc => {
+                              const isSelected = selectedAuctionIds.includes(auc.auctionId);
+                              return (
+                                <button
+                                  key={auc.auctionId}
+                                  type="button"
+                                  onClick={() => handleToggleAuctionSelection(auc.auctionId)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    fontWeight: isSelected ? 700 : 500,
+                                    background: isSelected ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                                    border: `1.5px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                                    color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: isSelected ? '0 0 10px rgba(56, 189, 248, 0.25)' : 'none',
+                                  }}
+                                >
+                                  <span style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '3px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: isSelected ? 'var(--accent-blue)' : 'rgba(255, 255, 255, 0.1)',
+                                    color: '#fff',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 900,
+                                  }}>
+                                    {isSelected ? '✓' : ''}
+                                  </span>
+                                  <span>
+                                    {auc.matchNumber ? `Match #${auc.matchNumber}: ` : ''}Auction #{auc.auctionId}
+                                  </span>
+                                  {auc.date && (
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                      ({formatDateDDMMYYYY(auc.date)})
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Executive First / Last Place Telemetry Summary Cards */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                            gap: '10px',
+                            paddingTop: '10px',
+                            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                          }}>
+                            {/* First Place Leader Card */}
+                            <div style={{
+                              background: 'rgba(245, 158, 11, 0.08)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              borderRadius: '8px',
+                              padding: '10px 14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                            }}>
+                              <span style={{ fontSize: '1.6rem' }}>🥇</span>
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  First Place (Leader)
+                                </div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                  {activeAdminLeaderboard[0] ? (activeAdminLeaderboard[0].realName || activeAdminLeaderboard[0].dealerName) : 'No entries'}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                  {activeAdminLeaderboard[0] ? `${(adminLeaderboardTab === 'buyers' ? (activeAdminLeaderboard[0].buyerPoints ?? activeAdminLeaderboard[0].points) : adminLeaderboardTab === 'sellers' ? (activeAdminLeaderboard[0].sellerPoints ?? activeAdminLeaderboard[0].points) : activeAdminLeaderboard[0].points).toLocaleString()} pts • ${activeAdminLeaderboard[0].city}` : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Last Place Card */}
+                            <div style={{
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              borderRadius: '8px',
+                              padding: '10px 14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                            }}>
+                              <span style={{ fontSize: '1.4rem', color: '#f87171' }}>🔻</span>
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Last Place (Rank #{activeAdminLeaderboard.length})
+                                </div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                  {activeAdminLeaderboard.length > 0 ? (activeAdminLeaderboard[activeAdminLeaderboard.length - 1].realName || activeAdminLeaderboard[activeAdminLeaderboard.length - 1].dealerName) : 'No entries'}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                  {activeAdminLeaderboard.length > 0 ? `${(adminLeaderboardTab === 'buyers' ? (activeAdminLeaderboard[activeAdminLeaderboard.length - 1].buyerPoints ?? activeAdminLeaderboard[activeAdminLeaderboard.length - 1].points) : adminLeaderboardTab === 'sellers' ? (activeAdminLeaderboard[activeAdminLeaderboard.length - 1].sellerPoints ?? activeAdminLeaderboard[activeAdminLeaderboard.length - 1].points) : activeAdminLeaderboard[activeAdminLeaderboard.length - 1].points).toLocaleString()} pts • ${activeAdminLeaderboard[activeAdminLeaderboard.length - 1].city}` : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Selection Scope Summary */}
+                            <div style={{
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '8px',
+                              padding: '10px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                            }}>
+                              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                Standings Processing Scope
+                              </div>
+                              <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '2px' }}>
+                                {selectedAuctionIds.length > 0 ? `${selectedAuctionIds.length} Selected Auctions` : 'All Super Cup Tournament'}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                {activeAdminLeaderboard.length} dealerships ranked across selection
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* ── Segmented League Switcher (Buyer Leaderboard, Seller Leaderboard, Overall Standings) ── */}
                         <div style={{
                           display: 'flex',
@@ -3146,8 +3451,31 @@ export default function AdminPage() {
                             </div>
                           </div>
 
-                          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                            Showing <strong>{filteredLeaderboard.length}</strong> of <strong>{activeAdminLeaderboard.length}</strong> {adminLeaderboardTab === 'sellers' ? 'active OEM sellers' : adminLeaderboardTab === 'buyers' ? 'active buyers' : 'active unmasked dealerships'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="btn btn-xs"
+                              onClick={() => setLeaderboardSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '0.74rem',
+                                borderRadius: '999px',
+                                background: leaderboardSortOrder === 'asc' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                                border: `1px solid ${leaderboardSortOrder === 'asc' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                                color: leaderboardSortOrder === 'asc' ? '#f87171' : 'var(--accent-blue)',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer',
+                              }}
+                              title="Toggle between First place at top and Last place at top"
+                            >
+                              {leaderboardSortOrder === 'desc' ? '🏆 Sort: 1st → Last' : '🔻 Sort: Last → 1st'}
+                            </button>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                              Showing <strong>{filteredLeaderboard.length}</strong> of <strong>{activeAdminLeaderboard.length}</strong> {adminLeaderboardTab === 'sellers' ? 'active OEM sellers' : adminLeaderboardTab === 'buyers' ? 'active buyers' : 'active unmasked dealerships'}
+                            </div>
                           </div>
                         </div>
 
@@ -3170,7 +3498,7 @@ export default function AdminPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {filteredLeaderboard.map((d, index) => {
+                              {sortedAndFilteredLeaderboard.map((d, index) => {
                                 const maxPts = activeAdminLeaderboard[0]?.points || 1;
                                 const ptsVal = adminLeaderboardTab === 'buyers' ? (d.buyerPoints ?? d.points) : adminLeaderboardTab === 'sellers' ? (d.sellerPoints ?? d.points) : (d.totalPoints ?? d.points);
                                 const pct = Math.min(100, Math.round((ptsVal / maxPts) * 100));
@@ -3450,19 +3778,214 @@ export default function AdminPage() {
                           </div>
                         </div>
 
+                        {/* ── Multi-Auction Standings Processing Ribbon (Super Cup >= Oct 15) ── */}
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.06) 100%)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          borderRadius: '10px',
+                          padding: '12px 16px',
+                          marginBottom: '14px',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <Filter className="w-4 h-4 text-sky-400" />
+                              <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                Multi-Auction Standings Filter
+                              </span>
+                              <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: selectedAuctionIds.length > 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                color: selectedAuctionIds.length > 0 ? 'var(--accent-blue)' : 'var(--text-muted)',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                              }}>
+                                {selectedAuctionIds.length > 0 ? `${selectedAuctionIds.length} of ${allSuperCupAuctions.length} Auctions Processed` : 'All Super Cup Matches'}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                (Tournament start: 15-Oct-2026)
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="btn btn-xs"
+                                onClick={handleSelectAllAuctions}
+                                style={{
+                                  background: selectedAuctionIds.length > 0 && selectedAuctionIds.length === allSuperCupAuctions.length
+                                    ? 'var(--accent-blue)'
+                                    : 'rgba(56, 189, 248, 0.15)',
+                                  color: selectedAuctionIds.length > 0 && selectedAuctionIds.length === allSuperCupAuctions.length
+                                    ? '#fff'
+                                    : 'var(--accent-blue)',
+                                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  fontSize: '0.72rem',
+                                }}
+                              >
+                                Select All ({allSuperCupAuctions.length})
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-ghost"
+                                onClick={handleClearAuctionSelection}
+                                style={{
+                                  border: '1px solid var(--border-subtle)',
+                                  color: 'var(--text-muted)',
+                                  padding: '3px 8px',
+                                  fontSize: '0.72rem',
+                                }}
+                              >
+                                Clear
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-primary"
+                                onClick={() => setActiveTab('leaderboard')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 10px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <Trophy className="w-3 h-3" />
+                                View Processed Standings →
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Overall Picture Banner: Who is First and Last */}
+                          {activeAdminLeaderboard.length > 0 && (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                              gap: '8px',
+                              paddingTop: '8px',
+                              borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                            }}>
+                              {/* 1st Place */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'rgba(245, 158, 11, 0.08)',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px',
+                                padding: '6px 10px',
+                              }}>
+                                <span style={{ fontSize: '1.2rem' }}>🥇</span>
+                                <div style={{ overflow: 'hidden' }}>
+                                  <div style={{ fontSize: '0.62rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                                    1st Place (Leader)
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                    {activeAdminLeaderboard[0]?.realName || activeAdminLeaderboard[0]?.dealerName || '—'}
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    {activeAdminLeaderboard[0] ? `${activeAdminLeaderboard[0].points.toLocaleString()} pts • ${activeAdminLeaderboard[0].city}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Last Place */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px',
+                                padding: '6px 10px',
+                              }}>
+                                <span style={{ fontSize: '1.1rem', color: '#f87171' }}>🔻</span>
+                                <div style={{ overflow: 'hidden' }}>
+                                  <div style={{ fontSize: '0.62rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase' }}>
+                                    Last Place (Rank #{activeAdminLeaderboard.length})
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                    {activeAdminLeaderboard[activeAdminLeaderboard.length - 1]?.realName || activeAdminLeaderboard[activeAdminLeaderboard.length - 1]?.dealerName || '—'}
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    {activeAdminLeaderboard[activeAdminLeaderboard.length - 1] ? `${activeAdminLeaderboard[activeAdminLeaderboard.length - 1].points.toLocaleString()} pts • ${activeAdminLeaderboard[activeAdminLeaderboard.length - 1].city}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Interactive Match Selector Cards Grid - Only LIVE or UPCOMING auctions */}
                         <div className="match-selection-grid">
                           {activeMatches.map(m => {
-                            const isSelected = String(liveAuctionId) === String(m.auctionId);
+                            const aId = String(m.auctionId || m.id);
+                            const isSelected = String(liveAuctionId) === aId;
+                            const isIncluded = selectedAuctionIds.includes(aId);
                             const isLive = m.status === 'LIVE';
                             return (
                               <div 
                                 key={m.id || m.auctionId}
                                 className={`match-select-card ${isSelected ? 'active' : ''}`}
                                 onClick={() => handleMatchSelect(m.auctionId || String(m.id))}
+                                style={{
+                                  borderColor: isSelected
+                                    ? 'var(--accent-blue)'
+                                    : isIncluded
+                                    ? 'rgba(56, 189, 248, 0.65)'
+                                    : 'var(--border-subtle)',
+                                  background: isIncluded ? 'rgba(56, 189, 248, 0.04)' : undefined,
+                                  boxShadow: isIncluded ? '0 0 10px rgba(56, 189, 248, 0.15)' : 'none',
+                                }}
                               >
                                 <div className="match-card-top">
-                                  <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleAuctionSelection(aId);
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '2px 6px',
+                                        borderRadius: '5px',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 700,
+                                        background: isIncluded ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                                        border: `1px solid ${isIncluded ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                                        color: isIncluded ? 'var(--accent-blue)' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                      }}
+                                      title={isIncluded ? "Included in multi-auction standings (click to remove)" : "Click to include in multi-auction standings"}
+                                    >
+                                      <span style={{
+                                        width: '11px',
+                                        height: '11px',
+                                        borderRadius: '2px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: isIncluded ? 'var(--accent-blue)' : 'transparent',
+                                        border: `1px solid ${isIncluded ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                                        color: '#fff',
+                                        fontSize: '0.55rem',
+                                      }}>
+                                        {isIncluded ? '✓' : ''}
+                                      </span>
+                                      <span>{isIncluded ? 'In Standings' : '+ Select'}</span>
+                                    </button>
+                                  </div>
                                   {isLive ? (
                                     <span className="match-card-badge live">
                                       <span className="live-ping" style={{ display: 'inline-flex' }}>
@@ -3489,6 +4012,20 @@ export default function AdminPage() {
                                     {getAuctionScheduleLabel(m.auctionId)}
                                   </span>
                                 </div>
+                                {isIncluded && (
+                                  <div style={{ 
+                                    fontSize: '0.68rem', 
+                                    color: 'var(--accent-blue)', 
+                                    fontWeight: 700, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '4px', 
+                                    marginTop: '4px' 
+                                  }}>
+                                    <span>✓</span>
+                                    <span>INCLUDED IN MULTI-AUCTION STANDINGS</span>
+                                  </div>
+                                )}
                                 {isSelected && (
                                   <div style={{ 
                                     fontSize: '0.72rem', 
@@ -3511,52 +4048,125 @@ export default function AdminPage() {
                         {/* Historical / Completed Auctions Section */}
                         {historicalMatches.length > 0 && (
                           <div style={{ marginTop: '16px' }}>
-                            <button
-                              onClick={() => setShowHistorical(!showHistorical)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '8px 4px',
-                                width: '100%',
-                                textAlign: 'left',
-                              }}
-                            >
-                              <History className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-                              <span style={{
-                                fontSize: '0.82rem',
-                                fontWeight: 700,
-                                color: 'var(--text-secondary)',
-                                fontFamily: 'var(--font-mono)',
-                                letterSpacing: '0.05em',
-                                textTransform: 'uppercase',
-                              }}>
-                                Historical Auctions ({historicalMatches.length})
-                              </span>
-                              {showHistorical
-                                ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--text-muted)', marginLeft: 'auto' }} />
-                                : <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-muted)', marginLeft: 'auto' }} />
-                              }
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                              <button
+                                onClick={() => setShowHistorical(!showHistorical)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '4px 2px',
+                                  textAlign: 'left',
+                                }}
+                              >
+                                <History className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                                <span style={{
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  color: 'var(--text-secondary)',
+                                  fontFamily: 'var(--font-mono)',
+                                  letterSpacing: '0.05em',
+                                  textTransform: 'uppercase',
+                                }}>
+                                  Historical Auctions ({historicalMatches.length})
+                                </span>
+                                {showHistorical
+                                  ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                                  : <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                                }
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-ghost"
+                                onClick={() => {
+                                  const histIds = historicalMatches.map(m => String(m.auctionId || m.id));
+                                  const allSelected = histIds.every(id => selectedAuctionIds.includes(id));
+                                  if (allSelected) {
+                                    const next = selectedAuctionIds.filter(id => !histIds.includes(id));
+                                    setSelectedAuctionIds(next);
+                                    loadData(true, false, undefined, next);
+                                  } else {
+                                    const merged = Array.from(new Set([...selectedAuctionIds, ...histIds]));
+                                    setSelectedAuctionIds(merged);
+                                    loadData(true, false, undefined, merged);
+                                  }
+                                }}
+                                style={{ fontSize: '0.72rem', padding: '2px 8px', border: '1px solid var(--border-subtle)' }}
+                              >
+                                {historicalMatches.every(m => selectedAuctionIds.includes(String(m.auctionId || m.id)))
+                                  ? 'Deselect Completed'
+                                  : 'Select All Completed'
+                                }
+                              </button>
+                            </div>
+
                             {showHistorical && (
                               <div className="match-selection-grid" style={{ marginTop: '8px' }}>
                                 {historicalMatches.map(m => {
-                                  const isSelected = String(liveAuctionId) === String(m.auctionId);
+                                  const aId = String(m.auctionId || m.id);
+                                  const isSelected = String(liveAuctionId) === aId;
+                                  const isIncluded = selectedAuctionIds.includes(aId);
                                   return (
                                     <div
                                       key={m.id || m.auctionId}
                                       className={`match-select-card ${isSelected ? 'active' : ''}`}
                                       onClick={() => handleMatchSelect(m.auctionId || String(m.id))}
                                       style={{
-                                        opacity: isSelected ? 1 : 0.85,
-                                        borderColor: isSelected ? 'var(--accent-blue)' : 'var(--border-subtle)',
+                                        opacity: isSelected ? 1 : 0.9,
+                                        borderColor: isSelected
+                                          ? 'var(--accent-blue)'
+                                          : isIncluded
+                                          ? 'rgba(56, 189, 248, 0.65)'
+                                          : 'var(--border-subtle)',
+                                        background: isIncluded ? 'rgba(56, 189, 248, 0.04)' : undefined,
+                                        boxShadow: isIncluded ? '0 0 10px rgba(56, 189, 248, 0.15)' : 'none',
                                       }}
                                     >
                                       <div className="match-card-top">
-                                        <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span className="match-card-number">MATCH #{m.matchNumber}</span>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleAuctionSelection(aId);
+                                            }}
+                                            style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '2px 6px',
+                                              borderRadius: '5px',
+                                              fontSize: '0.65rem',
+                                              fontWeight: 700,
+                                              background: isIncluded ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                                              border: `1px solid ${isIncluded ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                                              color: isIncluded ? 'var(--accent-blue)' : 'var(--text-muted)',
+                                              cursor: 'pointer',
+                                            }}
+                                            title={isIncluded ? "Included in multi-auction standings (click to remove)" : "Click to include in multi-auction standings"}
+                                          >
+                                            <span style={{
+                                              width: '11px',
+                                              height: '11px',
+                                              borderRadius: '2px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              background: isIncluded ? 'var(--accent-blue)' : 'transparent',
+                                              border: `1px solid ${isIncluded ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                                              color: '#fff',
+                                              fontSize: '0.55rem',
+                                            }}>
+                                              {isIncluded ? '✓' : ''}
+                                            </span>
+                                            <span>{isIncluded ? 'In Standings' : '+ Select'}</span>
+                                          </button>
+                                        </div>
                                         <span className="match-card-badge" style={{
                                           background: 'rgba(100, 116, 139, 0.15)',
                                           color: 'var(--text-muted)',
@@ -3583,6 +4193,20 @@ export default function AdminPage() {
                                           {formatDateDDMMYYYY(m.date)}
                                         </span>
                                       </div>
+                                      {isIncluded && (
+                                        <div style={{ 
+                                          fontSize: '0.68rem', 
+                                          color: 'var(--accent-blue)', 
+                                          fontWeight: 700, 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          gap: '4px', 
+                                          marginTop: '4px' 
+                                        }}>
+                                          <span>✓</span>
+                                          <span>INCLUDED IN MULTI-AUCTION STANDINGS</span>
+                                        </div>
+                                      )}
                                       {isSelected && (
                                         <div style={{
                                           fontSize: '0.72rem',
@@ -3617,7 +4241,7 @@ export default function AdminPage() {
                             <input
                               type="text"
                               className="form-input"
-                              placeholder="Enter custom Auction ID (e.g. 1991, 2003)..."
+                              placeholder="Enter custom Auction ID (e.g. 2060, 2038)..."
                               value={customAuctionInput}
                               onChange={e => setCustomAuctionInput(e.target.value)}
                               style={{ padding: '6px 12px', fontSize: '0.82rem', height: '34px', maxWidth: '300px' }}
@@ -3628,6 +4252,24 @@ export default function AdminPage() {
                               style={{ height: '34px', padding: '0 16px' }}
                             >
                               Load Auction
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ height: '34px', padding: '0 12px', border: '1px solid var(--border-subtle)', fontSize: '0.78rem' }}
+                              onClick={() => {
+                                const clean = customAuctionInput.trim();
+                                if (!clean) return;
+                                if (!selectedAuctionIds.includes(clean)) {
+                                  const next = [...selectedAuctionIds, clean];
+                                  setSelectedAuctionIds(next);
+                                  loadData(true, false, undefined, next);
+                                }
+                                setCustomAuctionInput('');
+                                showToast(`Added Auction #${clean} to Standings calculation`);
+                              }}
+                            >
+                              + Add to Standings
                             </button>
                           </form>
                           <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>

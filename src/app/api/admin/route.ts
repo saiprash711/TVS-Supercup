@@ -98,6 +98,33 @@ export async function GET(request: NextRequest) {
         const totalDealers = await prisma.dealer.count();
         const activeDealers = await prisma.dealer.count({ where: { status: 'ACTIVE' } });
 
+        // Official Super Cup started October 15th, 2026 IST
+        const SUPERCUP_START_DATE = new Date('2026-10-14T18:30:00.000Z');
+        const isSuperCup = campaign.slug === 'supercup-2026-27' || campaign.name.toLowerCase().includes('super cup') || campaign.id === 13;
+        const campaignEffectiveStart = isSuperCup
+          ? (campaign.startDate > SUPERCUP_START_DATE ? campaign.startDate : SUPERCUP_START_DATE)
+          : campaign.startDate;
+
+        const auctionsParam = searchParams.get('auctions') || searchParams.get('auctionIds') || '';
+        const selectedAuctionIds = auctionsParam
+          ? Array.from(new Set(auctionsParam.split(',').map(s => s.trim()).filter(Boolean)))
+          : undefined;
+
+        // Resolve target match days if specific auctions were selected
+        let targetMatchIds: number[] = [];
+        if (selectedAuctionIds && selectedAuctionIds.length > 0) {
+          const tMatches = await prisma.matchDay.findMany({
+            where: {
+              OR: [
+                { auctionId: { in: selectedAuctionIds } },
+                ...selectedAuctionIds.filter(id => !isNaN(Number(id))).map(id => ({ id: Number(id) })),
+              ],
+            },
+            select: { id: true },
+          });
+          targetMatchIds = tMatches.map(m => m.id);
+        }
+
         const totalPointsResult = await prisma.dealerScore.aggregate({
           where: { campaignId: campaign.id },
           _sum: { totalPoints: true },
@@ -106,7 +133,17 @@ export async function GET(request: NextRequest) {
         // Group by activityType to get exact counts across all activities
         const activityCounts = await prisma.dealerActivity.groupBy({
           by: ['activityType'],
-          where: { campaignId: campaign.id },
+          where: {
+            campaignId: campaign.id,
+            timestamp: { gte: campaignEffectiveStart, lte: campaign.endDate },
+            ...(selectedAuctionIds && selectedAuctionIds.length > 0 ? {
+              OR: [
+                ...(targetMatchIds.length > 0 ? [{ matchId: { in: targetMatchIds } }] : []),
+                ...selectedAuctionIds.map(aid => ({ externalTransactionId: { contains: aid } })),
+                ...selectedAuctionIds.map(aid => ({ metadata: { contains: aid } })),
+              ],
+            } : {}),
+          },
           _count: true,
         });
 
@@ -127,12 +164,19 @@ export async function GET(request: NextRequest) {
         const totalWatchlist = countMap['WATCHLIST_ADD'] || 0;
 
         const matchDays = await prisma.matchDay.findMany({
-          where: { campaignId: campaign.id },
+          where: {
+            campaignId: campaign.id,
+            ...(isSuperCup ? { date: { gte: SUPERCUP_START_DATE } } : {}),
+          },
           orderBy: { matchNumber: 'asc' },
         });
 
         const historicalMatches = await prisma.matchDay.findMany({
-          where: { status: 'COMPLETED' },
+          where: {
+            campaignId: campaign.id,
+            status: 'COMPLETED',
+            ...(isSuperCup ? { date: { gte: SUPERCUP_START_DATE } } : {}),
+          },
           orderBy: { date: 'desc' },
           include: {
             campaign: {
@@ -145,7 +189,13 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        const segmented = await getSegmentedLeaderboard(campaign.id, undefined, true);
+        const segmented = await getSegmentedLeaderboard(
+          campaign.id,
+          undefined,
+          true,
+          undefined,
+          selectedAuctionIds && selectedAuctionIds.length > 0 ? selectedAuctionIds : undefined
+        );
 
         // Recent real-time activities for Overview telemetry stream
         const recentActivities = await prisma.dealerActivity.findMany({
@@ -351,6 +401,8 @@ export async function GET(request: NextRequest) {
           sellers: segmented.sellers,
           overall: segmented.overall,
           counts: segmented.counts,
+          summary: segmented.summary,
+          selectedAuctions: selectedAuctionIds || [],
           campaign: {
             id: campaign.id,
             slug: campaign.slug,

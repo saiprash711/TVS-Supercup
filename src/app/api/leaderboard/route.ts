@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
 import { getSegmentedLeaderboard, getPositionContext } from '@/lib/services/ranking-engine';
 import { getCurrentSuperCupCampaign } from '@/lib/services/campaign';
 import { isAdmin, getCurrentDealer, isEmployeeDealer } from '@/lib/auth';
@@ -22,6 +23,10 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') || searchParams.get('type') || undefined;
+    const auctionsParam = searchParams.get('auctions') || searchParams.get('auctionIds') || '';
+    const selectedAuctionIds = auctionsParam
+      ? Array.from(new Set(auctionsParam.split(',').map(s => s.trim()).filter(Boolean)))
+      : undefined;
 
     // Get the active Super Cup campaign
     const campaign = await getCurrentSuperCupCampaign();
@@ -54,8 +59,26 @@ export async function GET(request: Request) {
       campaign.id,
       undefined,
       shouldUnmask,
-      isEmployee ? undefined : currentDealer?.dealerId
+      isEmployee ? undefined : currentDealer?.dealerId,
+      selectedAuctionIds && selectedAuctionIds.length > 0 ? selectedAuctionIds : undefined
     );
+
+    // Available official Super Cup auctions (started October 15th, 2026)
+    const SUPERCUP_START_DATE = new Date('2026-10-14T18:30:00.000Z');
+    const availableMatches = await prisma.matchDay.findMany({
+      where: {
+        campaignId: campaign.id,
+        date: { gte: SUPERCUP_START_DATE },
+      },
+      orderBy: { matchNumber: 'asc' },
+      select: {
+        id: true,
+        matchNumber: true,
+        auctionId: true,
+        date: true,
+        status: true,
+      },
+    });
 
     let activeLeaderboard = segmented.buyers;
     if (category === 'seller' || category === 'sellers') {
@@ -82,6 +105,9 @@ export async function GET(request: Request) {
       sellers: segmented.sellers,
       overall: segmented.overall,
       counts: segmented.counts,
+      summary: segmented.summary,
+      availableAuctions: availableMatches,
+      selectedAuctions: selectedAuctionIds || [],
       isAdmin: admin,
       isEmployee: Boolean(isEmployee),
       authenticated: Boolean(currentDealer || admin),

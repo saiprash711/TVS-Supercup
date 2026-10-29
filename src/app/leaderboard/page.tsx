@@ -19,6 +19,9 @@ import {
   Search,
   RefreshCw,
   TrendingUp,
+  Filter,
+  ArrowUpDown,
+  Check,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -107,10 +110,43 @@ function LeaderboardContent() {
   const [pageSize, setPageSize] = useState(5);
   const [jumpPageInput, setJumpPageInput] = useState('');
 
-  const fetchLeaderboard = useCallback(async (forcedMaskedPreview?: boolean) => {
+  // Multi-Auction Filter & Sorting States (Super Cup strictly >= Oct 15, 2026)
+  const [selectedAuctionIds, setSelectedAuctionIds] = useState<string[]>([]);
+  const [availableAuctions, setAvailableAuctions] = useState<{
+    id: number;
+    matchNumber: number;
+    auctionId: string;
+    date: string;
+    status: string;
+  }[]>([]);
+  const [leaderboardSummary, setLeaderboardSummary] = useState<{
+    firstPlace?: any;
+    lastPlace?: any;
+    totalDealers?: number;
+    totalPoints?: number;
+    selectedAuctions?: string[];
+  } | null>(null);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // Format date DD-MM-YYYY in Indian Standard Time (Asia/Kolkata)
+  const formatDateDDMMYYYY = (dateInput: Date | string | number | null | undefined): string => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }).format(d);
+  };
+
+  const fetchLeaderboard = useCallback(async (forcedMaskedPreview?: boolean, overrideAuctions?: string[]) => {
     try {
       const previewActive = typeof forcedMaskedPreview === 'boolean' ? forcedMaskedPreview : showMaskedPreview;
-      const url = previewActive ? '/api/leaderboard?unmask=false' : '/api/leaderboard';
+      const targetAuctions = overrideAuctions !== undefined ? overrideAuctions : selectedAuctionIds;
+      const auctionsQuery = targetAuctions.length > 0 ? `&auctions=${encodeURIComponent(targetAuctions.join(','))}` : '';
+      const url = previewActive ? `/api/leaderboard?unmask=false${auctionsQuery}` : `/api/leaderboard?${auctionsQuery.length > 0 ? auctionsQuery.slice(1) : ''}`;
       const res = await fetch(url);
       const data = await res.json();
       if (data) {
@@ -122,6 +158,12 @@ function LeaderboardContent() {
           sellers: data.counts?.sellers || data.sellers?.length || 0,
           overall: data.counts?.overall || data.overall?.length || 0,
         });
+        if (data.availableAuctions) {
+          setAvailableAuctions(data.availableAuctions);
+        }
+        if (data.summary) {
+          setLeaderboardSummary(data.summary);
+        }
         if (data.campaign) {
           setCampaign(data.campaign);
         }
@@ -141,7 +183,30 @@ function LeaderboardContent() {
     } finally {
       setLoading(false);
     }
-  }, [showMaskedPreview]);
+  }, [showMaskedPreview, selectedAuctionIds]);
+
+  const handleToggleAuction = (auctionId: string) => {
+    const clean = String(auctionId).trim();
+    setSelectedAuctionIds(prev => {
+      const next = prev.includes(clean) ? prev.filter(id => id !== clean) : [...prev, clean];
+      setCurrentPage(1);
+      fetchLeaderboard(undefined, next);
+      return next;
+    });
+  };
+
+  const handleSelectAllAuctions = () => {
+    const allIds = availableAuctions.map(a => String(a.auctionId || a.id));
+    setSelectedAuctionIds(allIds);
+    setCurrentPage(1);
+    fetchLeaderboard(undefined, allIds);
+  };
+
+  const handleClearAuctions = () => {
+    setSelectedAuctionIds([]);
+    setCurrentPage(1);
+    fetchLeaderboard(undefined, []);
+  };
 
   useEffect(() => {
     fetchLeaderboard();
@@ -206,18 +271,26 @@ function LeaderboardContent() {
     });
   }, [activeLeaderboard, searchQuery, getDisplayName, isAdminUser, isEmployee, showMaskedPreview]);
 
+  const sortedAndFilteredLeaderboard = useMemo(() => {
+    const list = [...filteredLeaderboard];
+    if (sortOrder === 'asc') {
+      return list.reverse();
+    }
+    return list;
+  }, [filteredLeaderboard, sortOrder]);
+
   // Pagination calculations
-  const effectivePageSize = pageSize === 0 ? filteredLeaderboard.length : pageSize;
-  const totalPages = Math.max(1, Math.ceil(filteredLeaderboard.length / (effectivePageSize || 1)));
+  const effectivePageSize = pageSize === 0 ? sortedAndFilteredLeaderboard.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(sortedAndFilteredLeaderboard.length / (effectivePageSize || 1)));
 
   const paginatedEntries = useMemo(() => {
-    if (pageSize === 0) return filteredLeaderboard;
+    if (pageSize === 0) return sortedAndFilteredLeaderboard;
     const startIndex = (currentPage - 1) * pageSize;
-    return filteredLeaderboard.slice(startIndex, startIndex + pageSize);
-  }, [filteredLeaderboard, currentPage, pageSize]);
+    return sortedAndFilteredLeaderboard.slice(startIndex, startIndex + pageSize);
+  }, [sortedAndFilteredLeaderboard, currentPage, pageSize]);
 
-  const startRecord = filteredLeaderboard.length === 0 ? 0 : (currentPage - 1) * effectivePageSize + 1;
-  const endRecord = Math.min(currentPage * effectivePageSize, filteredLeaderboard.length);
+  const startRecord = sortedAndFilteredLeaderboard.length === 0 ? 0 : (currentPage - 1) * effectivePageSize + 1;
+  const endRecord = Math.min(currentPage * effectivePageSize, sortedAndFilteredLeaderboard.length);
 
   // Smart page numbers array for pagination bar
   const getPageNumbers = () => {
@@ -553,6 +626,236 @@ function LeaderboardContent() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* ─── Multi-Auction Standings Filter & Processor (Super Cup >= Oct 15) ─── */}
+        <section aria-label="Multi-Auction Standings Filter" style={{ maxWidth: '920px', margin: '0 auto 16px' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.06) 100%)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <Filter className="w-4 h-4 text-sky-400" />
+                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    Multi-Auction Standings Processor
+                  </span>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: selectedAuctionIds.length > 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                    color: selectedAuctionIds.length > 0 ? 'var(--accent-blue)' : 'var(--text-muted)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                  }}>
+                    {selectedAuctionIds.length > 0 ? `${selectedAuctionIds.length} of ${availableAuctions.length} Auctions Processed` : 'All Super Cup Matches'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    (Super Cup Start: Oct 15, 2026)
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Multi-select auctions below to calculate aggregated standings across chosen matches. TVS Super Cup officially began on October 15th, 2026.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-xs"
+                  onClick={handleSelectAllAuctions}
+                  style={{
+                    background: selectedAuctionIds.length > 0 && selectedAuctionIds.length === availableAuctions.length
+                      ? 'var(--accent-blue)'
+                      : 'rgba(56, 189, 248, 0.15)',
+                    color: selectedAuctionIds.length > 0 && selectedAuctionIds.length === availableAuctions.length
+                      ? '#fff'
+                      : 'var(--accent-blue)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  Select All ({availableAuctions.length})
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-ghost"
+                  onClick={handleClearAuctions}
+                  style={{
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  Cumulative Whole Season
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    border: '1px solid var(--border-subtle)',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: sortOrder === 'asc' ? 'var(--accent-amber)' : 'var(--text-primary)',
+                  }}
+                  title="Toggle standings order (1st to Last vs Last to 1st)"
+                >
+                  <ArrowUpDown className="w-3 h-3" />
+                  <span>{sortOrder === 'desc' ? 'Sort: 1st → Last' : 'Sort: Last → 1st'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Auction Select Chips */}
+            {availableAuctions.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {availableAuctions.map(auc => {
+                  const aId = String(auc.auctionId || auc.id);
+                  const isSelected = selectedAuctionIds.includes(aId);
+                  return (
+                    <button
+                      key={aId}
+                      type="button"
+                      onClick={() => handleToggleAuction(aId)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        background: isSelected ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                        border: `1.5px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-subtle)'}`,
+                        color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? '0 0 10px rgba(56, 189, 248, 0.25)' : 'none',
+                      }}
+                    >
+                      <span style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '3px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: isSelected ? 'var(--accent-blue)' : 'rgba(255, 255, 255, 0.1)',
+                        color: '#fff',
+                        fontSize: '0.65rem',
+                        fontWeight: 900,
+                      }}>
+                        {isSelected ? '✓' : ''}
+                      </span>
+                      <span>
+                        {auc.matchNumber ? `Match #${auc.matchNumber}: ` : ''}Auction #{auc.auctionId}
+                      </span>
+                      {auc.date && (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          ({formatDateDDMMYYYY(auc.date)})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Overall Picture: First and Last Place Cards */}
+            {activeLeaderboard.length > 0 && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '10px',
+                paddingTop: '10px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              }}>
+                {/* 1st Place (Leader) */}
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  <span style={{ fontSize: '1.6rem' }}>🥇</span>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      First Place (Leader)
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                      {getDisplayName(activeLeaderboard[0])}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      {activeLeaderboard[0].points.toLocaleString('en-IN')} pts {activeLeaderboard[0].city ? `• ${activeLeaderboard[0].city}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Last Place */}
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  <span style={{ fontSize: '1.4rem', color: '#f87171' }}>🔻</span>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Last Place (Rank #{activeLeaderboard.length})
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                      {getDisplayName(activeLeaderboard[activeLeaderboard.length - 1])}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      {activeLeaderboard[activeLeaderboard.length - 1].points.toLocaleString('en-IN')} pts {activeLeaderboard[activeLeaderboard.length - 1].city ? `• ${activeLeaderboard[activeLeaderboard.length - 1].city}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scope */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Standings Scope
+                  </div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '2px' }}>
+                    {selectedAuctionIds.length > 0 ? `${selectedAuctionIds.length} Selected Auctions` : 'All Super Cup Tournament'}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    {activeLeaderboard.length} dealerships ranked across scope
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

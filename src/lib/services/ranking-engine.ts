@@ -226,6 +226,13 @@ export interface SegmentedLeaderboardResult {
     sellers: number;
     overall: number;
   };
+  summary?: {
+    firstPlace?: LeaderboardEntry | null;
+    lastPlace?: LeaderboardEntry | null;
+    totalDealers: number;
+    totalPoints: number;
+    selectedAuctions?: string[];
+  };
 }
 
 /**
@@ -399,12 +406,25 @@ export async function getSegmentedLeaderboard(
   campaignId: number,
   limit?: number,
   unmasked?: boolean,
-  currentDealerId?: number
+  currentDealerId?: number,
+  auctionIds?: string[]
 ): Promise<SegmentedLeaderboardResult> {
   const campaign = await prisma.campaign.findUniqueOrThrow({
     where: { id: campaignId },
-    select: { startDate: true, endDate: true },
+    select: { id: true, name: true, slug: true, startDate: true, endDate: true },
   });
+
+  // Official TVS Super Cup 2026-27 window: started from October 15th, 2026 (18:30 UTC 14-Oct = 00:00 IST 15-Oct)
+  const SUPERCUP_START_DATE = new Date('2026-10-14T18:30:00.000Z');
+  const isSuperCupCampaign = campaign.slug === 'supercup-2026-27' || campaign.name.toLowerCase().includes('super cup');
+  const effectiveStartDate = isSuperCupCampaign
+    ? (campaign.startDate > SUPERCUP_START_DATE ? campaign.startDate : SUPERCUP_START_DATE)
+    : campaign.startDate;
+
+  const cleanAuctionIds = Array.isArray(auctionIds)
+    ? Array.from(new Set(auctionIds.map(a => String(a).trim()).filter(Boolean)))
+    : [];
+  const isMultiAuctionFiltered = cleanAuctionIds.length > 0;
 
   const dealers = await prisma.dealer.findMany({
     where: { status: 'ACTIVE' },
@@ -420,23 +440,76 @@ export async function getSegmentedLeaderboard(
   });
   const dealerMap = new Map(dealers.map(d => [d.id, d]));
 
+  // Resolve target match days if specific auctions were requested
+  let targetMatchIds: number[] = [];
+  const matchIdToAuctionMap = new Map<number, string>();
+  if (isMultiAuctionFiltered) {
+    const targetMatchDays = await prisma.matchDay.findMany({
+      where: {
+        OR: [
+          { auctionId: { in: cleanAuctionIds } },
+          ...cleanAuctionIds.filter(id => !isNaN(Number(id))).map(id => ({ id: Number(id) })),
+        ],
+      },
+      select: { id: true, auctionId: true },
+    });
+    targetMatchIds = targetMatchDays.map(m => m.id);
+    targetMatchDays.forEach(m => {
+      if (m.auctionId) matchIdToAuctionMap.set(m.id, m.auctionId);
+    });
+  }
+
+  // Fetch activities with proper date gating and auction filtering
   const activities = await prisma.dealerActivity.findMany({
     where: {
       campaignId,
-      timestamp: { gte: campaign.startDate, lte: campaign.endDate },
+      timestamp: { gte: effectiveStartDate, lte: campaign.endDate },
+      ...(isMultiAuctionFiltered ? {
+        OR: [
+          ...(targetMatchIds.length > 0 ? [{ matchId: { in: targetMatchIds } }] : []),
+          ...cleanAuctionIds.map(aid => ({ externalTransactionId: { contains: aid } })),
+          ...cleanAuctionIds.map(aid => ({ metadata: { contains: aid } })),
+        ],
+      } : {}),
     },
     select: {
       dealerId: true,
       activityType: true,
       points: true,
       metadata: true,
+      externalTransactionId: true,
+      matchId: true,
     },
   });
 
-  const scores = await prisma.dealerScore.findMany({
-    where: { campaignId, totalPoints: { gt: 0 } },
-    select: { dealerId: true, totalPoints: true, rank: true },
-  });
+  // Strict verification filter in memory to avoid substring cross-matches (e.g. bid suffix ending in 1978)
+  const targetAuctionLowerSet = new Set(cleanAuctionIds.map(a => a.toLowerCase()));
+  const filteredActivities = isMultiAuctionFiltered
+    ? activities.filter(a => {
+        if (a.matchId && matchIdToAuctionMap.has(a.matchId)) {
+          if (targetAuctionLowerSet.has(matchIdToAuctionMap.get(a.matchId)!.toLowerCase())) return true;
+        }
+        if (a.externalTransactionId) {
+          const parts = a.externalTransactionId.split('-');
+          if (parts.length >= 2 && targetAuctionLowerSet.has(parts[1].toLowerCase())) return true;
+        }
+        if (a.metadata) {
+          try {
+            const meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : a.metadata;
+            const mId = String(meta.auctionId || meta.auction_id || '').toLowerCase();
+            if (mId && targetAuctionLowerSet.has(mId)) return true;
+          } catch {}
+        }
+        return false;
+      })
+    : activities;
+
+  const scores = !isMultiAuctionFiltered
+    ? await prisma.dealerScore.findMany({
+        where: { campaignId, totalPoints: { gt: 0 } },
+        select: { dealerId: true, totalPoints: true, rank: true },
+      })
+    : [];
   const scoreMap = new Map(scores.map(s => [s.dealerId, s]));
 
   // Aggregate points, GMV, and activity telemetry per dealer
@@ -451,12 +524,12 @@ export async function getSegmentedLeaderboard(
     bidsCount: number;
     salesCount: number;
     listingsCount: number;
-    activities: Array<{ metadata?: string | null }>;
+    activities: Array<{ metadata?: string | null; externalTransactionId?: string | null }>;
   }>();
 
   // Pre-determine league participation for attendance point attribution
   const dealerRoles = new Map<number, { isBuyer: boolean; isSeller: boolean }>();
-  for (const a of activities) {
+  for (const a of filteredActivities) {
     if (!dealerRoles.has(a.dealerId)) {
       const d = dealerMap.get(a.dealerId);
       dealerRoles.set(a.dealerId, {
@@ -469,7 +542,7 @@ export async function getSegmentedLeaderboard(
     if (['SELL', 'SELL_LISTING', 'SELL_COMMISSION'].includes(a.activityType)) r.isSeller = true;
   }
 
-  for (const a of activities) {
+  for (const a of filteredActivities) {
     if (!aggMap.has(a.dealerId)) {
       aggMap.set(a.dealerId, {
         buyerPoints: 0,
@@ -518,22 +591,24 @@ export async function getSegmentedLeaderboard(
     }
   }
 
-  // Include any dealers present in dealer_scores that may not have active activity records
-  for (const s of scores) {
-    if (!aggMap.has(s.dealerId)) {
-      aggMap.set(s.dealerId, {
-        buyerPoints: 0,
-        sellerPoints: 0,
-        totalPoints: s.totalPoints,
-        buyerGmv: 0,
-        sellerGmv: 0,
-        totalGmv: 0,
-        buysCount: 0,
-        bidsCount: 0,
-        salesCount: 0,
-        listingsCount: 0,
-        activities: [],
-      });
+  // Include any dealers present in dealer_scores only when viewing full cumulative season
+  if (!isMultiAuctionFiltered) {
+    for (const s of scores) {
+      if (!aggMap.has(s.dealerId)) {
+        aggMap.set(s.dealerId, {
+          buyerPoints: 0,
+          sellerPoints: 0,
+          totalPoints: s.totalPoints,
+          buyerGmv: 0,
+          sellerGmv: 0,
+          totalGmv: 0,
+          buysCount: 0,
+          bidsCount: 0,
+          salesCount: 0,
+          listingsCount: 0,
+          activities: [],
+        });
+      }
     }
   }
 
@@ -561,8 +636,10 @@ export async function getSegmentedLeaderboard(
       ? custInfo.role
       : (agg.sellerPoints > agg.buyerPoints ? 'Seller' : 'Buyer');
 
-    // Use materialized totalPoints if higher or equal, else aggregated
-    const totalPts = Math.max(agg.totalPoints, scoreMap.get(dealerId)?.totalPoints || 0);
+    // When multi-auction filter is active, strictly compute points from selected auctions
+    const totalPts = isMultiAuctionFiltered
+      ? agg.totalPoints
+      : Math.max(agg.totalPoints, scoreMap.get(dealerId)?.totalPoints || 0);
 
     validEntries.push({
       dealerId: dealer.id,
@@ -643,6 +720,10 @@ export async function getSegmentedLeaderboard(
     overallRank: overallRankMap.get(e.dealerId),
   }));
 
+  const firstPlace = overall[0] || null;
+  const lastPlace = overall.length > 0 ? overall[overall.length - 1] : null;
+  const totalProcessedPoints = overall.reduce((sum, d) => sum + (d.totalPoints || 0), 0);
+
   return {
     buyers: limit ? buyers.slice(0, limit) : buyers,
     sellers: limit ? sellers.slice(0, limit) : sellers,
@@ -651,6 +732,13 @@ export async function getSegmentedLeaderboard(
       buyers: buyers.length,
       sellers: sellers.length,
       overall: overall.length,
+    },
+    summary: {
+      firstPlace,
+      lastPlace,
+      totalDealers: overall.length,
+      totalPoints: totalProcessedPoints,
+      selectedAuctions: cleanAuctionIds,
     },
   };
 }
